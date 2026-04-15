@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+.font-brand {
+  font-family: var(--font-brand), sans-serif;
+}
+
+/* Scrollbars */
+* { scrollbar-width: thin; scrollbar-color: #e5e7eb transparent; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #d1d5db; }
+
+/* Base font size */
+html { font-size: 16px; }
+
+/* Prevent horizontal scroll on body */
+html, body, #__next { height: 100%; overflow: hidden; }
+
+/* Hide scrollbar utility */
+.scrollbar-none { scrollbar-width: none; }
+.scrollbar-none::-webkit-scrollbar { display: none; }
+
+/* Range input */
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 14px;
+  width: 14px;
+  border-radius: 50%;
+  background: #10b981;
+  cursor: pointer;
+  margin-top: -5px;
+}
+input[type='range']::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 4px;
+  background: #e5e7eb;
+}
+input[type='range']:focus { outline: none; }
+
+/* Select dropdown arrow */
+select {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%2371717a' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 10px center;
+  background-repeat: no-repeat;
+  background-size: 16px;
+  padding-right: 36px !important;
+}
+
+/* Prose dark mode overrides */
+.prose-invert h1, .prose-invert h2, .prose-invert h3 {
+  color: #f4f4f5;
+  font-weight: 700;
+}
+.prose-invert p { color: #a1a1aa; line-height: 1.7; }
+.prose-invert strong { color: #e4e4e7; }
+.prose-invert ul li, .prose-invert ol li { color: #a1a1aa; }
+.prose-invert code {
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.08);
+  padding: 0.1em 0.4em;
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes pulseSoft {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+
+.animate-fade-in  { animation: fadeIn  0.3s ease both; }
+.animate-fade-up  { animation: fadeUp  0.4s ease both; }
+.animate-pulse-soft { animation: pulseSoft 2s ease-in-out infinite; }
+
+/* ── Print / PDF Export ───────────────────────────────────────────────── */
+@media print {
+  html, body, #__next {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  /* Hide all page chrome */
+  body * { visibility: hidden !important; }
+  /* Show only the print view */
+  #ah-print-view {
+    visibility: visible !important;
+    display: block !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    background: white !important;
+    z-index: 99999 !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  #ah-print-view * { visibility: visible !important; }
+  @page { margin: 0.65in; size: letter; }
+}

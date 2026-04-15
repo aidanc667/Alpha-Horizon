@@ -1,0 +1,153 @@
+{
+  "asOfDate": "2026-01",
+  "consensusMethod": "compute_in_code_using_median_of_non_null_sources",
+  "notes": [
+    "Raw source values only. Do not store consensus in this file.",
+    "Ignore null values when computing consensus.",
+    "If only one source is non-null, use that source.",
+    "If no external source is non-null, fall back to internalFallback.",
+    "Keep ETF-to-bucket mapping in code, not in this JSON."
+  ],
+  "buckets": {
+    "US_Large_Cap_Equity": {
+      "sources": {
+        "jpmorgan": 0.067,
+        "vanguard": 0.045,
+        "blackrock": 0.052,
+        "morningstar": 0.053
+      },
+      "internalFallback": 0.055,
+      "notes": "Use for broad US large-cap / total-market exposures."
+    },
+    "US_Small_Value": {
+      "sources": {
+        "jpmorgan": null,
+        "vanguard": 0.065,
+        "blackrock": null,
+        "morningstar": null
+      },
+      "internalFallback": 0.075,
+      "notes": "Vanguard small-cap midpoint from 5.1%-7.1%. Consider adding a separate deterministic value tilt in code."
+    },
+    "Developed_ExUS_Equity": {
+      "sources": {
+        "jpmorgan": 0.075,
+        "vanguard": 0.059,
+        "blackrock": 0.071,
+        "morningstar": 0.075
+      },
+      "internalFallback": 0.060,
+      "notes": "Developed markets outside the US."
+    },
+    "Developed_ExUS_Small_Value": {
+      "sources": {
+        "jpmorgan": null,
+        "vanguard": null,
+        "blackrock": null,
+        "morningstar": null
+      },
+      "internalFallback": 0.075,
+      "notes": "Treat as Developed_ExUS_Equity plus a deterministic factor/value premium until directly sourced."
+    },
+    "Emerging_Markets_Equity": {
+      "sources": {
+        "jpmorgan": 0.078,
+        "vanguard": null,
+        "blackrock": null,
+        "morningstar": 0.099
+      },
+      "internalFallback": 0.070,
+      "notes": "Morningstar and JPM both provide direct EM equity assumptions in the roundup."
+    },
+    "US_Core_Bonds": {
+      "sources": {
+        "jpmorgan": 0.048,
+        "vanguard": 0.043,
+        "blackrock": 0.041,
+        "morningstar": 0.045
+      },
+      "internalFallback": 0.040,
+      "notes": "US aggregate / core bond bucket."
+    },
+    "US_Treasury_Short": {
+      "sources": {
+        "jpmorgan": 0.031,
+        "vanguard": null,
+        "blackrock": null,
+        "morningstar": null
+      },
+      "internalFallback": 0.030,
+      "notes": "10-yr forward cash/T-bill assumption. Lower than current Fed Funds Rate — reflects expected rate normalisation over the horizon."
+    },
+    "US_Investment_Grade_Credit": {
+      "sources": {
+        "jpmorgan": 0.052,
+        "vanguard": null,
+        "blackrock": null,
+        "morningstar": null
+      },
+      "internalFallback": 0.045,
+      "notes": "JPM direct IG credit assumption from 2026 LTCMA fixed income table."
+    },
+    "US_High_Yield": {
+      "sources": {
+        "jpmorgan": 0.061,
+        "vanguard": 0.048,
+        "blackrock": 0.057,
+        "morningstar": null
+      },
+      "internalFallback": 0.055,
+      "notes": "Vanguard midpoint from 4.3%-5.3%; BlackRock 5.7%; JPM 6.1%."
+    },
+    "Emerging_Market_Debt_Hard_Currency": {
+      "sources": {
+        "jpmorgan": 0.063,
+        "vanguard": 0.056,
+        "blackrock": 0.047,
+        "morningstar": null
+      },
+      "internalFallback": 0.055,
+      "notes": "Vanguard midpoint from 5.1%-6.1% for hedged EM sovereign bonds; BlackRock 4.7%; JPM 6.3%."
+    },
+    "REITs": {
+      "sources": {
+        "jpmorgan": 0.087,
+        "vanguard": null,
+        "blackrock": null,
+        "morningstar": null
+      },
+      "internalFallback": 0.075,
+      "notes": "Use JPM global REITs until additional sourced values are available."
+    },
+    "Gold": {
+      "sources": {
+        "jpmorgan": 0.055,
+        "vanguard": null,
+        "blackrock": null,
+        "morningstar": null
+      },
+      "internalFallback": 0.050,
+      "notes": "Use JPM gold until additional sourced values are available."
+    },
+    "Commodities": {
+      "sources": {
+        "jpmorgan": 0.046,
+        "vanguard": null,
+        "blackrock": null,
+        "morningstar": null
+      },
+      "internalFallback": 0.040,
+      "notes": "No ETF in current universe maps to this bucket. Reserved for future use."
+    },
+    "Cash": {
+      "sources": {
+        "jpmorgan": 0.031,
+        "vanguard": null,
+        "blackrock": null,
+        "morningstar": null
+      },
+      "internalFallback": 0.025,
+      "notes": "JPM cash from 2026 LTCMA fixed income table. 10-yr forward; lower than current Fed Funds Rate."
+    }
+  }
+}
