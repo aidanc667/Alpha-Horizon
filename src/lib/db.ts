@@ -56,11 +56,14 @@ export async function runMacroCacheMigration() {
   `;
 }
 
-/** Run once on first deploy to create tables. Call from /api/db/migrate route. */
+/** Run once on first deploy to create tables. Called from instrumentation.ts on startup. */
 export async function runMigrations() {
   // Portfolio Agent cache tables (safe to run every deploy — CREATE TABLE IF NOT EXISTS)
   await runMacroCacheMigration();
   await runPlanCacheMigration();
+  // Feature-specific migrations — consolidated here so instrumentation.ts is the single entry point
+  await runArenaMigrations();
+  await runMarketMigrations();
   const sql = getDb();
   await sql`
     CREATE TABLE IF NOT EXISTS saved_plans (
@@ -89,6 +92,15 @@ export async function runMigrations() {
   `;
   await sql`
     CREATE INDEX IF NOT EXISTS lab_runs_user_id_idx ON lab_runs(user_id)
+  `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS rate_limits (
+      user_id      TEXT NOT NULL,
+      endpoint     TEXT NOT NULL,
+      window_start TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      count        INTEGER NOT NULL DEFAULT 1,
+      PRIMARY KEY (user_id, endpoint)
+    )
   `;
 }
 

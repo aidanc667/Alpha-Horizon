@@ -39,6 +39,15 @@ export async function GET(req: NextRequest) {
 
   const tickers = tickersParam.split(',').map(t => t.trim().toUpperCase()).filter(Boolean);
 
+  if (tickers.length > 50) {
+    return NextResponse.json({ error: 'Too many tickers — max 50' }, { status: 400 });
+  }
+  const TICKER_RE = /^[A-Z0-9.^=\-]{1,10}$/;
+  const invalid = tickers.find(t => !TICKER_RE.test(t));
+  if (invalid) {
+    return NextResponse.json({ error: `Invalid ticker: ${invalid}` }, { status: 400 });
+  }
+
   const results: Record<string, { price: number; prevClose: number }> = {};
   const errors: string[] = [];
 

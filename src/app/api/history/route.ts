@@ -11,6 +11,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Missing required params: ticker, from, to' }, { status: 400 });
   }
 
+  const TICKER_RE = /^[A-Z0-9.^=\-]{1,10}$/;
+  if (!TICKER_RE.test(ticker)) {
+    return NextResponse.json({ error: 'Invalid ticker format' }, { status: 400 });
+  }
+  if (isNaN(Date.parse(from)) || isNaN(Date.parse(to))) {
+    return NextResponse.json({ error: 'Invalid date format' }, { status: 400 });
+  }
+
   try {
     const startTs = Math.floor(new Date(from).getTime() / 1000);
     const endTs   = Math.floor(new Date(to).getTime()   / 1000);
