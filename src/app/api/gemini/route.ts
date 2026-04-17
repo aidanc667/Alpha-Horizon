@@ -1,21 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
+import { auth } from '@clerk/nextjs/server';
 import { CURATED_ASSETS } from '@/lib/assets';
 import { BUCKET_RATES } from '@/lib/constants';
-
-// ─── Simple in-memory rate limiter (10 requests per IP per minute) ────────────
-const rateLimitMap = new Map<string, { count: number; ts: number }>();
-function checkRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const entry = rateLimitMap.get(ip);
-  if (!entry || now - entry.ts > 60_000) {
-    rateLimitMap.set(ip, { count: 1, ts: now });
-    return true;
-  }
-  if (entry.count >= 30) return false;
-  entry.count++;
-  return true;
-}
+import { checkRateLimit } from '@/lib/rateLimit';
 
 // ─── API key lives ONLY on the server ────────────────────────────────────────
 function getApiKey(): string {
@@ -37,8 +25,9 @@ const phi = (x: number) => {
 // ─── POST /api/gemini ─────────────────────────────────────────────────────────
 // Body: { action: 'generatePlan' | 'generateReport', responses, plan? }
 export async function POST(req: NextRequest) {
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
-  if (!checkRateLimit(ip)) {
+  const { userId } = await auth();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!await checkRateLimit(userId, 'gemini', 30)) {
     return NextResponse.json({ error: 'Too many requests. Please wait a minute.' }, { status: 429 });
   }
 
