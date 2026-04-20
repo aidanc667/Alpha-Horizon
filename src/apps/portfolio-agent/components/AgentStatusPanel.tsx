@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import type { IntakeAnswers, PortfolioPlan, AgentRunState, AgentName, AgentStatus } from '../types';
+import type { IntakeAnswers, AgentName, AgentStatus } from '../types';
+import type { V3Plan } from '@/lib/agents/types';
 import { AGENT_PIPELINE, AGENT_LABELS, AGENT_DESCRIPTIONS, AGENT_ICONS } from '../constants';
 
 interface AgentStatusPanelProps {
   answers: IntakeAnswers;
-  onComplete: (plan: PortfolioPlan, state: AgentRunState) => void;
+  onComplete: (plan: V3Plan) => void;
   onReset: () => void;
 }
 
@@ -32,7 +33,7 @@ const CLIENT_TIMEOUT_MS = 110_000;
 // Stream chunk types emitted by the route
 type StreamChunk =
   | { type: 'log';   message: string }
-  | { type: 'plan';  plan: PortfolioPlan; logs: string[] }
+  | { type: 'plan';  plan: V3Plan; logs: string[] }
   | { type: 'error'; error: string }
   | { type: 'done' };
 
@@ -51,7 +52,7 @@ export default function AgentStatusPanel({ answers, onComplete, onReset }: Agent
   // before rendering results. onComplete fires as soon as the plan is ready.
   const [apiFetchDone, setApiFetchDone] = useState(false);
 
-  const planResult = useRef<{ plan: PortfolioPlan; logs: string[] } | null>(null);
+  const planResult = useRef<{ plan: V3Plan; logs: string[] } | null>(null);
   const completionFired = useRef(false);
   const fastForward = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -140,16 +141,7 @@ export default function AgentStatusPanel({ answers, onComplete, onReset }: Agent
                 // First plan: fire onComplete immediately so the parent transitions
                 // to the results view without waiting for the animation to complete.
                 completionFired.current = true;
-                const runState: AgentRunState = {
-                  status: 'complete',
-                  currentAgent: null,
-                  iteration: 1,
-                  results: {},
-                  criticScore: chunk.plan.criticScore,
-                  completedAt: new Date().toISOString(),
-                  logs: [],
-                };
-                onComplete(chunk.plan, runState);
+                onComplete(chunk.plan as V3Plan);
               }
               // Second plan (revision): update state; parent re-renders if it
               // subscribes to plan changes. setApiFetchDone(true) is idempotent.

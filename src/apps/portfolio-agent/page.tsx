@@ -7,9 +7,10 @@ import {
 } from 'lucide-react';
 import IntakeWizard from './components/IntakeWizard';
 import AgentStatusPanel from './components/AgentStatusPanel';
-import PortfolioPlanCard from './components/PortfolioPlanCard';
+import ResultsDashboard from './components/ResultsDashboard';
 import { APP_NAME, APP_TAGLINE } from './constants';
-import type { IntakeAnswers, PortfolioPlan, AgentRunState } from './types';
+import type { IntakeAnswers } from './types';
+import type { V3Plan } from '@/lib/agents/types';
 
 type PageView = 'home' | 'intake' | 'running' | 'results';
 
@@ -73,24 +74,21 @@ const AGENTS = [
 export default function PortfolioAgentPage() {
   const [view, setView] = useState<PageView>('home');
   const [answers, setAnswers] = useState<IntakeAnswers | null>(null);
-  const [runState, setRunState] = useState<AgentRunState | null>(null);
-  const [plan, setPlan] = useState<PortfolioPlan | null>(null);
+  const [plan, setPlan] = useState<V3Plan | null>(null);
 
   const handleIntakeComplete = (data: IntakeAnswers) => {
     setAnswers(data);
     setView('running');
   };
 
-  const handleRunComplete = (finalPlan: PortfolioPlan, state: AgentRunState) => {
+  const handleRunComplete = (finalPlan: V3Plan) => {
     setPlan(finalPlan);
-    setRunState(state);
     setView('results');
   };
 
   const handleReset = () => {
     setView('home');
     setAnswers(null);
-    setRunState(null);
     setPlan(null);
   };
 
@@ -190,8 +188,8 @@ export default function PortfolioAgentPage() {
           <AgentStatusPanel answers={answers} onComplete={handleRunComplete} onReset={handleReset} />
         )}
 
-        {view === 'results' && plan && runState && answers && (
-          <PortfolioPlanCard plan={plan} runState={runState} answers={answers} onReset={handleReset} />
+        {view === 'results' && plan && (
+          <ResultsDashboard plan={plan} onBack={handleReset} />
         )}
       </div>
     </div>

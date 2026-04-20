@@ -893,6 +893,7 @@ export interface Agent6Output {
 
 // ─── 9. MonteCarloOutput ─────────────────────────────────────────────────────
 
+
 /** Projected portfolio values at a single future point in time. */
 export interface ProjectionPoint {
   /** Year from today (e.g. 1, 5, 10, 20, 30). */
@@ -926,4 +927,23 @@ export interface MonteCarloOutput {
   };
   /** Wall-clock execution time in ms. */
   executionTimeMs: number;
+}
+
+// ─── 10. V3Plan (full pipeline output) ───────────────────────────────────────
+
+/**
+ * Complete output of the v3 portfolio agent pipeline.
+ * Assembled in the POST /api/portfolio-agent route and cached in Neon.
+ */
+export interface V3Plan {
+  version: 'v3';
+  /** ISO 8601 timestamp when the plan was assembled. */
+  generatedAt: string;
+  clientProfile:   Agent1Output;
+  economicIntel:   Agent2Output;
+  portfolio:       Agent3Output;
+  riskAnalysis:    Agent4Output;
+  taxOptimization: Agent5Output;
+  criticScore:     Agent6Output;
+  monteCarlo:      MonteCarloOutput;
 }
