@@ -78,23 +78,57 @@ function horizonBucket(years: number): TimeHorizonBucket {
 }
 
 // ─── Goal analysis ────────────────────────────────────────────────────────────
+
+const PROJECTION_RATE = 0.07; // 7% blended planning rate for FV projections
+
+function annuityFV(pmt: number, annualRate: number, years: number): number {
+  if (pmt === 0 || years === 0) return 0;
+  const n  = years * 12;
+  const rm = Math.pow(1 + annualRate, 1 / 12) - 1;
+  if (rm < 1e-9) return pmt * n;
+  return pmt * ((Math.pow(1 + rm, n) - 1) / rm);
+}
+
 function deriveGoalAnalysis(
   goalAmount: number | undefined,
   startingCapital: number,
-  expectedReturn: number,
+  monthlyContribution: number,
   yearsToGoal: number,
 ): GoalAnalysis {
   const goal = goalAmount ?? 0;
+
+  const futureValueOfCapital       = Math.round(startingCapital * Math.pow(1 + PROJECTION_RATE, yearsToGoal));
+  const futureValueOfContributions = Math.round(annuityFV(monthlyContribution, PROJECTION_RATE, yearsToGoal));
+  const totalProjectedValue        = futureValueOfCapital + futureValueOfContributions;
+
   if (goal === 0) {
-    return { goalAmount: 0, presentValue: 0, fundedStatus: 1, feasibility: 'achievable' };
+    return {
+      goalAmount: 0,
+      presentValue: 0,
+      futureValueOfCapital,
+      futureValueOfContributions,
+      totalProjectedValue,
+      fundedStatus: 1,
+      feasibility: 'achievable',
+    };
   }
-  const pv = goal / Math.pow(1 + expectedReturn, yearsToGoal);
-  const fundedStatus = pv > 0 ? startingCapital / pv : 1;
+
+  const presentValue = Math.round(goal / Math.pow(1 + PROJECTION_RATE, yearsToGoal));
+  const fundedStatus = goal > 0 ? totalProjectedValue / goal : 1;
   const feasibility =
     fundedStatus >= 1.0 ? 'achievable' :
     fundedStatus >= 0.7 ? 'stretch' :
     'requires_adjustment';
-  return { goalAmount: goal, presentValue: Math.round(pv), fundedStatus, feasibility };
+
+  return {
+    goalAmount: goal,
+    presentValue,
+    futureValueOfCapital,
+    futureValueOfContributions,
+    totalProjectedValue,
+    fundedStatus,
+    feasibility,
+  };
 }
 
 // ─── Agent 1: Client Profile ──────────────────────────────────────────────────
@@ -146,8 +180,8 @@ export function agent1_clientProfile(input: {
     maxEquityAllowed: maxEquity(riskScore, bucket),
   };
 
-  // ── Goal analysis (uses 6% blended expected return as planning rate) ──────
-  const goalAnalysis = deriveGoalAnalysis(a.goalAmount, a.startingCapital, 0.06, yearsToGoal);
+  // ── Goal analysis (uses 7% blended planning rate, includes contributions) ──
+  const goalAnalysis = deriveGoalAnalysis(a.goalAmount, a.startingCapital, a.monthlyContribution, yearsToGoal);
 
   // ── Liquidity needs ───────────────────────────────────────────────────────
   const hasEmergencyFund = a.financialSnapshot.hasEmergencyFund;

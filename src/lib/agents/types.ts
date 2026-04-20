@@ -358,8 +358,24 @@ export interface GoalAnalysis {
    */
   presentValue: number;
   /**
-   * Ratio of current assets to the present value of the goal (0–1+).
+   * Future value of the lump-sum starting capital compounded at 7% for yearsToGoal (USD).
+   * Zero when no goal is stated.
+   */
+  futureValueOfCapital: number;
+  /**
+   * Future value of all monthly contributions compounded at 7% for yearsToGoal (USD).
+   * Uses the standard annuity FV formula. Zero when no goal or no contributions.
+   */
+  futureValueOfContributions: number;
+  /**
+   * futureValueOfCapital + futureValueOfContributions — total projected wealth at goal year.
+   * This is the primary input to fundedStatus (replaces the PV-only approach).
+   */
+  totalProjectedValue: number;
+  /**
+   * Ratio of totalProjectedValue to goalAmount (0–1+).
    * > 1.0 = overfunded, 1.0 = exactly on track, < 1.0 = underfunded.
+   * Accounts for both current capital and ongoing monthly contributions.
    */
   fundedStatus: number;
   /** Human-readable feasibility verdict. */
