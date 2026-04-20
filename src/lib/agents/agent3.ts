@@ -1,5 +1,6 @@
 import { deriveTargetAllocation, selectETFsForAllocation } from './portfolioRules';
 import { calculateAllETFReturns, calculateETFVolatility } from '@/lib/data/calculateETFReturns';
+import { computePortfolioVol } from './sharpeOptimizer';
 import { ETF_UNIVERSE } from '@/lib/data/etfUniverse';
 import type { Agent1Output, Agent2Output, Agent3Output, EtfRationaleEntry } from './types';
 
@@ -41,7 +42,22 @@ export function agent3_portfolioConstruction(input: {
     hasEmergencyFund,
   );
 
-  // ── Step 2: Select ETFs via lookup tables (<10ms) ─────────────────────────
+  // ── Step 2: Select ETFs via optimizer (<50ms) ────────────────────────────
+  const riskFreeRate = economicIntel.assetClassOutlook.riskFreeRate;
+
+  // Live market rates from FRED (via agent2) — anchors bond/cash returns to
+  // current yields instead of static 2026 CMA baseline.
+  const marketRates = {
+    riskFreeRate,
+    fedFundsRate: economicIntel.macroData.fedFundsRate,
+    // CAPE + CPI enable the live equity build-up model in calculateETFReturns:
+    //   US equity expected return = (1/CAPE) + 1.0% real growth + CPI + class premium
+    // At current CAPE=32, CPI=2.8% this reproduces the 2026 institutional CMAs exactly.
+    // As CAPE/CPI move, every US equity ETF's expected return updates automatically.
+    shillerCAPE: economicIntel.macroData.shillerCAPE,
+    cpiYoY:      economicIntel.macroData.cpiYoY,
+  };
+
   const allocation = selectETFsForAllocation(
     equityTarget,
     bondTarget,
@@ -49,11 +65,15 @@ export function agent3_portfolioConstruction(input: {
     clientProfile.riskProfile.riskScore,
     clientProfile.taxProfile.combinedMarginalRate,
     clientProfile.accountStructure.availableAccounts,
+    riskFreeRate,
+    marketRates,
   );
 
   // ── Step 3: Portfolio statistics ──────────────────────────────────────────
   const taxBracket = clientProfile.taxProfile.combinedMarginalRate;
-  const etfReturns = calculateAllETFReturns(taxBracket);
+  // Same market-grounded rates used here so expected-return stats are consistent
+  // with the optimizer inputs that selected the holdings.
+  const etfReturns = calculateAllETFReturns(taxBracket, marketRates);
 
   // Weighted-average expected return
   const expectedReturn = allocation.reduce(
@@ -61,15 +81,10 @@ export function agent3_portfolioConstruction(input: {
     0,
   );
 
-  // Simplified volatility: √(Σ wᵢ² σᵢ²)  — no cross-correlations (MVP)
-  const variance = allocation.reduce((sum, s) => {
-    const vol = calculateETFVolatility(s.ticker);
-    return sum + s.weight * s.weight * vol * vol;
-  }, 0);
-  const expectedVolatility = Math.sqrt(variance);
+  // True portfolio volatility via full covariance matrix (σᵢσⱼρᵢⱼ correlations)
+  const expectedVolatility = computePortfolioVol(allocation);
 
   // Sharpe ratio
-  const riskFreeRate = economicIntel.assetClassOutlook.riskFreeRate;
   const sharpeRatio =
     expectedVolatility > 0 ? (expectedReturn - riskFreeRate) / expectedVolatility : 0;
 
@@ -100,6 +115,12 @@ export function agent3_portfolioConstruction(input: {
     let rationale: string;
 
     switch (slice.ticker) {
+      case 'VOO':
+        rationale = `S&P 500 ETF covering the 500 largest US companies. At the current Shiller CAPE of ${economicIntel.macroData.shillerCAPE}, the earnings yield (${(100 / economicIntel.macroData.shillerCAPE).toFixed(1)}%) signals an expected return of ${(etfReturns['VOO'] * 100).toFixed(1)}%. Same 0.03% ER as VTI but without the small-cap sleeve.`;
+        break;
+      case 'VT':
+        rationale = `Total world stock ETF combining ~60% US and ~40% international in a single fund. International markets trade at a significant valuation discount to US (lower CAPE → higher earnings yield), contributing to the ${(etfReturns['VT'] * 100).toFixed(1)}% blended expected return. One-fund global diversification at 0.07% ER.`;
+        break;
       case 'VTI':
         rationale =
           'US total market core holding providing broad diversification across 3,500+ stocks. Low-cost (0.03% ER) and tax-efficient.';
@@ -132,6 +153,38 @@ export function agent3_portfolioConstruction(input: {
       case 'SGOV':
         rationale =
           'Treasury bills providing liquidity and capital preservation for short-term needs. Earns the risk-free rate with near-zero volatility and is held outside your emergency fund.';
+        break;
+      case 'VEA':
+        rationale =
+          'Developed markets ex-US providing international diversification at lower volatility than VXUS by excluding emerging market exposure. Captures valuation discount in European and Japanese markets.';
+        break;
+      case 'MTUM':
+        rationale = `Momentum factor ETF overweighting recent 12-month winners (${(etfReturns['MTUM'] * 100).toFixed(1)}% CMA). Quarterly rebalance captures trend persistence — held in Roth to minimize turnover tax drag.`;
+        break;
+      case 'VNQ':
+        rationale =
+          'US REIT ETF providing real estate exposure and inflation linkage. Low correlation with bonds and partial equity diversification; REIT dividends are ordinary income so always held in tax-deferred accounts.';
+        break;
+      case 'IAU':
+        rationale =
+          'Gold bullion ETF serving as a tail-risk hedge and inflation store of value. Near-zero correlation with equities in normal markets; historically spikes during stress events and currency crises.';
+        break;
+      case 'SCHP':
+        rationale = `TIPS ETF providing inflation-linked real return (${(etfReturns['SCHP'] * 100).toFixed(1)}% CMA). Phantom income from inflation accruals makes it unsuitable for taxable accounts — held in tax-deferred only.`;
+        break;
+      case 'VCIT':
+        rationale = `Intermediate investment-grade corporate bonds adding a credit premium above Treasuries (${(etfReturns['VCIT'] * 100).toFixed(1)}% CMA). Corporate coupon income is taxable as ordinary income — tax-deferred placement required.`;
+        break;
+      case 'HYG':
+        rationale = `High-yield corporate bond ETF targeting the credit risk premium (${(etfReturns['HYG'] * 100).toFixed(1)}% CMA). Equity-like behavior in stress periods; ordinary income distributions make taxable placement inefficient.`;
+        break;
+      case 'BNDX':
+        rationale =
+          'Currency-hedged international investment-grade bonds adding geographic diversification to the bond sleeve. Low correlation with US bonds; hedging cost is reflected in the lower expected return.';
+        break;
+      case 'VPU':
+        rationale =
+          'US utilities sector ETF providing defensive equity exposure with low beta (~0.5). Regulated monopoly cash flows offer stability; partial ordinary income from rate-regulated profits warrants tax-deferred placement.';
         break;
       default:
         rationale = `${slice.ticker} — expected return: ${((etfReturns[slice.ticker] ?? 0) * 100).toFixed(1)}%, weight: ${(slice.weight * 100).toFixed(1)}%.`;

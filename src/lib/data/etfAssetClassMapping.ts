@@ -171,6 +171,20 @@ export const ETF_TO_ASSET_CLASS: Record<string, ETFMapping> = {
     expenseRatio: 0.0030,
     description: 'Short-duration High Yield — less rate sensitivity than HYG; tax-deferred only',
   },
+  HYG: {
+    primaryAssetClass: 'US_HIGH_YIELD',
+    weight: 1.00,
+    expenseRatio: 0.0049,
+    description: 'iShares High Yield Corporate Bond — liquid HY benchmark; tax-deferred only',
+  },
+  BNDX: {
+    primaryAssetClass: 'US_AGGREGATE_BONDS',
+    weight: 1.00,
+    // International IG bonds yield ~100bps less than US IG in USD-hedged terms
+    factorPremiumAdjustment: -0.010,
+    expenseRatio: 0.0007,
+    description: 'Total International Bond (hedged) — adds global diversification to bond sleeve',
+  },
   BNDW: {
     primaryAssetClass: 'US_AGGREGATE_BONDS',
     weight: 0.50,
@@ -182,6 +196,20 @@ export const ETF_TO_ASSET_CLASS: Record<string, ETFMapping> = {
 
   // ── US Equity ─────────────────────────────────────────────────────────────
 
+  VOO: {
+    primaryAssetClass: 'US_LARGE_CAP',
+    weight: 1.00,
+    expenseRatio: 0.0003,
+    description: 'S&P 500 — 500 largest US companies; no small-cap sleeve vs VTI (same ER)',
+  },
+  VT: {
+    primaryAssetClass: 'US_LARGE_CAP',
+    weight: 0.60,
+    secondaryAssetClass: 'INTL_DEVELOPED',
+    secondaryWeight: 0.40,
+    expenseRatio: 0.0007,
+    description: 'Total World Stock — ~60% US, ~30% developed ex-US, ~10% EM; single-fund global diversification',
+  },
   VTI: {
     primaryAssetClass: 'US_LARGE_CAP',
     weight: 0.80,
@@ -293,6 +321,12 @@ export const ETF_TO_ASSET_CLASS: Record<string, ETFMapping> = {
     factorPremiumAdjustment: 0.022,
     expenseRatio: 0.0079,
     description: 'Alpha Architect International Value — top-decile value; very high conviction',
+  },
+  VEA: {
+    primaryAssetClass: 'INTL_DEVELOPED',
+    weight: 1.00,
+    expenseRatio: 0.0005,
+    description: 'Developed Markets ex-US — lower vol than VXUS; excludes EM exposure',
   },
   VWO: {
     primaryAssetClass: 'EMERGING_MARKETS',

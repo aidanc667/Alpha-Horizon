@@ -252,6 +252,39 @@ export const ETF_UNIVERSE: ETF[] = [
   // ── US Equity ─────────────────────────────────────────────────────────────
 
   {
+    ticker: 'VOO',
+    name: 'Vanguard S&P 500 ETF',
+    category: 'us_equity',
+    expenseRatio: 0.0003,
+    // CAPE build-up at CAPE=32, CPI=2.8%: 1/32 + 1.0% + 2.8% - 0.03% = 6.90%
+    // Slightly lower than VTI — lacks the small-cap return premium (~+10bps)
+    expectedReturn: 0.069,
+    // Pure large-cap: less volatile than VTI (no small/mid-cap exposure)
+    volatility: 0.155,
+    taxEfficiency: 'good',
+    // Large-cap only; slight quality loading from S&P 500 profitability screen;
+    // negative size (explicitly excludes small-caps vs VTI's full market coverage)
+    factorExposures: { value: 0.02, size: -0.05, quality: 0.20 },
+  },
+
+  {
+    ticker: 'VT',
+    name: 'Vanguard Total World Stock ETF',
+    category: 'intl_equity',
+    expenseRatio: 0.0007,
+    // CAPE build-up: 60% US (6.93%) + 40% Intl Developed CMA (7.8%) − 0.07% ER = 7.19%
+    // Higher than VTI because international markets trade at a valuation discount to US
+    expectedReturn: 0.072,
+    // Blend of US (0.160) and international (0.170) vol; geographic correlation benefit
+    volatility: 0.163,
+    // Foreign tax credit eligible from intl sleeve; mostly qualified dividends
+    taxEfficiency: 'good',
+    // ~60% US + ~30% developed ex-US + ~10% EM; intl sleeve adds value tilt
+    // (global markets trade at cheaper CAPE than US); modest size from broad market coverage
+    factorExposures: { value: 0.06, size: 0.04, quality: 0.12 },
+  },
+
+  {
     ticker: 'VTI',
     name: 'Vanguard Total Stock Market ETF',
     category: 'us_equity',

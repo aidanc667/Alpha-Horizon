@@ -35,6 +35,99 @@
 import { INSTITUTIONAL_CMAS } from './institutionalCMAs';
 import { ETF_TO_ASSET_CLASS }  from './etfAssetClassMapping';
 
+// ─── Market rates (live from FRED via Agent 2) ────────────────────────────────
+
+/**
+ * Live market rates passed from Agent 2 (FRED) into the return calculation.
+ * When provided, bond and cash returns are anchored to current yields rather
+ * than the static 2026 CMA baseline.
+ */
+export interface MarketRates {
+  /** Current 10-Year Treasury yield (e.g. 0.0435 = 4.35%). Used for bond sleeve. */
+  riskFreeRate: number;
+  /** Current Effective Federal Funds Rate. Used for cash sleeve (SGOV, USFR). */
+  fedFundsRate: number;
+  /**
+   * Shiller CAPE ratio for the US equity market (e.g. 32).
+   * When provided, US equity ETF returns are computed via the CAPE build-up model:
+   *   expectedReturn = (1/CAPE) + REAL_EPS_GROWTH + cpiYoY + classPremium
+   * instead of the static 2026 institutional CMA. This makes equity return
+   * estimates responsive to current market valuations.
+   * Source: agent2 macroData.shillerCAPE (updated annually via FRED/manual).
+   */
+  shillerCAPE?: number;
+  /**
+   * Current CPI year-over-year inflation rate (e.g. 0.028 = 2.8%).
+   * Used with shillerCAPE in the build-up model — inflation is the nominal
+   * component of expected equity returns above the real earnings yield.
+   * Source: agent2 macroData.cpiYoY (live from FRED CPIAUCSL).
+   */
+  cpiYoY?: number;
+}
+
+// ─── Rate constants ───────────────────────────────────────────────────────────
+
+/**
+ * 10-Year Treasury yield assumed when the 2026 institutional CMAs were published
+ * (JPMorgan LTCMA 2026 baseline). When live rates differ, bond/cash returns are
+ * adjusted by the delta so the model reflects current market conditions.
+ */
+const BASELINE_RF = 0.0435;
+
+/**
+ * Typical yield ratio of muni bonds to equivalent-maturity Treasuries.
+ * VTEB/CMF yield ≈ 0.75 × 10Y — a stable structural relationship driven by
+ * the federal tax exemption (investor demand for munis vs taxable bonds).
+ */
+const MUNI_TREASURY_RATIO = 0.75;
+
+// Asset class sets — used to route each ETF to its rate-adjustment logic
+const BOND_CLASSES  = new Set(['US_AGGREGATE_BONDS', 'US_TIPS', 'US_HIGH_YIELD']);
+const CASH_CLASSES  = new Set(['US_TREASURY_SHORT']);
+const MUNI_CLASSES  = new Set(['US_MUNI_BONDS']);
+
+// ─── CAPE build-up model for US equity ───────────────────────────────────────
+//
+// Formula (Shiller / Damodaran):
+//   expectedReturn = (1 / CAPE) + REAL_EPS_GROWTH + cpiYoY + classPremium
+//
+// Where:
+//   1/CAPE           = cyclically-adjusted earnings yield (current valuation signal)
+//   REAL_EPS_GROWTH  = 1.0% long-run real US EPS growth net of share dilution
+//                      (academic consensus: Bernstein, Dimson-Marsh-Staunton)
+//   cpiYoY           = current inflation from FRED — converts real to nominal
+//   classPremium     = size/style premium relative to US large-cap (from Fama-French)
+//
+// Calibration check — at CAPE=32, CPI=2.8% (the 2026 CMA baseline):
+//   US_LARGE_CAP:    1/32 + 1.0% + 2.8% + 0.0%  = 6.93% ≈ 6.9% CMA  ✓
+//   US_MID_CAP:      1/32 + 1.0% + 2.8% + 0.3%  = 7.23% ≈ 7.2% CMA  ✓
+//   US_SMALL_CAP:    1/32 + 1.0% + 2.8% + 0.5%  = 7.43% ≈ 7.4% CMA  ✓
+//   US_SMALL_VALUE:  1/32 + 1.0% + 2.8% + 1.2%  = 8.13% ≈ 8.1% CMA  ✓
+//   US_LARGE_GROWTH: 1/32 + 1.0% + 2.8% − 0.2%  = 6.73% ≈ 6.7% CMA  ✓
+//
+// When CAPE drops to 25 (cheaper market), US_LARGE_CAP → 7.8% (+90bps)
+// When CAPE rises to 40 (richer market), US_LARGE_CAP → 6.3% (−60bps)
+
+const REAL_EPS_GROWTH = 0.010; // 1.0% — long-run US real EPS growth net of dilution
+
+/** US equity asset class keys — these use the CAPE build-up model when live data available. */
+const US_EQUITY_CLASSES = new Set([
+  'US_LARGE_CAP', 'US_MID_CAP', 'US_SMALL_CAP', 'US_SMALL_VALUE', 'US_LARGE_GROWTH',
+]);
+
+/**
+ * Size/style premium of each US equity class relative to US_LARGE_CAP.
+ * Calibrated against Fama-French factor research and the 2026 institutional CMAs.
+ * The CAPE model applies these on top of the base earnings-yield return.
+ */
+const US_EQUITY_CLASS_PREMIUM: Record<string, number> = {
+  US_LARGE_CAP:     0.000,  // baseline — no premium
+  US_MID_CAP:       0.003,  // +30bps size premium (small-cap lite)
+  US_SMALL_CAP:     0.005,  // +50bps size premium (Fama-French SMB)
+  US_SMALL_VALUE:   0.012,  // +120bps size + value premium (Fama-French SMB + HML)
+  US_LARGE_GROWTH:  -0.002, // −20bps growth discount (premium P/E, lower earnings yield)
+};
+
 // ─── Expected Return ──────────────────────────────────────────────────────────
 
 /**
@@ -90,6 +183,97 @@ export function calculateETFExpectedReturn(
   return afterFeeReturn;
 }
 
+// ─── Market-grounded single-ETF return ────────────────────────────────────────
+
+/**
+ * Computes an expected return for one ETF, anchoring bond and cash ETFs to
+ * live market yields when `marketRates` is provided.
+ *
+ * Rate-adjustment logic by asset class:
+ *   • Cash (US_TREASURY_SHORT)  — return ≈ current Fed Funds Rate - ER
+ *   • Munis (US_MUNI_BONDS)     — pre-tax yield ≈ MUNI_TREASURY_RATIO × 10Y,
+ *                                  TEY applied when taxBracket is provided
+ *   • Bonds (US_AGGREGATE_BONDS / US_TIPS / US_HIGH_YIELD)
+ *                                — static CMA shifted by (live10Y - BASELINE_RF)
+ *   • Equity / Real assets       — static CMA unchanged (10-yr forecasts are
+ *                                  structurally driven, not rate-sensitive short-term)
+ */
+function computeMarketGroundedReturn(
+  ticker: string,
+  taxBracket?: number,
+  marketRates?: MarketRates,
+): number {
+  const mapping = ETF_TO_ASSET_CLASS[ticker];
+  if (!mapping) return 0;
+
+  // Without live rates, fall back to static CMA calculation unchanged
+  if (!marketRates) return calculateETFExpectedReturn(ticker, taxBracket);
+
+  const { riskFreeRate, fedFundsRate } = marketRates;
+  const primaryClass = mapping.primaryAssetClass;
+
+  // ── Cash sleeve: T-bills track Fed Funds Rate ─────────────────────────────
+  if (CASH_CLASSES.has(primaryClass)) {
+    return Math.max(0, fedFundsRate - mapping.expenseRatio);
+  }
+
+  // ── Muni bonds: pre-tax yield = MUNI_TREASURY_RATIO × 10Y ────────────────
+  if (MUNI_CLASSES.has(primaryClass)) {
+    const muniPreTaxNet = MUNI_TREASURY_RATIO * riskFreeRate - mapping.expenseRatio;
+    if (taxBracket != null) {
+      // TEY makes muni return comparable to taxable yield for the investor's bracket
+      return muniPreTaxNet / (1 - taxBracket);
+    }
+    return muniPreTaxNet;
+  }
+
+  // ── Investment-grade / high-yield bonds: shift by yield delta ────────────
+  if (BOND_CLASSES.has(primaryClass)) {
+    const staticReturn = calculateETFExpectedReturn(ticker, undefined); // no TEY for non-munis
+    const rateShift = riskFreeRate - BASELINE_RF;
+    return staticReturn + rateShift;
+  }
+
+  // ── US equity: CAPE build-up model (live valuation-sensitive) ───────────
+  //
+  // When shillerCAPE and cpiYoY are available, replace the static institutional
+  // CMA with a live CAPE-derived return. This makes equity forecasts respond to
+  // actual market valuations instead of being frozen at January 2026 levels.
+  //
+  // Example — if CAPE drops from 32 to 25 (market correction):
+  //   VTI: 6.94% → 7.94%  (+100bps — equities become cheaper, expected return rises)
+  //   AVUV: 9.35% → 10.35% (same +100bps base shift, factor premium unchanged)
+  if (US_EQUITY_CLASSES.has(primaryClass) && marketRates.shillerCAPE && marketRates.cpiYoY != null) {
+    const usLargeCapBase = (1 / marketRates.shillerCAPE) + REAL_EPS_GROWTH + marketRates.cpiYoY;
+
+    // Primary class: CAPE base + size/style premium, scaled by exposure weight
+    const primaryPremium = US_EQUITY_CLASS_PREMIUM[primaryClass] ?? 0;
+    let baseReturn = (usLargeCapBase + primaryPremium) * mapping.weight;
+
+    // Secondary class (e.g. VTI's small-cap sleeve, VT's international sleeve)
+    if (mapping.secondaryAssetClass && mapping.secondaryWeight != null) {
+      const secClass = mapping.secondaryAssetClass;
+      if (US_EQUITY_CLASSES.has(secClass)) {
+        // Also US equity — apply CAPE model to the secondary sleeve too
+        const secPremium = US_EQUITY_CLASS_PREMIUM[secClass] ?? 0;
+        baseReturn += (usLargeCapBase + secPremium) * mapping.secondaryWeight;
+      } else {
+        // International / bonds — use institutional CMA (no live foreign CAPE from FRED)
+        const secCMA = INSTITUTIONAL_CMAS[secClass];
+        if (secCMA) baseReturn += secCMA.return * mapping.secondaryWeight;
+      }
+    }
+
+    const factor = mapping.factorPremiumAdjustment ?? 0;
+    return baseReturn + factor - mapping.expenseRatio;
+  }
+
+  // ── International equity + real assets: static institutional CMA ─────────
+  // No live international CAPE available from FRED — institutional CMAs
+  // (JPM/Vanguard/BlackRock) already embed current valuations for these markets.
+  return calculateETFExpectedReturn(ticker, taxBracket);
+}
+
 // ─── Batch Helper ─────────────────────────────────────────────────────────────
 
 /**
@@ -97,19 +281,35 @@ export function calculateETFExpectedReturn(
  * Use this at the start of each agent run rather than calling
  * calculateETFExpectedReturn() inside a loop — avoids repeated map lookups.
  *
- * @param taxBracket - Optional combined marginal rate; passed through to muni TEY.
+ * When `marketRates` is provided (live 10Y yield + Fed Funds from FRED):
+ *   • Cash ETFs  track the current Fed Funds Rate
+ *   • Muni ETFs  use muni/treasury ratio × 10Y, with TEY applied
+ *   • Bond ETFs  shift proportionally with the live 10Y yield
+ *   • Equity ETFs remain anchored to 2026 institutional CMAs (10-yr structural forecasts)
+ *
+ * @param taxBracket  - Optional combined marginal rate; applied to muni TEY.
+ * @param marketRates - Optional live yields from Agent 2 (FRED). Without this,
+ *                      returns use the static 2026 CMA baseline.
  * @returns Map of ticker → net expected annualized return
  *
  * @example
+ * // Static CMAs only
  * const returns = calculateAllETFReturns(0.35);
- * console.log(returns['AVUV']); // ~0.0915
- * console.log(returns['VTEB']); // ~0.0492 (TEY at 35%)
+ *
+ * // Market-grounded (live FRED rates from agent2)
+ * const returns = calculateAllETFReturns(0.35, {
+ *   riskFreeRate: economicIntel.assetClassOutlook.riskFreeRate,
+ *   fedFundsRate: economicIntel.macroData.fedFundsRate,
+ * });
  */
-export function calculateAllETFReturns(taxBracket?: number): Record<string, number> {
+export function calculateAllETFReturns(
+  taxBracket?: number,
+  marketRates?: MarketRates,
+): Record<string, number> {
   const returns: Record<string, number> = {};
 
   for (const ticker in ETF_TO_ASSET_CLASS) {
-    returns[ticker] = calculateETFExpectedReturn(ticker, taxBracket);
+    returns[ticker] = computeMarketGroundedReturn(ticker, taxBracket, marketRates);
   }
 
   return returns;

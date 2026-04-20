@@ -929,7 +929,43 @@ export interface MonteCarloOutput {
   executionTimeMs: number;
 }
 
-// ─── 10. V3Plan (full pipeline output) ───────────────────────────────────────
+// ─── 10. Agent7Output (LLM synthesis) ────────────────────────────────────────
+
+/**
+ * Output of Agent 7: the LLM synthesis agent.
+ * Provides the human-readable narrative layer on top of the quantitative plan.
+ */
+export interface Agent7Output {
+  agentName: 'synthesis';
+  timestamp: string;
+  executionTimeMs: number;
+
+  /**
+   * 2–3 paragraph narrative explaining why this specific portfolio was built
+   * for this specific user — written in plain English, not financial jargon.
+   */
+  portfolioNarrative: string;
+
+  /**
+   * 3–5 concise bullet points summarising the most important personalisation
+   * decisions made for this user (e.g. "High tax bracket → VTEB over BND").
+   */
+  keyInsights: string[];
+
+  /**
+   * The single biggest risk the user should understand about their plan.
+   */
+  primaryRisk: string;
+
+  /**
+   * 3 concrete actionable next steps the user should take to implement the plan.
+   */
+  actionableNextSteps: string[];
+
+  performance: AgentPerformance;
+}
+
+// ─── 11. V3Plan (full pipeline output) ───────────────────────────────────────
 
 /**
  * Complete output of the v3 portfolio agent pipeline.
@@ -946,4 +982,6 @@ export interface V3Plan {
   taxOptimization: Agent5Output;
   criticScore:     Agent6Output;
   monteCarlo:      MonteCarloOutput;
+  /** LLM-generated narrative. Present when GEMINI_API_KEY is configured. */
+  synthesis?:      Agent7Output;
 }
