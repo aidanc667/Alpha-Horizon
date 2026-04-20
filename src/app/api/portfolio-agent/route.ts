@@ -92,6 +92,11 @@ export async function POST(req: NextRequest) {
 
   const encoder = new TextEncoder();
 
+  // Paced delay — makes the pipeline feel deliberate to the user while keeping
+  // total time to ~10–15s. Each agent "breathes" for a moment after completing
+  // so the user sees the progress log fill in step by step.
+  const pace = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+
   const stream = new ReadableStream({
     async start(controller) {
       const push = (obj: unknown) => {
@@ -113,8 +118,8 @@ export async function POST(req: NextRequest) {
 
         const t0 = Date.now();
 
-        // ── Agent 1: Client Profile (deterministic, <2ms) ─────────────────────
-        log('Agent 1/7: Deriving client profile...');
+        // ── Agent 1: Client Profile ───────────────────────────────────────────
+        log('Agent 1/7: Analysing your financial profile...');
         const clientProfile = agent1_clientProfile({ intakeAnswers });
 
         if (clientProfile.constraints.hardStops.length > 0) {
@@ -126,39 +131,51 @@ export async function POST(req: NextRequest) {
           return;
         }
 
-        log(`Profile: risk ${clientProfile.riskProfile.riskScore}/10 | ${clientProfile.timeHorizon.yearsToGoal}yr | ${(clientProfile.taxProfile.combinedMarginalRate * 100).toFixed(0)}% combined rate`);
+        await pace(1200);
+        log(`Profile: risk ${clientProfile.riskProfile.riskScore}/10 | ${clientProfile.timeHorizon.yearsToGoal}yr horizon | ${(clientProfile.taxProfile.combinedMarginalRate * 100).toFixed(0)}% combined tax rate`);
 
-        // ── Agent 2: Economic Intelligence (cache → static fallback) ──────────
-        log('Agent 2/7: Loading market context...');
+        // ── Agent 2: Economic Intelligence ───────────────────────────────────
+        await pace(800);
+        log('Agent 2/7: Loading live market context from FRED...');
         const economicIntel = await agent2_economicIntelligence({ requestDate: new Date().toISOString() });
-        log(`Macro: ${economicIntel.regime.current} | rf ${(economicIntel.assetClassOutlook.riskFreeRate * 100).toFixed(2)}% | equity ${economicIntel.assetClassOutlook.equityValuation}`);
+        await pace(1000);
+        log(`Macro: ${economicIntel.regime.current} | 10Y ${(economicIntel.assetClassOutlook.riskFreeRate * 100).toFixed(2)}% | CAPE ${economicIntel.macroData.shillerCAPE} | equity ${economicIntel.assetClassOutlook.equityValuation}`);
 
-        // ── Agent 3: Portfolio Construction (<30ms) ───────────────────────────
-        log('Agent 3/7: Constructing portfolio...');
+        // ── Agent 3: Portfolio Construction ──────────────────────────────────
+        await pace(900);
+        log('Agent 3/7: Running Sharpe optimiser across ETF universe...');
         const portfolio = agent3_portfolioConstruction({ clientProfile, economicIntel });
-        log(`Portfolio: ${portfolio.allocation.length} holdings | return ${(portfolio.statistics.expectedReturn * 100).toFixed(1)}% | Sharpe ${portfolio.statistics.sharpeRatio.toFixed(2)}`);
+        await pace(1800);
+        log(`Portfolio: ${portfolio.allocation.length} holdings | expected return ${(portfolio.statistics.expectedReturn * 100).toFixed(1)}% | Sharpe ${portfolio.statistics.sharpeRatio.toFixed(2)}`);
 
-        // ── Agents 4 + 5 in parallel (<15ms total) ────────────────────────────
-        log('Agent 4/7: Running risk analysis...');
-        log('Agent 5/7: Running tax optimization...');
+        // ── Agents 4 + 5 in parallel ──────────────────────────────────────────
+        await pace(700);
+        log('Agent 4/7: Running stress tests and risk analysis...');
+        await pace(400);
+        log('Agent 5/7: Optimising tax placement across accounts...');
         const [riskAnalysis, taxOptimization] = await Promise.all([
           Promise.resolve(agent4_riskAnalysis({ portfolio, clientProfile })),
           Promise.resolve(agent5_taxOptimization({ portfolio, clientProfile })),
         ]);
+        await pace(1400);
         log(`Risk: ${riskAnalysis.riskLevel} (${riskAnalysis.warnings.length} warning${riskAnalysis.warnings.length !== 1 ? 's' : ''})`);
-        log(`Tax: ${taxOptimization.estimatedAnnualSavings}bps potential savings`);
+        log(`Tax: ${taxOptimization.estimatedAnnualSavings}bps potential savings identified`);
 
-        // ── Agent 6: Critic (<20ms) ───────────────────────────────────────────
-        log('Agent 6/7: Scoring portfolio...');
+        // ── Agent 6: Critic ───────────────────────────────────────────────────
+        await pace(800);
+        log('Agent 6/7: Scoring portfolio against institutional benchmarks...');
         const criticScore = agent6_critic({ portfolio, clientProfile, riskAnalysis, taxOptimization });
+        await pace(1200);
         log(`Score: ${criticScore.scores.overall}/100 — ${criticScore.passesThreshold ? 'APPROVED' : 'review suggested'}`);
 
-        // ── Monte Carlo (<5ms) ────────────────────────────────────────────────
+        // ── Monte Carlo ───────────────────────────────────────────────────────
+        await pace(600);
         const monteCarlo = runMonteCarlo(portfolio, clientProfile, clientProfile.timeHorizon.yearsToGoal);
-        log(`Monte Carlo: p50 at goal year = $${monteCarlo.projections.at(-1)?.p50.toLocaleString() ?? '—'} | success ${(monteCarlo.goalSuccessProbability * 100).toFixed(0)}%`);
+        log(`Monte Carlo: p50 at goal year = $${monteCarlo.projections.at(-1)?.p50.toLocaleString() ?? '—'} | success rate ${(monteCarlo.goalSuccessProbability * 100).toFixed(0)}%`);
 
-        // ── Agent 7: LLM Synthesis (2–5s, requires GEMINI_API_KEY) ────────────
-        log('Agent 7/7: Writing personalised narrative...');
+        // ── Agent 7: LLM Synthesis (Gemini — naturally 2–5s) ─────────────────
+        await pace(500);
+        log('Agent 7/7: Writing your personalised investment narrative...');
         const synthesis = await agent7_synthesis({
           clientProfile,
           economicIntel,
