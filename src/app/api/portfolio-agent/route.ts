@@ -47,12 +47,12 @@ async function checkCache(cacheKey: string): Promise<V3Plan | null> {
   try {
     const sql = db();
     const rows = await sql`
-      SELECT plan_data FROM plan_cache
+      SELECT plan_json FROM plan_cache
       WHERE cache_key = ${cacheKey}
         AND created_at > NOW() - INTERVAL '24 hours'
       LIMIT 1
-    ` as Array<{ plan_data: V3Plan }>;
-    return rows.length > 0 ? rows[0].plan_data : null;
+    ` as Array<{ plan_json: V3Plan }>;
+    return rows.length > 0 ? rows[0].plan_json : null;
   } catch {
     return null; // fail open — run pipeline on cache miss
   }
@@ -63,10 +63,10 @@ function saveCache(cacheKey: string, plan: V3Plan): void {
     try {
       const sql = db();
       await sql`
-        INSERT INTO plan_cache (cache_key, plan_data, created_at)
+        INSERT INTO plan_cache (cache_key, plan_json, created_at)
         VALUES (${cacheKey}, ${JSON.stringify(plan)}::jsonb, NOW())
         ON CONFLICT (cache_key) DO UPDATE
-          SET plan_data = EXCLUDED.plan_data, created_at = EXCLUDED.created_at
+          SET plan_json = EXCLUDED.plan_json, created_at = EXCLUDED.created_at
       `;
     } catch (e) {
       console.error('[portfolio-agent] cache write failed:', e);
