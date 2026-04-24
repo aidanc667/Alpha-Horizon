@@ -36,25 +36,30 @@ import { calculateETFVolatility } from '@/lib/data/calculateETFReturns';
 // Upper-triangle values derived from rolling 10-year return correlations
 // (MSCI/Bloomberg data 2014–2024, averaged). Symmetric matrix — lookup
 // always uses [Math.min, Math.max] key order for consistency.
+//
+// bonds↔equity updated to +0.40 to reflect the post-2022 regime shift:
+// the negative/near-zero correlation of the 2010–2021 ZIRP era reversed
+// sharply positive when the Fed raised rates while equity fell simultaneously.
+// Source: AQR "The Stock-Bond Correlation" (2023); JPMorgan LTCMA 2026, Ch. 4
 
 const CATEGORY_CORR: Record<string, Record<string, number>> = {
   us_equity: {
     us_equity:   0.82,
     intl_equity: 0.73,
-    bonds:       0.03,
+    bonds:       0.40,
     cash:       -0.02,
     real_assets: 0.55,
   },
   intl_equity: {
     us_equity:   0.73,
     intl_equity: 0.80,
-    bonds:       0.03,
+    bonds:       0.40,
     cash:       -0.02,
     real_assets: 0.48,
   },
   bonds: {
-    us_equity:   0.03,
-    intl_equity: 0.03,
+    us_equity:   0.40,
+    intl_equity: 0.40,
     bonds:       0.72,
     cash:        0.30,
     real_assets: 0.10,

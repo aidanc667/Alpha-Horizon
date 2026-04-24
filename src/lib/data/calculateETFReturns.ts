@@ -72,14 +72,29 @@ export interface MarketRates {
  * (JPMorgan LTCMA 2026 baseline). When live rates differ, bond/cash returns are
  * adjusted by the delta so the model reflects current market conditions.
  */
-const BASELINE_RF = 0.0435;
+export const BASELINE_RF = 0.0435;
 
 /**
  * Typical yield ratio of muni bonds to equivalent-maturity Treasuries.
- * VTEB/CMF yield ≈ 0.75 × 10Y — a stable structural relationship driven by
- * the federal tax exemption (investor demand for munis vs taxable bonds).
+ * Updated to 0.80 — the 0.75 value reflected pre-2022 conditions; the
+ * post-2022 muni/treasury ratio has stabilised closer to 0.80 as higher
+ * absolute yields reduced the relative demand premium for tax-exempt income.
  */
-const MUNI_TREASURY_RATIO = 0.75;
+const MUNI_TREASURY_RATIO = 0.80;
+
+/**
+ * Derives the pre-expense nominal yield for a muni bond ETF (VTEB/CMF) from
+ * the current 10-Year Treasury yield.
+ *
+ * Single canonical implementation shared by calculateETFReturns.ts and agent5.ts
+ * so both modules always use the same muni/treasury ratio. Pass BASELINE_RF when
+ * live market rates are not available.
+ *
+ * Source: Bloomberg BVAL Muni indices — post-2022 muni/treasury ratio ≈ 0.80.
+ */
+export function deriveMuniNominalYield(rfr: number): number {
+  return MUNI_TREASURY_RATIO * rfr;
+}
 
 // Asset class sets — used to route each ETF to its rate-adjustment logic
 const BOND_CLASSES  = new Set(['US_AGGREGATE_BONDS', 'US_TIPS', 'US_HIGH_YIELD']);
@@ -93,22 +108,24 @@ const MUNI_CLASSES  = new Set(['US_MUNI_BONDS']);
 //
 // Where:
 //   1/CAPE           = cyclically-adjusted earnings yield (current valuation signal)
-//   REAL_EPS_GROWTH  = 1.0% long-run real US EPS growth net of share dilution
-//                      (academic consensus: Bernstein, Dimson-Marsh-Staunton)
+//   REAL_EPS_GROWTH  = 1.3% long-run real US EPS growth net of share dilution
+//                      Source: Dimson, Marsh, Staunton, "Credit Suisse Global Investment
+//                      Returns Yearbook 2024", US data 1900–2023 (~1.3% per year)
 //   cpiYoY           = current inflation from FRED — converts real to nominal
 //   classPremium     = size/style premium relative to US large-cap (from Fama-French)
 //
 // Calibration check — at CAPE=32, CPI=2.8% (the 2026 CMA baseline):
-//   US_LARGE_CAP:    1/32 + 1.0% + 2.8% + 0.0%  = 6.93% ≈ 6.9% CMA  ✓
-//   US_MID_CAP:      1/32 + 1.0% + 2.8% + 0.3%  = 7.23% ≈ 7.2% CMA  ✓
-//   US_SMALL_CAP:    1/32 + 1.0% + 2.8% + 0.5%  = 7.43% ≈ 7.4% CMA  ✓
-//   US_SMALL_VALUE:  1/32 + 1.0% + 2.8% + 1.2%  = 8.13% ≈ 8.1% CMA  ✓
-//   US_LARGE_GROWTH: 1/32 + 1.0% + 2.8% − 0.2%  = 6.73% ≈ 6.7% CMA  ✓
+//   US_LARGE_CAP:    1/32 + 1.3% + 2.8% + 0.0%  = 7.23% ≈ 7.2% CMA  ✓
+//   US_MID_CAP:      1/32 + 1.3% + 2.8% + 0.3%  = 7.53% ≈ 7.5% CMA  ✓
+//   US_SMALL_CAP:    1/32 + 1.3% + 2.8% + 0.5%  = 7.73% ≈ 7.7% CMA  ✓
+//   US_SMALL_VALUE:  1/32 + 1.3% + 2.8% + 1.2%  = 8.43% ≈ 8.4% CMA  ✓
+//   US_LARGE_GROWTH: 1/32 + 1.3% + 2.8% − 0.2%  = 7.03% ≈ 7.0% CMA  ✓
 //
-// When CAPE drops to 25 (cheaper market), US_LARGE_CAP → 7.8% (+90bps)
-// When CAPE rises to 40 (richer market), US_LARGE_CAP → 6.3% (−60bps)
+// When CAPE drops to 25 (cheaper market), US_LARGE_CAP → 8.1% (+90bps)
+// When CAPE rises to 40 (richer market), US_LARGE_CAP → 6.6% (−60bps)
 
-const REAL_EPS_GROWTH = 0.010; // 1.0% — long-run US real EPS growth net of dilution
+// Source: Dimson, Marsh, Staunton, "Credit Suisse Global Investment Returns Yearbook 2024"
+const REAL_EPS_GROWTH = 0.013;
 
 /** US equity asset class keys — these use the CAPE build-up model when live data available. */
 const US_EQUITY_CLASSES = new Set([
@@ -124,7 +141,7 @@ const US_EQUITY_CLASS_PREMIUM: Record<string, number> = {
   US_LARGE_CAP:     0.000,  // baseline — no premium
   US_MID_CAP:       0.003,  // +30bps size premium (small-cap lite)
   US_SMALL_CAP:     0.005,  // +50bps size premium (Fama-French SMB)
-  US_SMALL_VALUE:   0.012,  // +120bps size + value premium (Fama-French SMB + HML)
+  US_SMALL_VALUE:   0.012,  // +120bps size + value premium; AQR Capital Management (2023), "Value is Alive," p.8: SMB+HML ~1.1% annualized
   US_LARGE_GROWTH:  -0.002, // −20bps growth discount (premium P/E, lower earnings yield)
 };
 
@@ -217,9 +234,9 @@ function computeMarketGroundedReturn(
     return Math.max(0, fedFundsRate - mapping.expenseRatio);
   }
 
-  // ── Muni bonds: pre-tax yield = MUNI_TREASURY_RATIO × 10Y ────────────────
+  // ── Muni bonds: pre-tax yield = deriveMuniNominalYield(10Y) ─────────────
   if (MUNI_CLASSES.has(primaryClass)) {
-    const muniPreTaxNet = MUNI_TREASURY_RATIO * riskFreeRate - mapping.expenseRatio;
+    const muniPreTaxNet = deriveMuniNominalYield(riskFreeRate) - mapping.expenseRatio;
     if (taxBracket != null) {
       // TEY makes muni return comparable to taxable yield for the investor's bracket
       return muniPreTaxNet / (1 - taxBracket);

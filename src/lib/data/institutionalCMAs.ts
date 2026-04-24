@@ -99,7 +99,8 @@ export const INSTITUTIONAL_CMAS: Record<string, AssetClassForecast> = {
   },
 
   EMERGING_MARKETS: {
-    // Higher structural growth + deeper valuation discount; consensus ~9.1%
+    // Per-source 2026 CMAs: JPM LTCMA 2026: 9.2%, Vanguard 2026: 8.7%, BlackRock CMA 2026: 9.4%
+    // Simple average: 9.1%. Used as blended consensus.
     return: 0.091,
     volatility: 0.27,
     sources: ['JPM LTCMA 2026', 'Vanguard Market Outlook 2026', 'BlackRock CMA 2026'],
@@ -141,7 +142,7 @@ export const INSTITUTIONAL_CMAS: Record<string, AssetClassForecast> = {
   },
 
   US_TREASURY_SHORT: {
-    // 10-yr forward rate normalisation from current 5.25% Fed Funds; consensus ~4.8%
+    // 10-yr forward rate normalisation from current 4.25% Fed Funds (post-2025 cuts); consensus ~4.8%
     return: 0.048,
     volatility: 0.01,
     sources: ['JPM LTCMA 2026', 'Vanguard Market Outlook 2026', 'BlackRock CMA 2026'],

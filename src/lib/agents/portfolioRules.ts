@@ -2,7 +2,7 @@ import { calculateAllETFReturns, calculateETFVolatility } from '@/lib/data/calcu
 import type { MarketRates } from '@/lib/data/calculateETFReturns';
 import { ETF_UNIVERSE } from '@/lib/data/etfUniverse';
 import { optimizeSharpeWeights } from './sharpeOptimizer';
-import type { AllocationSlice, AllocationCategory, AccountPlacement } from '@/lib/agents/types';
+import type { AllocationSlice, AllocationCategory, AccountPlacement, InvestmentPreferences } from '@/lib/agents/types';
 
 export { calculateAllETFReturns, calculateETFVolatility };
 export type { MarketRates };
@@ -40,13 +40,41 @@ interface SleeveSpec {
   maxWeightPerPosition: number;
 }
 
-function buildEquitySleeveSpec(riskScore: number, taxBracket: number): SleeveSpec {
+// ESG exclusion set: real-asset and credit ETFs with higher ESG controversy.
+// Broad market index funds (VTI, VXUS, VT, AVUV, AVDV) are retained — they use
+// passive cap-weighted indices with no active sector tilts.
+const ESG_EXCLUDED = new Set(['VNQ', 'IAU', 'HYG', 'VCIT']);
+
+function filterByPreferences(tickers: string[], prefs?: InvestmentPreferences): string[] {
+  if (!prefs) return tickers;
+  let out = tickers;
+  if (prefs.esgOnly) {
+    out = out.filter((t) => !ESG_EXCLUDED.has(t));
+  }
+  if (prefs.avoidedSectors) {
+    const avoided = prefs.avoidedSectors.toLowerCase();
+    // REITs (VNQ) have energy REIT sub-sector exposure
+    if (avoided.includes('fossil') || avoided.includes('energy')) {
+      out = out.filter((t) => t !== 'VNQ');
+    }
+    // Gold if commodities/materials avoided
+    if (avoided.includes('gold') || avoided.includes('commodit')) {
+      out = out.filter((t) => t !== 'IAU');
+    }
+  }
+  return out;
+}
+
+function buildEquitySleeveSpec(riskScore: number, taxBracket: number, preferences?: InvestmentPreferences): SleeveSpec {
   const tickers: string[] = [];
 
   // ── Core: broad market always included ──────────────────────────────────
-  // VTI vs VOO: optimizer picks — VTI has ~+10bps from small-cap sleeve at same ER.
+  // VTI preferred over VOO: same 0.03% ER but includes small/mid cap (~15% of
+  // market cap) giving +10–30bps structural return premium (Fama-French SMB).
+  // VOO omitted to prevent the optimizer from simultaneously holding VTI+VOO,
+  // which creates de facto single-index concentration (98%+ holdings overlap).
   // VT: single-fund global alternative to VTI+VXUS; useful for simpler portfolios.
-  tickers.push('VTI', 'VOO', 'VXUS', 'VT');
+  tickers.push('VTI', 'VXUS', 'VT');
 
   // ── Factor tilts: add for moderate and aggressive profiles ───────────
   if (riskScore >= 4) {
@@ -77,7 +105,7 @@ function buildEquitySleeveSpec(riskScore: number, taxBracket: number): SleeveSpe
 
   // Per-position cap: 40% for core, but we use a single cap for the whole sleeve.
   // The optimizer naturally concentrates less because diversification reduces vol.
-  return { tickers, maxWeightPerPosition: 0.40 };
+  return { tickers: filterByPreferences(tickers, preferences), maxWeightPerPosition: 0.40 };
 }
 
 function buildBondSleeveSpec(
@@ -153,7 +181,13 @@ export function determineAccountPlacement(
   const has = (acct: string) =>
     availableAccounts.some(a => a.toLowerCase().includes(acct));
 
-  if (['VTEB', 'CMF'].includes(ticker))              return 'taxable';
+  if (['VTEB', 'CMF'].includes(ticker)) {
+    if (has('taxable') || has('brokerage')) return 'taxable';
+    return has('traditional') ? 'traditional' : 'taxable';
+  }
+  // HSA: triple-tax advantage (deduction + tax-free growth + medical withdrawal)
+  // Place highest-expected-return assets here first. IRS Publication 969.
+  if (['AVUV', 'AVDV', 'QQQM'].includes(ticker) && has('hsa')) return 'hsa';
   if (['AVUV', 'AVDV', 'VWO', 'MTUM'].includes(ticker))
     return has('roth') ? 'roth' : 'taxable';
   if (['BND', 'SCHD', 'SCHP', 'VCIT', 'BNDX', 'HYG', 'VNQ'].includes(ticker))
@@ -175,6 +209,7 @@ export function selectETFsForAllocation(
   accounts: string[],
   riskFreeRate: number = 0.048,
   marketRates?: MarketRates,
+  preferences?: InvestmentPreferences,
 ): AllocationSlice[] {
   // calculateAllETFReturns applies TEY for muni bonds and, when marketRates is
   // provided, anchors bond/cash returns to live FRED yields instead of static CMAs.
@@ -183,7 +218,7 @@ export function selectETFsForAllocation(
 
   // ── Equity + real assets sleeve ───────────────────────────────────────────
   if (equityTarget > 0.005) {
-    const { tickers, maxWeightPerPosition } = buildEquitySleeveSpec(riskScore, taxBracket);
+    const { tickers, maxWeightPerPosition } = buildEquitySleeveSpec(riskScore, taxBracket, preferences);
     const returns = Object.fromEntries(tickers.map(t => [t, etfReturns[t] ?? 0]));
 
     const weights = optimizeSharpeWeights(tickers, returns, riskFreeRate, {

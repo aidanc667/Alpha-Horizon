@@ -97,16 +97,23 @@ export function runMonteCarlo(
       const lumpP50 = lognormalPercentile(v0, mu, sig, y, 0);
       const lumpP90 = lognormalPercentile(v0, mu, sig, y, Z_90);
 
-      // Contribution component: deterministic FV added to each percentile.
-      // Contribution stream modelled at the expected return (median path);
-      // volatility around contributions is second-order for planning purposes.
-      const contribFv = contributionFV(pmt, mu, y);
+      // Stochastic contribution FV — midpoint-horizon approximation.
+      // Contributions are spread evenly over [0, y], so the average dollar is
+      // invested for ~y/2 years. Applying sigma×√(y/2) as the spread prevents
+      // P10≈P50≈P90 collapse for contribution-heavy portfolios (e.g. $2K initial /
+      // $200/mo where contributions exceed 95% of terminal wealth at year 40).
+      // Median path is unchanged; only the tails diverge realistically.
+      const contribFvBase = contributionFV(pmt, mu, y);
+      const halfSigSqrtY  = sig * Math.sqrt(y / 2);
+      const contribP10    = contribFvBase * Math.exp(halfSigSqrtY * Z_10);
+      const contribP50    = contribFvBase;
+      const contribP90    = contribFvBase * Math.exp(halfSigSqrtY * Z_90);
 
       return {
         year: y,
-        p10: Math.round(lumpP10 + contribFv),
-        p50: Math.round(lumpP50 + contribFv),
-        p90: Math.round(lumpP90 + contribFv),
+        p10: Math.round(lumpP10 + contribP10),
+        p50: Math.round(lumpP50 + contribP50),
+        p90: Math.round(lumpP90 + contribP90),
       };
     });
 

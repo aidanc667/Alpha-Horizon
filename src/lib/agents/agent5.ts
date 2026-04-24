@@ -1,3 +1,4 @@
+import { deriveMuniNominalYield, BASELINE_RF } from '@/lib/data/calculateETFReturns';
 import type {
   Agent1Output,
   Agent3Output,
@@ -9,9 +10,9 @@ import type {
 
 /** Tax-loss harvesting substitute pairs (held → wash-sale-safe swap). */
 const TLH_PAIRS: { ticker: string; substitute: string }[] = [
-  { ticker: 'VTI',  substitute: 'SCHD'  }, // US equity
+  { ticker: 'VTI',  substitute: 'ITOT'  }, // US equity — different index (S&P vs CRSP), not substantially identical
   { ticker: 'VXUS', substitute: 'VEA'   }, // international
-  { ticker: 'AVUV', substitute: 'DFSV'  }, // small-cap value
+  { ticker: 'AVUV', substitute: 'VBR'   }, // small-cap value — Vanguard index, not substantially identical to AQR
   { ticker: 'BND',  substitute: 'VGIT'  }, // investment-grade bonds
 ];
 
@@ -23,8 +24,10 @@ const IDEAL_PLACEMENT: Record<string, string> = {
   BND:  'traditional', SCHD: 'traditional',
 };
 
-// Reference yields for savings calculations
-const VTEB_NOMINAL_YIELD = 0.032;
+// Reference yields for savings calculations.
+// VTEB_NOMINAL_YIELD is derived from the shared muni/treasury formula so it stays
+// consistent with the yield used by calculateETFReturns (same ratio, same baseline rfr).
+const VTEB_NOMINAL_YIELD = deriveMuniNominalYield(BASELINE_RF);
 const BND_YIELD          = 0.050;
 
 // ─── Agent 5: Tax Optimization ────────────────────────────────────────────────
@@ -48,7 +51,8 @@ export function agent5_taxOptimization(input: {
   const { allocation } = portfolio;
   const { taxProfile, accountStructure, timeHorizon } = clientProfile;
 
-  const combinedRate  = taxProfile.combinedMarginalRate;
+  const combinedRate    = taxProfile.combinedMarginalRate;
+  const investmentRate  = taxProfile.investmentIncomeMarginalRate;
   const accounts      = accountStructure.availableAccounts;
   const hasTaxable    = accounts.some((a) => /taxable|brokerage/i.test(a));
   const hasRoth       = accounts.some((a) => /roth/i.test(a));
@@ -59,13 +63,13 @@ export function agent5_taxOptimization(input: {
 
   // ── 1. Muni bond check ────────────────────────────────────────────────────
   if (combinedRate >= 0.24 && hasTaxable) {
-    // After-tax comparison: VTEB nominal vs BND × (1 − rate)
-    const muniAdvantage = VTEB_NOMINAL_YIELD - BND_YIELD * (1 - combinedRate);
+    // TEY uses investmentRate (includes 3.8% NIIT for high earners) so the
+    // comparison reflects the investor's true cost of holding taxable bond income.
+    const muniAdvantage  = VTEB_NOMINAL_YIELD - BND_YIELD * (1 - investmentRate);
     const muniSavingsBps = Math.max(0, Math.round(muniAdvantage * 10_000));
 
     if (heldTickers.has('BND') && !heldTickers.has('VTEB')) {
-      // Portfolio holds BND but qualifies for munis
-      const teyPct = ((VTEB_NOMINAL_YIELD / (1 - combinedRate)) * 100).toFixed(1);
+      const teyPct = ((VTEB_NOMINAL_YIELD / (1 - investmentRate)) * 100).toFixed(1);
       recommendations.push({
         type: 'muni_bond',
         priority: 'high',
@@ -74,7 +78,7 @@ export function agent5_taxOptimization(input: {
         estimatedSavingsBps: muniSavingsBps,
       });
     } else if (heldTickers.has('VTEB')) {
-      const teyPct = ((VTEB_NOMINAL_YIELD / (1 - combinedRate)) * 100).toFixed(1);
+      const teyPct = ((VTEB_NOMINAL_YIELD / (1 - investmentRate)) * 100).toFixed(1);
       recommendations.push({
         type: 'muni_bond',
         priority: 'low',
@@ -83,6 +87,20 @@ export function agent5_taxOptimization(input: {
         estimatedSavingsBps: muniSavingsBps,
       });
     }
+  }
+
+  // ── 1b. State-muni upgrade (CMF for high state-tax investors) ────────────
+  // CMF (iShares CA Muni) is exempt from both federal and CA state income tax;
+  // VTEB is federal-only. At ≥7% state rate the extra exemption is material.
+  if (taxProfile.stateMarginalRate >= 0.07 && hasTaxable && heldTickers.has('VTEB')) {
+    const stateExemptSavingsBps = Math.round(taxProfile.stateMarginalRate * VTEB_NOMINAL_YIELD * 10_000);
+    recommendations.push({
+      type: 'muni_bond',
+      priority: 'medium',
+      title: 'Consider CMF for additional state-tax savings',
+      detail: `Your state rate is ${(taxProfile.stateMarginalRate * 100).toFixed(1)}%. VTEB is federally exempt only; CMF (iShares CA Muni) also exempts California state income tax, saving an estimated ${stateExemptSavingsBps}bps annually on the bond sleeve. Consider blending VTEB + CMF rather than a full swap to retain geographic diversification.`,
+      estimatedSavingsBps: stateExemptSavingsBps,
+    });
   }
 
   // ── 2. Asset location optimization ───────────────────────────────────────
@@ -117,6 +135,25 @@ export function agent5_taxOptimization(input: {
     });
   }
 
+  // ── 2b. Tax-drag warning for taxable-only investors ──────────────────────
+  // SCHP (TIPS), VNQ (REITs), HYG (high yield), VCIT (IG corp) all generate
+  // ordinary income; in a taxable-only account that income is fully taxable each year.
+  const TAX_INEFFICIENT_TICKERS = ['SCHP', 'VNQ', 'HYG', 'VCIT'];
+  const taxableOnlyDragTickers = (!hasRoth && !hasTraditional)
+    ? allocation.filter((s) => TAX_INEFFICIENT_TICKERS.includes(s.ticker)).map((s) => s.ticker)
+    : [];
+
+  if (taxableOnlyDragTickers.length > 0) {
+    const dragBps = taxableOnlyDragTickers.length * 15;
+    recommendations.push({
+      type: 'asset_location',
+      priority: 'medium',
+      title: `${taxableOnlyDragTickers.length} tax-inefficient holding(s) in taxable account`,
+      detail: `${taxableOnlyDragTickers.join(', ')} generate ordinary income that is fully taxable each year in a brokerage account. Opening a traditional IRA or Roth IRA to shelter these positions would eliminate that annual drag. Estimated drag at current rates: ~${dragBps}bps/year.`,
+      estimatedSavingsBps: dragBps,
+    });
+  }
+
   // ── 3. Tax-loss harvesting pairs ──────────────────────────────────────────
   const availablePairs = TLH_PAIRS.filter((p) => heldTickers.has(p.ticker));
 
@@ -137,7 +174,7 @@ export function agent5_taxOptimization(input: {
   const traditionalBalance = accountStructure.existingBalances.traditional;
   const hasConversionOpportunity =
     traditionalBalance > 0 &&
-    taxProfile.federalMarginalRate < 0.24 &&
+    taxProfile.federalMarginalRate <= 0.24 &&
     timeHorizon.yearsToGoal > 15;
 
   if (hasConversionOpportunity) {
@@ -146,9 +183,30 @@ export function agent5_taxOptimization(input: {
       type: 'roth_conversion',
       priority: 'high',
       title: 'Roth conversion window open',
-      detail: `You're in the ${(taxProfile.federalMarginalRate * 100).toFixed(0)}% federal bracket with ${timeHorizon.yearsToGoal} years until your goal. Converting traditional IRA funds to Roth now locks in the lower rate and eliminates future RMDs. Consider converting annually up to the top of your current bracket.`,
+      detail: `You're in the ${(taxProfile.federalMarginalRate * 100).toFixed(0)}% federal bracket with ${timeHorizon.yearsToGoal} years until your goal. Converting traditional IRA funds to Roth now locks in the lower rate and eliminates future RMDs. Consider converting annually up to the top of your current bracket. Note: a large single-year conversion may trigger Medicare IRMAA surcharges — consider spreading conversions across multiple years to stay below the Part B threshold (~$106K MAGI single / ~$212K MFJ in 2026). Source: CMS Medicare Part B IRMAA tables 2026.`,
       estimatedSavingsBps: conversionSavingsBps,
     });
+  }
+
+  // ── 5. HSA optimization ───────────────────────────────────────────────────
+  // HSA = triple-tax advantage: pre-tax contribution + tax-free growth + tax-free
+  // qualified medical withdrawal. Highest after-tax compounding of any US account type.
+  const hsaBalance = accountStructure.existingBalances.hsa;
+  const hasHSA = accounts.some((a) => /hsa/i.test(a));
+
+  if (hasHSA || hsaBalance > 0) {
+    const highGrowthInHSA = allocation.some(
+      (s) => ['AVUV', 'AVDV', 'QQQM'].includes(s.ticker) && s.accountPlacement === 'hsa',
+    );
+    if (!highGrowthInHSA) {
+      recommendations.push({
+        type: 'asset_location',
+        priority: 'high',
+        title: 'Prioritize high-growth assets in HSA',
+        detail: `Your HSA offers triple tax advantage: pre-tax contribution, tax-free growth, and tax-free qualified medical withdrawal — the highest after-tax compounding of any US account type. Placing high-expected-return ETFs (AVUV, AVDV) in the HSA maximizes this benefit. Max contributions first: $4,300 single / $8,550 family in 2026. Source: IRS Publication 969.`,
+        estimatedSavingsBps: 25,
+      });
+    }
   }
 
   // ── Aggregate savings & finalize ──────────────────────────────────────────

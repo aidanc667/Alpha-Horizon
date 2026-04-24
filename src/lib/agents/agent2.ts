@@ -5,7 +5,7 @@ import type { Agent2Output } from './types';
 // Used when FRED_API_KEY is not set or FRED is unreachable.
 // Values are consensus institutional forecasts from JPMorgan LTCMA 2026,
 // Vanguard Market Outlook 2026, BlackRock CMA 2026.
-const FALLBACK: Omit<Agent2Output, 'agentName' | 'timestamp' | 'executionTimeMs' | 'performance'> = {
+const FALLBACK: Omit<Agent2Output, 'agentName' | 'timestamp' | 'executionTimeMs' | 'performance' | 'macroFetchedAt' | 'dataAge'> = {
   dataSource: 'fallback',
   macroData: {
     fedFundsRate:  0.0425,
@@ -41,6 +41,7 @@ const FALLBACK: Omit<Agent2Output, 'agentName' | 'timestamp' | 'executionTimeMs'
 //   CPIAUCSL       — CPI All Items (need 13 obs to compute YoY)
 //   T10YIE         — 10-Year Breakeven Inflation Rate (inflation expectations)
 //   BAMLH0A0HYM2   — ICE BofA US High Yield Option-Adjusted Spread
+//   CAPE           — Shiller CAPE ratio (Robert Shiller dataset via FRED, monthly)
 
 const FRED_BASE = 'https://api.stlouisfed.org/fred/series/observations';
 
@@ -173,10 +174,10 @@ function deriveEquityValuation(
 // ─── Live fetch ───────────────────────────────────────────────────────────────
 
 async function fetchLiveMacro(apiKey: string): Promise<
-  Omit<Agent2Output, 'agentName' | 'timestamp' | 'executionTimeMs' | 'performance'> | null
+  Omit<Agent2Output, 'agentName' | 'timestamp' | 'executionTimeMs' | 'performance' | 'macroFetchedAt' | 'dataAge'> | null
 > {
   try {
-    const [treasury10Y, treasury2Y, fedFundsRate, cpiYoY, inflationExp, hySpread] =
+    const [treasury10Y, treasury2Y, fedFundsRate, cpiYoY, inflationExp, hySpread, capeRaw] =
       await Promise.all([
         fetchFred('DGS10', 5, apiKey),
         fetchFred('DGS2', 5, apiKey),
@@ -184,6 +185,7 @@ async function fetchLiveMacro(apiKey: string): Promise<
         fetchCpiYoY(apiKey),
         fetchFred('T10YIE', 5, apiKey),
         fetchFredRaw('BAMLH0A0HYM2', 5, apiKey), // already in bps (3.45 = 345bps)
+        fetchFredRaw('CAPE', 2, apiKey),           // Robert Shiller CAPE — FRED series CAPE (monthly)
       ]);
 
     // Require at least the 10Y yield — everything else has fallbacks
@@ -194,7 +196,10 @@ async function fetchLiveMacro(apiKey: string): Promise<
     const ff   = fedFundsRate ?? t2y;
     const cpi  = cpiYoY      ?? FALLBACK.macroData.cpiYoY;
     const ie   = inflationExp ?? 0.024;         // historical avg breakeven
-    const hyBps = hySpread !== null ? hySpread * 100 : 375; // FRED stores as percentage points
+    // 450bps: conservative fallback above long-run ICE BofA US HY OAS mean (~400–450bps, 1996–2025).
+    // Intentionally slightly risk-averse: a FRED outage during a stress event should not
+    // falsely classify elevated spreads as risk-on.
+    const hyBps = hySpread !== null ? hySpread * 100 : 450;
 
     const regime = deriveRegime({
       treasury10Y:  t10y,
@@ -211,7 +216,7 @@ async function fetchLiveMacro(apiKey: string): Promise<
         fedFundsRate: ff,
         treasury10Y:  t10y,
         cpiYoY:       cpi,
-        shillerCAPE:  FALLBACK.macroData.shillerCAPE, // no free live CAPE API; updated manually Jan each year
+        shillerCAPE:  capeRaw ?? FALLBACK.macroData.shillerCAPE, // FRED series CAPE (monthly, Shiller)
       },
       regime,
       assetClassOutlook: {
@@ -263,6 +268,15 @@ function writeNeonMacro(output: Agent2Output): void {
 const MACRO_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 let _l1: { data: Agent2Output; fetchedAt: number } | null = null;
 
+// ─── Data-age helper (L6) ─────────────────────────────────────────────────────
+// Recomputes `dataAge` from `macroFetchedAt` at read time so cache hits always
+// return an accurate staleness value rather than the stale `dataAge: 0` stored
+// when the data was originally fetched.
+function withDataAge(output: Agent2Output): Agent2Output {
+  const dataAge = Math.floor((Date.now() - Date.parse(output.macroFetchedAt)) / 1000);
+  return { ...output, dataAge };
+}
+
 // ─── Agent 2: Economic Intelligence ──────────────────────────────────────────
 //
 // Cache hierarchy (fastest to slowest):
@@ -280,19 +294,19 @@ export async function agent2_economicIntelligence(input: {
 
   // L1: in-process memory
   if (_l1 && Date.now() - _l1.fetchedAt < MACRO_TTL_MS) {
-    return _l1.data;
+    return withDataAge(_l1.data);
   }
 
   // L2: Neon Postgres
   const neon = await readNeonMacro();
   if (neon) {
     _l1 = { data: neon, fetchedAt: Date.now() };
-    return neon;
+    return withDataAge(neon);
   }
 
   // L3: Live FRED data (requires FRED_API_KEY env var)
   const fredKey = process.env.FRED_API_KEY;
-  let liveData: Omit<Agent2Output, 'agentName' | 'timestamp' | 'executionTimeMs' | 'performance'> | null = null;
+  let liveData: Omit<Agent2Output, 'agentName' | 'timestamp' | 'executionTimeMs' | 'performance' | 'macroFetchedAt' | 'dataAge'> | null = null;
 
   if (fredKey) {
     liveData = await fetchLiveMacro(fredKey);
@@ -307,12 +321,15 @@ export async function agent2_economicIntelligence(input: {
 
   const executionTimeMs = Date.now() - startTime;
   const source = liveData ?? FALLBACK;
+  const macroFetchedAt = new Date().toISOString();
 
   const output: Agent2Output = {
     agentName: 'capitalMarkets',
     timestamp: input.requestDate,
     executionTimeMs,
     ...source,
+    macroFetchedAt,
+    dataAge: 0, // will be recomputed via withDataAge on subsequent cache reads
     performance: {
       targetLatencyMs: 500,
       actualLatencyMs: executionTimeMs,

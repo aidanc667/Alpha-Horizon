@@ -146,13 +146,21 @@ export function agent1_clientProfile(input: {
   const a = input.intakeAnswers;
 
   // ── Tax profile ───────────────────────────────────────────────────────────
-  const federalMarginalRate = fedRate(a.annualIncome, a.filingStatus);
-  const stateMarginalRate   = STATE_TAX[a.state?.toUpperCase()] ?? 0;
+  const federalMarginalRate  = fedRate(a.annualIncome, a.filingStatus);
+  const stateMarginalRate    = STATE_TAX[a.state?.toUpperCase()] ?? 0;
   const combinedMarginalRate = Math.min(0.60, federalMarginalRate + stateMarginalRate);
+  // IRC §1411: 3.8% NIIT applies to investment income above $200K (single) / $250K (MFJ)
+  const niitApplies =
+    (a.filingStatus === 'married_filing_jointly' && a.annualIncome > 250_000) ||
+    (a.filingStatus !== 'married_filing_jointly' && a.annualIncome > 200_000);
+  const investmentIncomeMarginalRate = Math.min(0.60,
+    combinedMarginalRate + (niitApplies ? 0.038 : 0),
+  );
   const taxProfile: DerivedTaxProfile = {
     federalMarginalRate,
     stateMarginalRate,
     combinedMarginalRate,
+    investmentIncomeMarginalRate,
     ltcgRate: ltcgRate(a.annualIncome, a.filingStatus),
   };
 
@@ -163,6 +171,7 @@ export function agent1_clientProfile(input: {
     yearsToGoal,
     bucket,
     isInDrawdownPhase: yearsToGoal <= 0,
+    isNearDrawdown: yearsToGoal <= 5,
   };
 
   // ── Risk profile ──────────────────────────────────────────────────────────
@@ -206,6 +215,9 @@ export function agent1_clientProfile(input: {
   const hardStops: string[] = [];
   const warnings: string[]  = [];
 
+  if (a.age < 18) {
+    hardStops.push('Investor is under 18 — portfolio requires custodial account structure (UGMA/UTMA); consult a financial adviser before proceeding');
+  }
   if (timeHorizon.isInDrawdownPhase) {
     hardStops.push('Client is in drawdown phase — equity capped at 40%, no illiquid alts');
   }
@@ -213,7 +225,22 @@ export function agent1_clientProfile(input: {
     warnings.push('High-interest debt present — consider paying down before investing aggressively');
   }
   if (goalAnalysis.feasibility === 'requires_adjustment') {
-    warnings.push('Goal requires significant adjustment — increase savings rate or reduce target');
+    let goalWarning = 'Goal requires significant adjustment — increase savings rate or reduce target';
+    if (goalAnalysis.goalAmount > 0 && yearsToGoal > 0) {
+      const fvCapital = a.startingCapital * Math.pow(1 + PROJECTION_RATE, yearsToGoal);
+      const gap = goalAnalysis.goalAmount - fvCapital;
+      let minimumContribution = 0;
+      if (gap > 0) {
+        const rm = Math.pow(1 + PROJECTION_RATE, 1 / 12) - 1;
+        minimumContribution = gap * rm / (Math.pow(1 + rm, yearsToGoal * 12) - 1);
+      }
+      const achievableGoal = Math.round(goalAnalysis.totalProjectedValue / 1000) * 1000;
+      goalWarning =
+        `Goal of $${goalAnalysis.goalAmount.toLocaleString()} is not achievable at the current savings rate. ` +
+        `To reach your target, increase monthly contributions to at least $${Math.ceil(minimumContribution).toLocaleString()}, ` +
+        `or reduce your target to $${achievableGoal.toLocaleString()} (achievable at current rate).`;
+    }
+    warnings.push(goalWarning);
   }
   const constraints: AgentConstraints = { hardStops, warnings };
 
@@ -232,6 +259,7 @@ export function agent1_clientProfile(input: {
     constraints,
     startingCapital: a.startingCapital,
     monthlyContribution: a.monthlyContribution,
+    investmentPreferences: a.investmentPreferences,
     performance: {
       targetLatencyMs: 2,
       actualLatencyMs: executionTimeMs,

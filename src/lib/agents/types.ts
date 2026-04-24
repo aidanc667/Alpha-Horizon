@@ -317,6 +317,14 @@ export interface DerivedTaxProfile {
   /** federalMarginalRate + stateMarginalRate. Used for ordinary income decisions. */
   combinedMarginalRate: number;
   /**
+   * Effective marginal rate on investment income (bond interest, dividends).
+   * Equals combinedMarginalRate + 0.038 for investors above the IRC §1411 NIIT
+   * thresholds (single filers >$200K; MFJ >$250K). Equals combinedMarginalRate
+   * for all other investors. Use this rate — not combinedMarginalRate — for
+   * muni bond TEY comparisons (VTEB vs BND selection).
+   */
+  investmentIncomeMarginalRate: number;
+  /**
    * Long-term capital gains rate (0, 0.15, or 0.20).
    * Determined by taxable income vs. LTCG bracket thresholds for the filing status.
    */
@@ -344,6 +352,13 @@ export interface DerivedTimeHorizon {
    * Triggers a sequence-of-returns risk guard and shifts to income-heavy templates.
    */
   isInDrawdownPhase: boolean;
+  /**
+   * True when yearsToGoal ≤ 5. Triggers sequence-of-returns risk guards even
+   * when the client is not yet in full drawdown. A -1σ year followed by
+   * recovery to the original value requires increasingly extreme annualized
+   * returns as the horizon shrinks below 5 years.
+   */
+  isNearDrawdown: boolean;
 }
 
 /**
@@ -478,6 +493,9 @@ export interface Agent1Output {
    */
   monthlyContribution: number;
 
+  /** Client's ESG and sector exclusion preferences — passed through for portfolio filtering. */
+  investmentPreferences?: InvestmentPreferences;
+
   /** Latency / SLA telemetry. */
   performance: AgentPerformance;
 }
@@ -569,6 +587,16 @@ export interface Agent2Output {
 
   /** Per-asset-class directional outlook. */
   assetClassOutlook: AssetClassOutlook;
+
+  /** ISO 8601 timestamp when the underlying market data was originally fetched from FRED. */
+  macroFetchedAt: string;
+
+  /**
+   * Seconds elapsed since `macroFetchedAt`. Recomputed on every read — not stored
+   * in cache — so consumers always see an accurate staleness figure.
+   * Frontend should surface a warning banner when this exceeds 21600 (6 hours).
+   */
+  dataAge: number;
 
   /** Latency / SLA telemetry. */
   performance: AgentPerformance;
@@ -975,6 +1003,8 @@ export interface V3Plan {
   version: 'v3';
   /** ISO 8601 timestamp when the plan was assembled. */
   generatedAt: string;
+  /** Regulatory disclaimer — present on every plan per Investment Advisers Act §202(a)(11). */
+  disclaimer: string;
   clientProfile:   Agent1Output;
   economicIntel:   Agent2Output;
   portfolio:       Agent3Output;

@@ -58,22 +58,29 @@ export function agent3_portfolioConstruction(input: {
     cpiYoY:      economicIntel.macroData.cpiYoY,
   };
 
+  // investmentIncomeMarginalRate includes the 3.8% NIIT for high earners
+  // (single >$200K, MFJ >$250K) — use this for all muni TEY comparisons so
+  // VTEB vs BND selection reflects the investor's true cost of taxable bond income.
+  const investmentTaxBracket = clientProfile.taxProfile.investmentIncomeMarginalRate;
+
   const allocation = selectETFsForAllocation(
     equityTarget,
     bondTarget,
     cashTarget,
     clientProfile.riskProfile.riskScore,
-    clientProfile.taxProfile.combinedMarginalRate,
+    investmentTaxBracket,
     clientProfile.accountStructure.availableAccounts,
     riskFreeRate,
     marketRates,
+    clientProfile.investmentPreferences,
   );
 
   // ── Step 3: Portfolio statistics ──────────────────────────────────────────
-  const taxBracket = clientProfile.taxProfile.combinedMarginalRate;
   // Same market-grounded rates used here so expected-return stats are consistent
   // with the optimizer inputs that selected the holdings.
-  const etfReturns = calculateAllETFReturns(taxBracket, marketRates);
+  const etfReturns = calculateAllETFReturns(investmentTaxBracket, marketRates);
+  // combinedMarginalRate (without NIIT) used only for user-facing display text.
+  const displayTaxBracket = clientProfile.taxProfile.combinedMarginalRate;
 
   // Weighted-average expected return
   const expectedReturn = allocation.reduce(
@@ -148,7 +155,7 @@ export function agent3_portfolioConstruction(input: {
           'US investment-grade bond core providing stability and income. Low correlation with equities cushions the portfolio during equity drawdowns.';
         break;
       case 'VTEB':
-        rationale = `Tax-exempt municipal bonds. At your ${(taxBracket * 100).toFixed(0)}% combined rate, the ${(etfReturns['VTEB'] * 100).toFixed(1)}% tax-equivalent yield exceeds equivalent taxable bonds.`;
+        rationale = `Tax-exempt municipal bonds. At your ${(displayTaxBracket * 100).toFixed(0)}% combined rate, the ${(etfReturns['VTEB'] * 100).toFixed(1)}% tax-equivalent yield exceeds equivalent taxable bonds.`;
         break;
       case 'SGOV':
         rationale =

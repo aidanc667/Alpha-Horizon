@@ -1,3 +1,4 @@
+import { buildDrawdownThresholds } from './agent4';
 import type {
   Agent1Output,
   Agent3Output,
@@ -123,14 +124,19 @@ function scoreRiskManagement(
   portfolio: Agent3Output,
   client: Agent1Output,
   risk: Agent4Output,
+  marketContext?: { regime: string; cape: number },
 ): number {
   // Start from warning count (0 warnings = 100, each -20)
   let score = Math.max(0, 100 - risk.warnings.length * 20);
 
-  // Drawdown acceptability (±20)
+  // Drawdown acceptability (±20) — uses same regime-adjusted thresholds as agent4
+  // so the critic never disagrees with the risk agent on whether drawdown is acceptable.
   const drawdown = portfolio.statistics.maxDrawdownEstimate;
-  const capacityMap: Record<string, number> = { low: 0.15, medium: 0.30, high: 0.50 };
-  const threshold = capacityMap[client.riskProfile.riskCapacity] ?? 0.30;
+  const thresholds = buildDrawdownThresholds(
+    marketContext?.regime ?? 'risk_on',
+    marketContext?.cape   ?? 25,
+  );
+  const threshold = thresholds[client.riskProfile.riskCapacity] ?? 0.30;
   if (drawdown <= threshold * 0.80) score = Math.min(100, score + 20); // comfortably within
   else if (drawdown > threshold)    score = Math.max(0,   score - 20); // over limit
 
@@ -193,6 +199,7 @@ export function agent6_critic(input: {
   clientProfile: Agent1Output;
   riskAnalysis: Agent4Output;
   taxOptimization: Agent5Output;
+  marketContext?: { regime: string; cape: number };
 }): Agent6Output {
   const startTime = Date.now();
 
@@ -202,7 +209,7 @@ export function agent6_critic(input: {
   const diversification = scoreDiversification(portfolio);
   const taxEfficiency  = scoreTaxEfficiency(portfolio, clientProfile, taxOptimization);
   const costEfficiency = scoreCostEfficiency(portfolio);
-  const riskManagement = scoreRiskManagement(portfolio, clientProfile, riskAnalysis);
+  const riskManagement = scoreRiskManagement(portfolio, clientProfile, riskAnalysis, input.marketContext);
 
   const overall = Math.round(
     alignment      * WEIGHTS.alignment      +
@@ -216,9 +223,8 @@ export function agent6_critic(input: {
     alignment, diversification, taxEfficiency, costEfficiency, riskManagement, overall,
   };
 
-  // MVP: revision loop not yet implemented — always approve
-  const requiresRevision = false;
   const passesThreshold  = overall >= 85;
+  const requiresRevision = !passesThreshold;
 
   const improvementSuggestions = passesThreshold
     ? []
