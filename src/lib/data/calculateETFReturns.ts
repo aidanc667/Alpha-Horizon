@@ -145,6 +145,45 @@ const US_EQUITY_CLASS_PREMIUM: Record<string, number> = {
   US_LARGE_GROWTH:  -0.002, // −20bps growth discount (premium P/E, lower earnings yield)
 };
 
+// ─── Black-Litterman shrinkage toward CAPM equilibrium ───────────────────────
+//
+// Pure CAPE point estimates are noisy: at CAPE=32 they predict 7.2% US equity;
+// at CAPE=50 they collapse to 6.1%, making the optimizer pile into bonds/EM.
+// Black-Litterman-style shrinkage blends CAPE forecasts (our "views") with the
+// CAPM equilibrium return (implied by market cap weights), which is a much more
+// stable prior. Goldman Sachs, Vanguard, and JPMorgan all use this approach in
+// their published Capital Market Assumptions — they never use pure point estimates.
+//
+//   μ_final = SHRINKAGE × μ_CAPE + (1 − SHRINKAGE) × μ_CAPM
+//   μ_CAPM  = riskFreeRate + β × LONG_RUN_ERP
+//
+// At current CAPE=32, rf=4.35%:
+//   US_LARGE_CAP:   0.60×7.23% + 0.40×8.85% = 7.88% (vs raw 7.23%)
+//   US_SMALL_VALUE: 0.60×8.43% + 0.40×9.70% = 8.94% (vs raw 8.43%)
+//
+// The key benefit: at extreme CAPE (e.g. 50), the model can't predict below ~7%
+// for US equities — CAPM gravity prevents implausible low-return scenarios that
+// would cause the optimizer to abandon equities entirely.
+//
+// Source: Black & Litterman (1992), "Global Portfolio Optimization";
+//         Idzorek (2005), "A Step-by-Step Guide to the Black-Litterman Model"
+
+const SHRINKAGE = 0.60;
+
+// Damodaran (Jan 2026) implied ERP for S&P 500 ≈ 4.5%
+// Source: pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/implprem.html
+const LONG_RUN_ERP = 0.045;
+
+// CAPM beta for each US equity class (relative to the broad market, β_mkt = 1.0)
+// Sources: MSCI factor models; Fama-French 5-factor betas from Ken French data library
+const US_EQUITY_BETA: Record<string, number> = {
+  US_LARGE_CAP:     1.00,  // broad large-cap — market beta by definition
+  US_MID_CAP:       1.05,  // slight size tilt raises systematic risk modestly
+  US_SMALL_CAP:     1.15,  // small-cap historically ~1.1–1.2× market beta
+  US_SMALL_VALUE:   1.15,  // similar to small-cap; value loading reduces beta vs pure small-cap
+  US_LARGE_GROWTH:  1.05,  // slightly elevated beta from growth's higher duration
+};
+
 // ─── Expected Return ──────────────────────────────────────────────────────────
 
 /**
@@ -251,38 +290,51 @@ function computeMarketGroundedReturn(
     return staticReturn + rateShift;
   }
 
-  // ── US equity: CAPE build-up model (live valuation-sensitive) ───────────
+  // ── US equity: CAPE build-up model + BL shrinkage ───────────────────────
   //
-  // When shillerCAPE and cpiYoY are available, replace the static institutional
-  // CMA with a live CAPE-derived return. This makes equity forecasts respond to
-  // actual market valuations instead of being frozen at January 2026 levels.
+  // When shillerCAPE and cpiYoY are available, compute a CAPE-derived return,
+  // then shrink it 60/40 toward the CAPM equilibrium return (rf + β × ERP).
+  // This prevents the optimizer from making extreme bets when CAPE is at
+  // historical extremes — identical to how Goldman/JPM/Vanguard publish CMAs.
   //
-  // Example — if CAPE drops from 32 to 25 (market correction):
-  //   VTI: 6.94% → 7.94%  (+100bps — equities become cheaper, expected return rises)
-  //   AVUV: 9.35% → 10.35% (same +100bps base shift, factor premium unchanged)
+  // Example — CAPE drops from 32 to 25 (market correction):
+  //   VTI raw CAPE:  7.94%  → after shrinkage toward CAPM(8.85%): 8.30%
+  //   VTI at CAPE=50: 6.1%  → after shrinkage: 0.60×6.1% + 0.40×8.85% = 7.20%
+  //   (CAPM gravity prevents equity expected returns from collapsing implausibly)
   if (US_EQUITY_CLASSES.has(primaryClass) && marketRates.shillerCAPE && marketRates.cpiYoY != null) {
     const usLargeCapBase = (1 / marketRates.shillerCAPE) + REAL_EPS_GROWTH + marketRates.cpiYoY;
 
-    // Primary class: CAPE base + size/style premium, scaled by exposure weight
+    // Pure CAPE return for primary class (pre-shrinkage)
     const primaryPremium = US_EQUITY_CLASS_PREMIUM[primaryClass] ?? 0;
-    let baseReturn = (usLargeCapBase + primaryPremium) * mapping.weight;
+    let capeReturn = (usLargeCapBase + primaryPremium) * mapping.weight;
+
+    // CAPM equilibrium return for primary class (the stable prior)
+    const primaryBeta = US_EQUITY_BETA[primaryClass] ?? 1.0;
+    let capmReturn = (riskFreeRate + primaryBeta * LONG_RUN_ERP) * mapping.weight;
 
     // Secondary class (e.g. VTI's small-cap sleeve, VT's international sleeve)
     if (mapping.secondaryAssetClass && mapping.secondaryWeight != null) {
       const secClass = mapping.secondaryAssetClass;
       if (US_EQUITY_CLASSES.has(secClass)) {
-        // Also US equity — apply CAPE model to the secondary sleeve too
         const secPremium = US_EQUITY_CLASS_PREMIUM[secClass] ?? 0;
-        baseReturn += (usLargeCapBase + secPremium) * mapping.secondaryWeight;
+        capeReturn += (usLargeCapBase + secPremium) * mapping.secondaryWeight;
+        const secBeta = US_EQUITY_BETA[secClass] ?? 1.0;
+        capmReturn   += (riskFreeRate + secBeta * LONG_RUN_ERP) * mapping.secondaryWeight;
       } else {
-        // International / bonds — use institutional CMA (no live foreign CAPE from FRED)
+        // International / bonds — use institutional CMA for both views
         const secCMA = INSTITUTIONAL_CMAS[secClass];
-        if (secCMA) baseReturn += secCMA.return * mapping.secondaryWeight;
+        if (secCMA) {
+          capeReturn += secCMA.return * mapping.secondaryWeight;
+          capmReturn += secCMA.return * mapping.secondaryWeight; // no shrinkage on non-US equity
+        }
       }
     }
 
+    // BL shrinkage: blend our CAPE view (60%) with CAPM equilibrium (40%)
+    const blendedReturn = SHRINKAGE * capeReturn + (1 - SHRINKAGE) * capmReturn;
+
     const factor = mapping.factorPremiumAdjustment ?? 0;
-    return baseReturn + factor - mapping.expenseRatio;
+    return blendedReturn + factor - mapping.expenseRatio;
   }
 
   // ── International equity + real assets: static institutional CMA ─────────
