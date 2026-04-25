@@ -68,13 +68,19 @@ function filterByPreferences(tickers: string[], prefs?: InvestmentPreferences): 
 function buildEquitySleeveSpec(riskScore: number, taxBracket: number, preferences?: InvestmentPreferences): SleeveSpec {
   const tickers: string[] = [];
 
-  // ── Core: broad market always included ──────────────────────────────────
-  // VTI preferred over VOO: same 0.03% ER but includes small/mid cap (~15% of
-  // market cap) giving +10–30bps structural return premium (Fama-French SMB).
-  // VOO omitted to prevent the optimizer from simultaneously holding VTI+VOO,
-  // which creates de facto single-index concentration (98%+ holdings overlap).
-  // VT: single-fund global alternative to VTI+VXUS; useful for simpler portfolios.
-  tickers.push('VTI', 'VXUS', 'VT');
+  // ── Core: one framework — never hold VTI+VT simultaneously ──────────────
+  // VT is 60% US + 40% international. Holding VT + VTI double-counts US equity,
+  // producing an incoherent split (e.g. VTI 5% + VT 10% = 11% US from two funds,
+  // only 4% international). A professional would never hold both.
+  //
+  // Choice: risk ≥ 5 → VTI + VXUS (separate sleeves; allows independent factor
+  // satellites on each leg). risk < 5 → VT alone (single-fund simplicity for
+  // conservative profiles that don't need explicit factor tilts).
+  if (riskScore >= 5) {
+    tickers.push('VTI', 'VXUS');   // explicit US + international sleeves
+  } else {
+    tickers.push('VT');             // single global core, lower complexity
+  }
 
   // ── Factor tilts: add for moderate and aggressive profiles ───────────
   if (riskScore >= 4) {
@@ -199,6 +205,84 @@ export function determineAccountPlacement(
   return 'taxable';
 }
 
+// ─── ETF hard-cap enforcement ─────────────────────────────────────────────────
+//
+// Clamps any ETF that exceeds its maxTotalWeight and redistributes the surplus
+// to uncapped positions proportionally. Runs up to 3 passes until stable.
+
+function enforceETFCaps(slices: AllocationSlice[]): AllocationSlice[] {
+  let result = slices.map(s => ({ ...s }));
+
+  for (let pass = 0; pass < 3; pass++) {
+    let surplus = 0;
+    const cappedIdx = new Set<number>();
+
+    result = result.map((s, i) => {
+      const cap = ETF_META[s.ticker]?.maxTotalWeight ?? 1.0;
+      if (s.weight > cap + 0.001) {
+        surplus += s.weight - cap;
+        cappedIdx.add(i);
+        return { ...s, weight: cap };
+      }
+      return s;
+    });
+
+    if (surplus < 0.001) break;
+
+    const freeTotal = result
+      .filter((_, i) => !cappedIdx.has(i))
+      .reduce((sum, s) => sum + s.weight, 0);
+
+    if (freeTotal < 0.001) break;
+
+    result = result.map((s, i) =>
+      cappedIdx.has(i) ? s : { ...s, weight: s.weight + surplus * (s.weight / freeTotal) },
+    );
+  }
+
+  return result;
+}
+
+// ─── Core-satellite enforcement ───────────────────────────────────────────────
+//
+// Ensures broad-market core ETFs (VTI, VXUS, VT) hold at least 50% of the
+// equity sleeve. If satellites have crowded them out, weight is shifted back
+// proportionally. Bonds, cash, and alternatives are untouched.
+
+const CORE_EQUITY = new Set(['VTI', 'VXUS', 'VT']);
+
+function enforceCoreSatellite(slices: AllocationSlice[], equityTarget: number): AllocationSlice[] {
+  if (equityTarget < 0.01) return slices;
+
+  const equitySlices    = slices.filter(s => s.category === 'growth');
+  const nonEquitySlices = slices.filter(s => s.category !== 'growth');
+
+  const coreSlices      = equitySlices.filter(s =>  CORE_EQUITY.has(s.ticker));
+  const satelliteSlices = equitySlices.filter(s => !CORE_EQUITY.has(s.ticker));
+
+  const equityTotal = equitySlices.reduce((sum, s) => sum + s.weight, 0);
+  const coreTotal   = coreSlices.reduce((sum, s) => sum + s.weight, 0);
+  const minCore     = equityTotal * 0.50;
+
+  if (coreTotal >= minCore - 0.001) return slices; // already fine
+
+  const deficit       = minCore - coreTotal;
+  const satelliteTotal = satelliteSlices.reduce((sum, s) => sum + s.weight, 0);
+  if (satelliteTotal <= deficit + 0.001) return slices; // not enough to shift
+
+  const scaleSatellite = (satelliteTotal - deficit) / satelliteTotal;
+  const adjusted: AllocationSlice[] = [
+    ...nonEquitySlices,
+    ...coreSlices.map(s => ({
+      ...s,
+      weight: s.weight + deficit * (s.weight / coreTotal),
+    })),
+    ...satelliteSlices.map(s => ({ ...s, weight: s.weight * scaleSatellite })),
+  ];
+
+  return adjusted;
+}
+
 // ─── Weight rounding ──────────────────────────────────────────────────────────
 //
 // Rounds each position to the nearest 5% increment (e.g. 30.85% → 30%, 32.5% → 35%).
@@ -251,6 +335,9 @@ export function selectETFsForAllocation(
   // provided, anchors bond/cash returns to live FRED yields instead of static CMAs.
   const etfReturns = calculateAllETFReturns(taxBracket, marketRates);
   const slices: AllocationSlice[] = [];
+
+  // equityTarget captured here so enforceCoreSatellite can use it below
+  const capturedEquityTarget = equityTarget;
 
   // ── Equity + real assets sleeve ───────────────────────────────────────────
   if (equityTarget > 0.005) {
@@ -313,11 +400,21 @@ export function selectETFsForAllocation(
   const total = slices.reduce((s, x) => s + x.weight, 0);
   if (total > 0) slices.forEach(s => { s.weight = s.weight / total; });
 
-  const sum = slices.reduce((s, x) => s + x.weight, 0);
+  // ── Enforce per-ETF caps (e.g. AVUV ≤ 15%, MTUM ≤ 8%, IAU ≤ 5%) ─────────
+  let result = enforceETFCaps(slices);
+
+  // ── Enforce core-satellite (broad-market core ≥ 50% of equity sleeve) ─────
+  result = enforceCoreSatellite(result, capturedEquityTarget);
+
+  // ── Re-normalize after cap adjustments ───────────────────────────────────
+  const adjTotal = result.reduce((s, x) => s + x.weight, 0);
+  if (adjTotal > 0) result.forEach(s => { s.weight = s.weight / adjTotal; });
+
+  const sum = result.reduce((s, x) => s + x.weight, 0);
   if (Math.abs(sum - 1.0) > 0.01) {
     throw new Error(`portfolioRules: weights sum to ${sum.toFixed(4)}, expected 1.0 ±0.01`);
   }
 
   // ── Round to nearest 5% (largest-remainder) ───────────────────────────────
-  return roundWeightsToFive(slices);
+  return roundWeightsToFive(result);
 }
