@@ -201,25 +201,50 @@ export async function POST(req: NextRequest) {
             s.riskManagement < 60 &&
             s.riskManagement <= s.taxEfficiency &&
             s.riskManagement <= s.costEfficiency;
+          // Concentration failures (e.g. AVUV/AVDV each >25%) drop the diversification
+          // score but don't touch alignment or riskManagement — the old retry never fired.
+          // Fix: tighten the per-position cap to 0.15 so the optimizer spreads weight.
+          const diversificationTriggered =
+            !equityTriggered && !riskTriggered &&
+            s.diversification < 65 &&
+            s.diversification <= s.alignment &&
+            s.diversification <= s.taxEfficiency;
 
-          if (equityTriggered || riskTriggered) {
-            const trigger = equityTriggered ? 'alignment' : 'riskManagement';
-            log(`Retry: tightening equity ceiling by 5% (${trigger} failure)...`);
-            const retryProfile = {
-              ...clientProfile,
-              riskProfile: {
-                ...clientProfile.riskProfile,
-                maxEquityAllowed: Math.max(0, clientProfile.riskProfile.maxEquityAllowed - 0.05),
-              },
-            };
-            const retryPortfolio = agent3_portfolioConstruction({ clientProfile: retryProfile, economicIntel });
+          if (equityTriggered || riskTriggered || diversificationTriggered) {
+            const trigger = equityTriggered ? 'alignment'
+              : riskTriggered ? 'riskManagement'
+              : 'diversification';
+            log(`Retry: ${trigger} failure — rebuilding with tighter constraints...`);
+
+            let retryPortfolio;
+            let retryClientProfile = clientProfile;
+
+            if (diversificationTriggered) {
+              // Tighten per-position cap to force broader spread across the ETF universe
+              retryPortfolio = agent3_portfolioConstruction({
+                clientProfile,
+                economicIntel,
+                constructionOverrides: { maxEquityWeightPerPosition: 0.15 },
+              });
+            } else {
+              // Alignment / risk failure: reduce equity ceiling by 5%
+              retryClientProfile = {
+                ...clientProfile,
+                riskProfile: {
+                  ...clientProfile.riskProfile,
+                  maxEquityAllowed: Math.max(0, clientProfile.riskProfile.maxEquityAllowed - 0.05),
+                },
+              };
+              retryPortfolio = agent3_portfolioConstruction({ clientProfile: retryClientProfile, economicIntel });
+            }
+
             const [retryRisk, retryTax] = await Promise.all([
-              Promise.resolve(agent4_riskAnalysis({ portfolio: retryPortfolio, clientProfile: retryProfile, marketContext })),
-              Promise.resolve(agent5_taxOptimization({ portfolio: retryPortfolio, clientProfile: retryProfile })),
+              Promise.resolve(agent4_riskAnalysis({ portfolio: retryPortfolio, clientProfile: retryClientProfile, marketContext })),
+              Promise.resolve(agent5_taxOptimization({ portfolio: retryPortfolio, clientProfile: retryClientProfile })),
             ]);
             const retryScore = agent6_critic({
               portfolio: retryPortfolio,
-              clientProfile: retryProfile,
+              clientProfile: retryClientProfile,
               riskAnalysis: retryRisk,
               taxOptimization: retryTax,
               marketContext,

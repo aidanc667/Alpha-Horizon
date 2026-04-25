@@ -382,8 +382,9 @@ export const ETF_UNIVERSE: ETF[] = [
     name: 'Avantis International Small Cap Value ETF',
     category: 'intl_equity',
     expenseRatio: 0.0036,
-    // User-specified: 8.5%
-    expectedReturn: 0.085,
+    // Revised to 7.0% — aligns with JPMorgan 2026 LTCMA for developed intl small-value.
+    // Previous 8.5% was too aggressive and caused the optimizer to over-concentrate here.
+    expectedReturn: 0.070,
     // User-specified: 21%
     volatility: 0.210,
     // Foreign dividends; active screens increase turnover vs passive; Roth preferred

@@ -103,9 +103,10 @@ function buildEquitySleeveSpec(riskScore: number, taxBracket: number, preference
     tickers.push('IAU');            // Gold — tail-risk hedge; reduces drawdown
   }
 
-  // Per-position cap: 40% for core, but we use a single cap for the whole sleeve.
-  // The optimizer naturally concentrates less because diversification reduces vol.
-  return { tickers: filterByPreferences(tickers, preferences), maxWeightPerPosition: 0.40 };
+  // Per-position cap: 25% of equity sleeve max (was 40%).
+  // At 80% equity target this limits any single factor tilt to 20% of total portfolio,
+  // and combined AVUV+AVDV to ≤40% — defensible but not reckless.
+  return { tickers: filterByPreferences(tickers, preferences), maxWeightPerPosition: 0.25 };
 }
 
 function buildBondSleeveSpec(
@@ -198,6 +199,40 @@ export function determineAccountPlacement(
   return 'taxable';
 }
 
+// ─── Weight rounding ──────────────────────────────────────────────────────────
+//
+// Rounds each position to the nearest 5% increment (e.g. 30.85% → 30%, 32.5% → 35%).
+// Uses the largest-remainder algorithm so rounded weights always sum to exactly 100%.
+// Any position that would round to 0% gets a floor of 5% so no holding disappears.
+
+function roundWeightsToFive(slices: AllocationSlice[]): AllocationSlice[] {
+  if (slices.length === 0) return slices;
+
+  // Work in 5%-unit integers (multiply by 20) to avoid floating-point drift
+  const units = slices.map(s => ({
+    idx:       slices.indexOf(s),
+    floored:   Math.max(1, Math.floor(s.weight * 20)), // floor, min 1 unit (5%)
+    remainder: (s.weight * 20) % 1,
+  }));
+
+  const totalFloored = units.reduce((sum, u) => sum + u.floored, 0);
+  let deficit = 20 - totalFloored; // 20 units = 100%
+
+  // Award deficit units to positions with the largest fractional remainder
+  units.sort((a, b) => b.remainder - a.remainder);
+  for (const u of units) {
+    if (deficit <= 0) break;
+    u.floored += 1;
+    deficit -= 1;
+  }
+
+  const result = [...slices];
+  for (const u of units) {
+    result[u.idx] = { ...result[u.idx], weight: u.floored / 20 };
+  }
+  return result;
+}
+
 // ─── 3. selectETFsForAllocation ───────────────────────────────────────────────
 
 export function selectETFsForAllocation(
@@ -210,6 +245,7 @@ export function selectETFsForAllocation(
   riskFreeRate: number = 0.048,
   marketRates?: MarketRates,
   preferences?: InvestmentPreferences,
+  overrides?: { maxEquityWeightPerPosition?: number },
 ): AllocationSlice[] {
   // calculateAllETFReturns applies TEY for muni bonds and, when marketRates is
   // provided, anchors bond/cash returns to live FRED yields instead of static CMAs.
@@ -218,7 +254,8 @@ export function selectETFsForAllocation(
 
   // ── Equity + real assets sleeve ───────────────────────────────────────────
   if (equityTarget > 0.005) {
-    const { tickers, maxWeightPerPosition } = buildEquitySleeveSpec(riskScore, taxBracket, preferences);
+    const { tickers, maxWeightPerPosition: defaultCap } = buildEquitySleeveSpec(riskScore, taxBracket, preferences);
+    const maxWeightPerPosition = overrides?.maxEquityWeightPerPosition ?? defaultCap;
     const returns = Object.fromEntries(tickers.map(t => [t, etfReturns[t] ?? 0]));
 
     const weights = optimizeSharpeWeights(tickers, returns, riskFreeRate, {
@@ -281,5 +318,6 @@ export function selectETFsForAllocation(
     throw new Error(`portfolioRules: weights sum to ${sum.toFixed(4)}, expected 1.0 ±0.01`);
   }
 
-  return slices;
+  // ── Round to nearest 5% (largest-remainder) ───────────────────────────────
+  return roundWeightsToFive(slices);
 }

@@ -22,10 +22,11 @@ const ETF_ER = Object.fromEntries(ETF_UNIVERSE.map((e) => [e.ticker, e.expenseRa
 export function agent3_portfolioConstruction(input: {
   clientProfile: Agent1Output;
   economicIntel: Agent2Output;
+  constructionOverrides?: { maxEquityWeightPerPosition?: number };
 }): Agent3Output {
   const startTime = Date.now();
 
-  const { clientProfile, economicIntel } = input;
+  const { clientProfile, economicIntel, constructionOverrides } = input;
 
   // ── Step 1: Derive target allocation split (deterministic, <1ms) ──────────
   //
@@ -73,6 +74,7 @@ export function agent3_portfolioConstruction(input: {
     riskFreeRate,
     marketRates,
     clientProfile.investmentPreferences,
+    constructionOverrides,
   );
 
   // ── Step 3: Portfolio statistics ──────────────────────────────────────────
