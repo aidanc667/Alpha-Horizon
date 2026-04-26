@@ -39,6 +39,8 @@ export interface PortfolioPolicy {
   filteredGuide: string;         // pre-filtered ETF guide string (ready for prompt injection)
 }
 
+const FACTOR_TICKERS = new Set(['AVUV', 'AVDV', 'VWO']);
+
 export function derivePortfolioPolicy(
   answers: IntakeAnswers,
   profile: InvestorProfile,
@@ -46,7 +48,26 @@ export function derivePortfolioPolicy(
   flags: AccountFlags,
 ): PortfolioPolicy {
   // very_aggressive falls back to aggressive (merged — they were near-identical)
-  const baseline = BASELINES[profile.derivedRiskTolerance] ?? BASELINES.aggressive;
+  const rawBaseline = BASELINES[profile.derivedRiskTolerance] ?? BASELINES.aggressive;
+
+  // ── Beginner complexity cap ────────────────────────────────────────────────
+  // Beginner investors get a simplified portfolio: max 4 ETFs, no factor tilts.
+  // Strip AVUV/AVDV/VWO from the baseline and renormalize remaining weights.
+  const isBeginnerExperience = answers.investmentExperience === 'beginner';
+  let baseline = rawBaseline;
+  if (isBeginnerExperience) {
+    const simplified = rawBaseline.filter(s => !FACTOR_TICKERS.has(s.ticker));
+    if (simplified.length > 0) {
+      const totalWeight = simplified.reduce((sum, s) => sum + s.weight, 0);
+      baseline = simplified.map(s => ({ ...s, weight: s.weight / totalWeight }));
+    } else {
+      // Degenerate case: entire baseline was factor tilts — fall back to VTI/VEA
+      baseline = [
+        { ticker: 'VTI', name: 'Vanguard Total Stock Market', weight: 0.60, assetClass: 'US Equity',      bucket: 'growth' as const, expectedAnnualReturn: 0.055, accountPlacement: 'taxable' },
+        { ticker: 'VEA', name: 'Vanguard Developed Markets',  weight: 0.40, assetClass: 'Intl Developed', bucket: 'growth' as const, expectedAnnualReturn: 0.078, accountPlacement: 'taxable' },
+      ];
+    }
+  }
 
   // ── Step 1: Compute target bond allocation ────────────────────────────────────
   // All bond/horizon/macro directives are unified into a single numeric target.
@@ -79,7 +100,7 @@ export function derivePortfolioPolicy(
 
   // Equity-side macro signals
   if (macro.equityValuation === 'expensive') adjustments.push('equity expensive: trim US large cap 5%, tilt more toward international (better valuations)');
-  if (answers.yearsUntilWithdrawal > 15)     adjustments.push('very long horizon: maximize factor tilts (AVUV/AVDV) — short-term volatility is irrelevant');
+  if (answers.yearsUntilWithdrawal > 15 && !isBeginnerExperience) adjustments.push('very long horizon: maximize factor tilts (AVUV/AVDV) — short-term volatility is irrelevant');
 
   // ── Bond sleeve (exactly ONE directive with explicit % target) ────────────
   // Vehicle chosen by tax situation; size set by targetBondPct above.
@@ -124,6 +145,12 @@ export function derivePortfolioPolicy(
     adjustments.push('NO safety sleeve: investor has an established emergency fund and no near-term large expense. Do NOT include SGOV anywhere in this portfolio.');
   }
 
+  // ── Beginner directives ───────────────────────────────────────────────────
+  if (isBeginnerExperience) {
+    adjustments.push('EXPERIENCE CAP: Investor is a first-time investor — keep the portfolio simple. Max 4 ETFs total. No factor tilts: do NOT include AVUV, AVDV, or VWO.');
+    adjustments.push('SIMPLICITY RULE: Prefer VTI + VEA (+ bond sleeve if applicable + SGOV if applicable) as the core. Only add a 4th ETF if it provides clear, obvious value. No exotic or niche ETFs.');
+  }
+
   // ── Filtered ETF guide ────────────────────────────────────────────────────
   // Build guide from only the ETFs relevant to THIS request + their overlap partners.
   // Reduces prompt size ~40% vs the full 28-ETF guide, cutting Gemini latency 3–8s.
@@ -132,7 +159,7 @@ export function derivePortfolioPolicy(
     ...(bondPct > 0 ? [hasTaxable && rate >= 0.22                               // bond sleeve
         ? (isCalifornia ? 'CMF' : 'VTEB') : 'BND'] : []),
     ...(needsSafety ? ['SGOV'] : []),                                            // safety sleeve
-    'AVUV', 'AVDV', 'VEA', 'VWO',                                               // factor/intl alternatives
+    ...(!isBeginnerExperience ? ['AVUV', 'AVDV', 'VWO'] : ['VEA']),             // factor/intl alternatives (excluded for beginners)
     ...(profile.derivedRiskTolerance !== 'aggressive' ? ['SPLV', 'SCHD'] : []), // defensive options
     'VT',                                                                        // benchmark reference
     ...(answers.hasSectorPreferences && answers.favoredSectors
@@ -150,7 +177,7 @@ export function derivePortfolioPolicy(
   const filteredGuide = buildFilteredETFGuide(relevantTickers);
 
   // ── Account placement ──────────────────────────────────────────────────────
-  if (hasTaxFree)     adjustments.push('Roth: place AVUV, AVDV, VWO here — highest growth benefits most from tax-free compounding.');
+  if (hasTaxFree && !isBeginnerExperience) adjustments.push('Roth: place AVUV, AVDV, VWO here — highest growth benefits most from tax-free compounding.');
   if (hasTaxDeferred && bondPct > 0) adjustments.push('Traditional/401k: bond sleeve goes here per BOND SLEEVE directive above.');
 
   // ── Sector preferences ─────────────────────────────────────────────────────
