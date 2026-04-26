@@ -995,6 +995,8 @@ export interface Agent7Output {
 
 // ─── 11. V3Plan (full pipeline output) ───────────────────────────────────────
 
+import type { IPSDocument } from '@/types/index';
+
 /**
  * Complete output of the v3 portfolio agent pipeline.
  * Assembled in the POST /api/portfolio-agent route and cached in Neon.
@@ -1012,6 +1014,8 @@ export interface V3Plan {
   taxOptimization: Agent5Output;
   criticScore:     Agent6Output;
   monteCarlo:      MonteCarloOutput;
+  /** Formal Investment Policy Statement. Present when GEMINI_API_KEY is configured. */
+  ips?:            IPSDocument;
   /** LLM-generated narrative. Present when GEMINI_API_KEY is configured. */
   synthesis?:      Agent7Output;
 }

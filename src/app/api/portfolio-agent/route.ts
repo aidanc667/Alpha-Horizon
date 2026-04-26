@@ -9,7 +9,9 @@ import { agent4_riskAnalysis }          from '@/lib/agents/agent4';
 import { agent5_taxOptimization }       from '@/lib/agents/agent5';
 import { agent6_critic }                from '@/lib/agents/agent6';
 import { agent7_synthesis }             from '@/lib/agents/agent7_synthesis';
+import { agentIPS }                      from '@/lib/agents/agentIPS';
 import { runMonteCarlo }                from '@/lib/monteCarlo/analyticalMonteCarlo';
+import type { IPSDocument } from '@/types/index';
 import type {
   IntakeAnswers,
   Agent1Output, Agent2Output, Agent3Output,
@@ -41,6 +43,7 @@ interface V3Plan {
   taxOptimization: Agent5Output;
   criticScore:     Agent6Output;
   monteCarlo:      MonteCarloOutput;
+  ips?:            IPSDocument;
   synthesis?:      Agent7Output;
 }
 
@@ -266,17 +269,33 @@ export async function POST(req: NextRequest) {
         const monteCarlo = runMonteCarlo(finalPortfolio, clientProfile, clientProfile.timeHorizon.yearsToGoal);
         log(`Monte Carlo: p50 at goal year = $${monteCarlo.projections.at(-1)?.p50.toLocaleString() ?? '—'} | success rate ${(monteCarlo.goalSuccessProbability * 100).toFixed(0)}%`);
 
-        // ── Agent 7: LLM Synthesis (Gemini — naturally 2–5s) ─────────────────
+        // ── Agents 7a + 7b: IPS Generator + Synthesis in parallel (both Gemini) ──
         await pace(500);
-        log('Agent 7/7: Writing your personalised investment narrative...');
-        const synthesis = await agent7_synthesis({
-          clientProfile,
-          economicIntel,
-          portfolio:       finalPortfolio,
-          riskAnalysis:    finalRisk,
-          taxOptimization: finalTax,
-          criticScore:     finalScore,
-        });
+        log('Agent 7a/7: Generating your Investment Policy Statement...');
+        log('Agent 7b/7: Writing your personalised investment narrative...');
+        const [ips, synthesis] = await Promise.all([
+          agentIPS({
+            clientProfile,
+            portfolio:       finalPortfolio,
+            taxOptimization: finalTax,
+            criticScore:     finalScore,
+            intakeAnswers,
+          }),
+          agent7_synthesis({
+            clientProfile,
+            economicIntel,
+            portfolio:       finalPortfolio,
+            riskAnalysis:    finalRisk,
+            taxOptimization: finalTax,
+            criticScore:     finalScore,
+          }),
+        ]);
+        if (ips) {
+          log(`IPS: Investment Policy Statement generated — ${finalScore.scores.overall}/100 Critic score`);
+          push({ type: 'ips', ips });
+        } else {
+          log('IPS: skipped (GEMINI_API_KEY not set)');
+        }
         if (synthesis) {
           log(`Narrative: generated in ${synthesis.executionTimeMs}ms`);
         } else {
@@ -295,6 +314,7 @@ export async function POST(req: NextRequest) {
           taxOptimization: finalTax,
           criticScore:     finalScore,
           monteCarlo,
+          ...(ips       ? { ips }       : {}),
           ...(synthesis ? { synthesis } : {}),
         };
 
