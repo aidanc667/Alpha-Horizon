@@ -8,6 +8,8 @@ import {
 import type { V3Plan } from '@/lib/agents/types';
 import type { BacktestState } from './PlannerTab';
 import type { IntakeAnswers } from '@/apps/portfolio-agent/types';
+import type { IPSDocument } from '@/types';
+import { IPSTab } from './IPSDocument';
 import { generateProjectionSeries } from '@/lib/projectionSeries';
 
 // ─── Format helpers ────────────────────────────────────────────────────────────
@@ -638,9 +640,10 @@ interface Props {
   plan: V3Plan;
   backtest: BacktestState;
   answers: IntakeAnswers;
+  ips?: IPSDocument;
 }
 
-export default function PlanResults({ plan, backtest, answers }: Props) {
+export default function PlanResults({ plan, backtest, answers, ips }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>('portfolio');
 
   return (
@@ -667,7 +670,7 @@ export default function PlanResults({ plan, backtest, answers }: Props) {
       )}
       {activeTab === 'analysis' && <StubTab label="Analysis" />}
       {activeTab === 'tax' && <StubTab label="Tax & Planning" />}
-      {activeTab === 'ips' && <StubTab label="IPS Document" />}
+      {activeTab === 'ips' && <IPSTab ips={ips ?? plan.ips} />}
     </div>
   );
 }

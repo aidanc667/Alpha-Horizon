@@ -503,7 +503,7 @@ export default function PlannerTab() {
             />
             {/* Full dashboard — shown once plan arrives */}
             {plan && answers && (
-              <PlanResults plan={plan} backtest={backtest} answers={answers} />
+              <PlanResults plan={plan} backtest={backtest} answers={answers} ips={ips} />
             )}
           </div>
         )}
