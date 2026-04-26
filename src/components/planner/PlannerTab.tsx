@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Sparkles, RotateCcw, ShieldCheck, TrendingUp, Shield } from 'lucide-react';
 import OnboardingFlow from './OnboardingFlow';
 import AgentStreamPanel from './AgentStreamPanel';
+import PlanResults from './PlanResults';
 import type { IntakeAnswers } from '@/apps/portfolio-agent/types';
 import type { V3Plan } from '@/lib/agents/types';
 import type { IPSDocument, SimulationResult } from '@/types';
@@ -500,8 +501,10 @@ export default function PlannerTab() {
               onComplete={handleAgentComplete}
               onReset={handleReset}
             />
-            {/* Plan summary card — shown once plan arrives */}
-            {plan && <PlanSummaryCard plan={plan} backtest={backtest} />}
+            {/* Full dashboard — shown once plan arrives */}
+            {plan && answers && (
+              <PlanResults plan={plan} backtest={backtest} answers={answers} />
+            )}
           </div>
         )}
       </div>
