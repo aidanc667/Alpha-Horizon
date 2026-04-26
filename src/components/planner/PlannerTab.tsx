@@ -5,6 +5,7 @@ import { Sparkles, RotateCcw, ShieldCheck, TrendingUp, Shield } from 'lucide-rea
 import OnboardingFlow from './OnboardingFlow';
 import PlanResults from './PlanResults';
 import type { PersonalizedPlan, OnboardingResponses } from '@/types';
+import type { IntakeAnswers } from '@/apps/portfolio-agent/types';
 import { useAppContext } from '@/lib/appContext';
 
 type ViewState = 'welcome' | 'onboarding' | 'results';
@@ -168,10 +169,12 @@ export default function PlannerTab() {
     });
   }, [plan, responses, setPlannerSnapshot]);
 
-  const handleOnboardingComplete = async (resp: OnboardingResponses) => {
+  const handleOnboardingComplete = async (resp: IntakeAnswers) => {
+    // PlannerTab is rewritten in Prompt 8; cast to legacy type for now
+    const legacyResp = resp as unknown as OnboardingResponses;
     setLoading(true);
     setError(null);
-    setResponses(resp);
+    setResponses(legacyResp);
     setView('results');
 
     try {
@@ -224,7 +227,7 @@ export default function PlannerTab() {
           // Auto-save complete plan to DB (debounced to avoid hammering on stream updates)
           if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
           autoSaveTimer.current = setTimeout(() => {
-            savePlanToDB(completePlan, resp, currentPlanId);
+            savePlanToDB(completePlan, legacyResp, currentPlanId);
           }, 1500);
         }),
       ]);
@@ -393,7 +396,7 @@ export default function PlannerTab() {
         {view === 'onboarding' && (
           <div className="max-w-xl mx-auto">
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-              <OnboardingFlow onComplete={handleOnboardingComplete} isLoading={false} />
+              <OnboardingFlow onComplete={handleOnboardingComplete} />
             </div>
           </div>
         )}
