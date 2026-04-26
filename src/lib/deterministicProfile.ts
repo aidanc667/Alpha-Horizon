@@ -27,21 +27,54 @@ const STATE_TAX: Record<string, number> = {
   'WI': 0.0765, 'WY': 0,      'DC': 0.1075,
 };
 
-// ─── 2026 Federal income tax brackets (single filer) ─────────────────────────
-function federalMarginalRate(income: number): number {
+type FilingStatus = 'single' | 'mfj' | 'mfs' | 'hoh';
+
+// ─── 2026 Federal income tax brackets (per filing status) ────────────────────
+// MFS uses single-filer tables; MFJ thresholds roughly double single.
+function federalMarginalRate(income: number, filing: FilingStatus = 'single'): number {
+  if (filing === 'mfj') {
+    if (income > 751600) return 0.37;
+    if (income > 501050) return 0.35;
+    if (income > 394600) return 0.32;
+    if (income > 206700) return 0.24;
+    if (income > 96950)  return 0.22;
+    if (income > 23850)  return 0.12;
+    return 0.10;
+  }
+  if (filing === 'hoh') {
+    if (income > 609350) return 0.37;
+    if (income > 243700) return 0.35;
+    if (income > 191950) return 0.32;
+    if (income > 100500) return 0.24;
+    if (income > 63100)  return 0.22;
+    if (income > 16550)  return 0.12;
+    return 0.10;
+  }
+  // single / mfs share the same brackets
   if (income > 626350) return 0.37;
   if (income > 250525) return 0.35;
   if (income > 197300) return 0.32;
   if (income > 103350) return 0.24;
-  if (income > 48475) return 0.22;
-  if (income > 11925) return 0.12;
+  if (income > 48475)  return 0.22;
+  if (income > 11925)  return 0.12;
   return 0.10;
 }
 
-// ─── 2026 Long-term capital gains rates (single filer) ───────────────────────
-function ltcgRate(income: number): number {
+// ─── 2026 Long-term capital gains rates (per filing status) ──────────────────
+function ltcgRate(income: number, filing: FilingStatus = 'single'): number {
+  if (filing === 'mfj') {
+    if (income > 600050) return 0.20;
+    if (income > 96700)  return 0.15;
+    return 0;
+  }
+  if (filing === 'hoh') {
+    if (income > 566700) return 0.20;
+    if (income > 64750)  return 0.15;
+    return 0;
+  }
+  // single / mfs
   if (income > 533400) return 0.20;
-  if (income > 48350) return 0.15;
+  if (income > 48350)  return 0.15;
   return 0;
 }
 
@@ -53,7 +86,10 @@ export function deriveInvestorProfile(a: IntakeAnswers): InvestorProfile {
   const stabilityPts = a.incomeStability; // 1–5
   // Normalize to 1–10: sum ranges 3–11, map to 1–10
   const rawSum = horizonPts + behaviorPts + stabilityPts; // 3–11
-  const riskScore = Math.min(10, Math.max(1, Math.round(((rawSum - 3) / 8) * 9 + 1)));
+  const baseRiskScore = Math.min(10, Math.max(1, Math.round(((rawSum - 3) / 8) * 9 + 1)));
+  // Debt burden reduces risk capacity: high debt -2, medium debt -1
+  const debtPenalty = a.debtLevel === 'high' ? 2 : a.debtLevel === 'medium' ? 1 : 0;
+  const riskScore = Math.min(10, Math.max(1, baseRiskScore - debtPenalty));
 
   // 2. Tolerance label
   const derivedRiskTolerance: InvestorProfile['derivedRiskTolerance'] =
@@ -69,11 +105,12 @@ export function deriveInvestorProfile(a: IntakeAnswers): InvestorProfile {
     : a.yearsUntilWithdrawal < 15 ? 'long'
     : 'very_long';
 
-  // 4. Tax rates
-  const fedRate = federalMarginalRate(a.annualIncome);
+  // 4. Tax rates (filing-status-aware)
+  const filing = a.taxFilingStatus ?? 'single';
+  const fedRate = federalMarginalRate(a.annualIncome, filing);
   const stateRate = STATE_TAX[a.state] ?? 0.05;
   const effectiveMarginalRate = Math.min(0.503, fedRate + stateRate);
-  const capitalGainsRate = ltcgRate(a.annualIncome);
+  const capitalGainsRate = ltcgRate(a.annualIncome, filing);
 
   // 5. Liquidity need (months of expenses to keep liquid)
   const baseLiquidity = a.incomeStability <= 2 ? 6 : a.incomeStability <= 3 ? 4 : 3;
