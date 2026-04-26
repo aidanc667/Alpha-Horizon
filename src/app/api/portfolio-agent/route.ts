@@ -113,7 +113,9 @@ export async function POST(req: NextRequest) {
       const push = (obj: unknown) => {
         try { controller.enqueue(encoder.encode(JSON.stringify(obj) + '\n')); } catch { /* closed */ }
       };
-      const log = (msg: string) => push({ type: 'log', message: msg });
+      const log        = (msg: string)                                => push({ type: 'log',        message: msg });
+      const agentStart = (agent: string)                              => push({ type: 'agent_start', agent });
+      const agentDone  = (agent: string, summary: string, data?: object) => push({ type: 'agent_done',  agent, summary, ...(data ? { data } : {}) });
 
       try {
         // ── L2 cache check ────────────────────────────────────────────────────
@@ -130,6 +132,7 @@ export async function POST(req: NextRequest) {
         const t0 = Date.now();
 
         // ── Agent 1: Client Profile ───────────────────────────────────────────
+        agentStart('clientProfile');
         log('Agent 1/7: Analysing your financial profile...');
         const clientProfile = agent1_clientProfile({ intakeAnswers });
 
@@ -143,26 +146,36 @@ export async function POST(req: NextRequest) {
         }
 
         await pace(1200);
+        const agent1Summary = `Risk: ${clientProfile.riskProfile.effectiveRiskTolerance} (${clientProfile.riskProfile.riskScore}/10) · Horizon: ${clientProfile.timeHorizon.yearsToGoal}yr · Tax: ${(clientProfile.taxProfile.federalMarginalRate * 100).toFixed(0)}% federal + ${(clientProfile.taxProfile.stateMarginalRate * 100).toFixed(1)}% ${intakeAnswers.state ?? ''}`;
         log(`Profile: risk ${clientProfile.riskProfile.riskScore}/10 | ${clientProfile.timeHorizon.yearsToGoal}yr horizon | ${(clientProfile.taxProfile.combinedMarginalRate * 100).toFixed(0)}% combined tax rate`);
+        agentDone('clientProfile', agent1Summary);
 
         // ── Agent 2: Economic Intelligence ───────────────────────────────────
         await pace(800);
+        agentStart('economicIntelligence');
         log('Agent 2/7: Loading live market context from FRED...');
         const economicIntel = await agent2_economicIntelligence({ requestDate: new Date().toISOString() });
         await pace(1000);
+        const agent2Summary = `Regime: ${economicIntel.regime.current} · Equity: ${economicIntel.assetClassOutlook.equityValuation} (CAPE ${economicIntel.macroData.shillerCAPE}) · Bonds: ${economicIntel.assetClassOutlook.bondOpportunity} · rf ${(economicIntel.assetClassOutlook.riskFreeRate * 100).toFixed(2)}%`;
         log(`Macro: ${economicIntel.regime.current} | 10Y ${(economicIntel.assetClassOutlook.riskFreeRate * 100).toFixed(2)}% | CAPE ${economicIntel.macroData.shillerCAPE} | equity ${economicIntel.assetClassOutlook.equityValuation}`);
+        agentDone('economicIntelligence', agent2Summary);
 
         // ── Agent 3: Portfolio Construction ──────────────────────────────────
         await pace(900);
+        agentStart('portfolioConstruction');
         log('Agent 3/7: Running Sharpe optimiser across ETF universe...');
         const portfolio = agent3_portfolioConstruction({ clientProfile, economicIntel });
         await pace(1800);
+        const agent3Summary = `${portfolio.allocation.length} ETFs · Expected ${(portfolio.statistics.expectedReturn * 100).toFixed(1)}% return · Vol ${(portfolio.statistics.expectedVolatility * 100).toFixed(1)}% · Sharpe ${portfolio.statistics.sharpeRatio.toFixed(2)}`;
         log(`Portfolio: ${portfolio.allocation.length} holdings | expected return ${(portfolio.statistics.expectedReturn * 100).toFixed(1)}% | Sharpe ${portfolio.statistics.sharpeRatio.toFixed(2)}`);
+        agentDone('portfolioConstruction', agent3Summary);
 
         // ── Agents 4 + 5 in parallel ──────────────────────────────────────────
         await pace(700);
+        agentStart('riskAnalysis');
         log('Agent 4/7: Running stress tests and risk analysis...');
         await pace(400);
+        agentStart('taxOptimization');
         log('Agent 5/7: Optimising tax placement across accounts...');
         const marketContext = {
           regime: economicIntel.regime.current,
@@ -174,15 +187,22 @@ export async function POST(req: NextRequest) {
           Promise.resolve(agent5_taxOptimization({ portfolio, clientProfile })),
         ]);
         await pace(1400);
+        const agent4Summary = `${riskAnalysis.passesRiskCheck ? '✓ Approved' : '✗ Review required'} — ${riskAnalysis.riskLevel} risk · ${riskAnalysis.warnings.length} warning${riskAnalysis.warnings.length !== 1 ? 's' : ''}`;
         log(`Risk: ${riskAnalysis.riskLevel} (${riskAnalysis.warnings.length} warning${riskAnalysis.warnings.length !== 1 ? 's' : ''})`);
+        agentDone('riskAnalysis', agent4Summary);
+        const agent5Summary = `Est. ${taxOptimization.estimatedAnnualSavings}bps tax alpha · ${taxOptimization.recommendations.length} recommendation${taxOptimization.recommendations.length !== 1 ? 's' : ''} · ${taxOptimization.tlhPairs.length} TLH pair${taxOptimization.tlhPairs.length !== 1 ? 's' : ''}`;
         log(`Tax: ${taxOptimization.estimatedAnnualSavings}bps potential savings identified`);
+        agentDone('taxOptimization', agent5Summary);
 
         // ── Agent 6: Critic ───────────────────────────────────────────────────
         await pace(800);
+        agentStart('critic');
         log('Agent 6/7: Scoring portfolio against institutional benchmarks...');
         const criticScore = agent6_critic({ portfolio, clientProfile, riskAnalysis, taxOptimization, marketContext });
         await pace(1200);
+        const agent6Summary = `${criticScore.scores.overall}/100 — ${criticScore.passesThreshold ? 'Strong plan' : 'Revision suggested'} · Alignment ${criticScore.scores.alignment} · Risk ${criticScore.scores.riskManagement} · Tax ${criticScore.scores.taxEfficiency}`;
         log(`Score: ${criticScore.scores.overall}/100 — ${criticScore.passesThreshold ? 'APPROVED' : 'review suggested'}`);
+        agentDone('critic', agent6Summary);
 
         // ── Agent 6 retry (one pass, failure-mode-aware) ──────────────────────
         // Only retries for alignment/riskManagement failures — those can be improved
@@ -271,7 +291,9 @@ export async function POST(req: NextRequest) {
 
         // ── Agents 7a + 7b: IPS Generator + Synthesis in parallel (both Gemini) ──
         await pace(500);
+        agentStart('ipsGenerator');
         log('Agent 7a/7: Generating your Investment Policy Statement...');
+        agentStart('synthesis');
         log('Agent 7b/7: Writing your personalised investment narrative...');
         const [ips, synthesis] = await Promise.all([
           agentIPS({
@@ -291,15 +313,20 @@ export async function POST(req: NextRequest) {
           }),
         ]);
         if (ips) {
-          log(`IPS: Investment Policy Statement generated — ${finalScore.scores.overall}/100 Critic score`);
+          const ipsSum = `Investment Policy Statement generated — ${finalScore.scores.overall}/100 Critic score`;
+          log(`IPS: ${ipsSum}`);
+          agentDone('ipsGenerator', ipsSum);
           push({ type: 'ips', ips });
         } else {
           log('IPS: skipped (GEMINI_API_KEY not set)');
+          agentDone('ipsGenerator', 'Skipped — GEMINI_API_KEY not set');
         }
         if (synthesis) {
           log(`Narrative: generated in ${synthesis.executionTimeMs}ms`);
+          agentDone('synthesis', `Investment narrative generated in ${synthesis.executionTimeMs}ms`);
         } else {
           log('Narrative: skipped (GEMINI_API_KEY not set)');
+          agentDone('synthesis', 'Skipped — GEMINI_API_KEY not set');
         }
 
         // ── Assemble + stream plan ────────────────────────────────────────────
