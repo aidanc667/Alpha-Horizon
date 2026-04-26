@@ -8,7 +8,8 @@ export type AgentName =
   | 'portfolioConstruction'
   | 'riskAgent'
   | 'taxImplementation'
-  | 'criticEvaluator';
+  | 'criticEvaluator'
+  | 'ipsGenerator';
 
 export interface AgentResult<T = unknown> {
   agent: AgentName;
@@ -57,6 +58,10 @@ export interface IntakeAnswers {
   hasSectorPreferences: boolean;
   favoredSectors?: string;
   avoidedSectors?: string;
+  taxFilingStatus: 'single' | 'mfj' | 'mfs' | 'hoh';
+  debtLevel: 'none' | 'low' | 'medium' | 'high';
+  investmentExperience: 'beginner' | 'some' | 'experienced' | 'sophisticated';
+  goalAmount?: number;
 }
 
 // ─── Agent Outputs ────────────────────────────────────────────────────────────

@@ -191,6 +191,54 @@ export interface PersonalizedPlan {
   sources?: { uri: string; title: string }[];
 }
 
+export interface IPSTargetAllocation {
+  bucketName: string;
+  targetPct: number;
+  rangeLow: number;
+  rangeHigh: number;
+  holdings: { ticker: string; name: string; weight: number; accountPlacement: string }[];
+}
+
+export interface IPSDocument {
+  generatedDate: string;
+  clientProfile: {
+    riskScore: number;
+    derivedRiskTolerance: string;
+    effectiveMarginalRate: number;
+    horizon: number;
+    state: string;
+    filingStatus: string;
+    primaryGoal: string;
+    goalAmount?: number;
+  };
+  investmentObjective: string;
+  constraints: {
+    liquidityRequirement: string;
+    taxConsiderations: string;
+    restrictions: string[];
+    rebalancingPolicy: string;
+    reviewSchedule: string;
+  };
+  targetAllocation: IPSTargetAllocation[];
+  riskParameters: {
+    maxDrawdownTolerance: string;
+    concentrationLimit: string;
+    sequenceRisk: string;
+    expectedVolatility: string;
+  };
+  taxStrategy: {
+    assetLocationSummary: string;
+    keyTaxActions: string[];
+    estimatedAnnualTaxAlpha: number;
+    rothConversionOpportunity: boolean;
+    muniBondSuitable: boolean;
+  };
+  benchmarks: { primary: string; secondary: string; expectedReturnVsBenchmark: number; sharpeVsBenchmark: number };
+  executiveSummary: string;
+  criticScore: number;
+  disclaimer: string;
+}
+
 // ─── Portfolio Lab Types ──────────────────────────────────────────────────────
 
 export interface TickerAllocation {

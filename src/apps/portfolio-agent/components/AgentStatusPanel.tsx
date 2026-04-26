@@ -18,17 +18,22 @@ interface AgentStatusPanelProps {
 const HOLD_UNTIL_API = Number.MAX_SAFE_INTEGER;
 
 const AGENT_VISUAL_MS: Record<AgentName, number> = {
-  clientProfile:         500,
-  capitalMarkets:        4500,
-  portfolioConstruction: 4000,
-  riskAgent:             2500,
-  taxImplementation:     2000,
-  criticEvaluator:       HOLD_UNTIL_API,
+  clientProfile:         1200,
+  capitalMarkets:        2800,
+  portfolioConstruction: 3200,
+  riskAgent:             2000,
+  taxImplementation:     1800,
+  criticEvaluator:       2500,
+  ipsGenerator:          HOLD_UNTIL_API,
 };
 
 // Client-side hard timeout: if the API hasn't responded in 110 seconds, show an error.
 // Set slightly below server maxDuration (120s) so the client error shows before Vercel cuts the connection.
 const CLIENT_TIMEOUT_MS = 110_000;
+
+// Minimum time the analysis screen stays visible before transitioning to results.
+// Even if the API responds in 3s, the user sees the agents "thinking" for this long.
+const MIN_DISPLAY_MS = 13_000;
 
 // Stream chunk types emitted by the route
 type StreamChunk =
@@ -56,6 +61,7 @@ export default function AgentStatusPanel({ answers, onComplete, onReset }: Agent
   const completionFired = useRef(false);
   const fastForward = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
+  const startTimeRef = useRef<number>(Date.now());
 
   function addLog(msg: string) {
     setLogs(prev => [...prev.slice(-20), msg]);
@@ -77,6 +83,7 @@ export default function AgentStatusPanel({ answers, onComplete, onReset }: Agent
     completionFired.current = false;
     planResult.current = null;
     fastForward.current = false;
+    startTimeRef.current = Date.now();
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -130,21 +137,21 @@ export default function AgentStatusPanel({ answers, onComplete, onReset }: Agent
             if (chunk.type === 'log') {
               addLog(chunk.message);
             } else if (chunk.type === 'plan') {
-              // ── Render immediately — no animation gate (Change 1+2) ──────────
-              // planResult may be set multiple times if the server streams an improved
-              // revision. Each update triggers a re-render via setApiFetchDone.
               planResult.current = { plan: chunk.plan, logs: chunk.logs ?? [] };
               fastForward.current = true;
               clearTimeout(timeoutId);
 
               if (!completionFired.current) {
-                // First plan: fire onComplete immediately so the parent transitions
-                // to the results view without waiting for the animation to complete.
                 completionFired.current = true;
-                onComplete(chunk.plan as V3Plan);
+                // Enforce minimum display time so users see the full analysis animation.
+                // If the API responds faster than MIN_DISPLAY_MS, hold the transition.
+                const elapsed = Date.now() - startTimeRef.current;
+                const remaining = Math.max(0, MIN_DISPLAY_MS - elapsed);
+                const capturedPlan = chunk.plan as V3Plan;
+                setTimeout(() => {
+                  if (!cancelled) onComplete(capturedPlan);
+                }, remaining);
               }
-              // Second plan (revision): update state; parent re-renders if it
-              // subscribes to plan changes. setApiFetchDone(true) is idempotent.
               setApiFetchDone(true);
             } else if (chunk.type === 'error') {
               setFetchError(chunk.error);
