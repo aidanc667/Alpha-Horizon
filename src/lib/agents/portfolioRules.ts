@@ -1,6 +1,7 @@
 import { calculateAllETFReturns, calculateETFVolatility } from '@/lib/data/calculateETFReturns';
 import type { MarketRates } from '@/lib/data/calculateETFReturns';
 import { ETF_UNIVERSE } from '@/lib/data/etfUniverse';
+import { OVERLAP_PAIRS } from '@/lib/assets';
 import { optimizeSharpeWeights } from './sharpeOptimizer';
 import type { AllocationSlice, AllocationCategory, AccountPlacement, InvestmentPreferences } from '@/lib/agents/types';
 
@@ -317,6 +318,23 @@ function roundWeightsToFive(slices: AllocationSlice[]): AllocationSlice[] {
   return result;
 }
 
+// ─── Overlap pair enforcement ─────────────────────────────────────────────────
+// If the optimizer selects both members of an OVERLAP_PAIRS entry (e.g. BND+VTEB,
+// VTI+VOO), consolidate into the preferred ticker by merging weights. This prevents
+// the portfolio from holding two near-identical funds simultaneously.
+function enforceOverlapPairs(slices: AllocationSlice[]): AllocationSlice[] {
+  const result = slices.map(s => ({ ...s }));
+  for (const [preferred, deprecated] of OVERLAP_PAIRS) {
+    const prefIdx  = result.findIndex(s => s.ticker === preferred);
+    const deprIdx  = result.findIndex(s => s.ticker === deprecated);
+    if (prefIdx === -1 || deprIdx === -1) continue;
+    // Merge deprecated weight into preferred, then remove deprecated
+    result[prefIdx] = { ...result[prefIdx], weight: result[prefIdx].weight + result[deprIdx].weight };
+    result.splice(deprIdx, 1);
+  }
+  return result;
+}
+
 // ─── 3. selectETFsForAllocation ───────────────────────────────────────────────
 
 export function selectETFsForAllocation(
@@ -396,12 +414,15 @@ export function selectETFsForAllocation(
     });
   }
 
+  // ── Enforce overlap pairs (merge deprecated ticker weight into preferred) ──
+  const deduped = enforceOverlapPairs(slices);
+
   // ── Normalize ─────────────────────────────────────────────────────────────
-  const total = slices.reduce((s, x) => s + x.weight, 0);
-  if (total > 0) slices.forEach(s => { s.weight = s.weight / total; });
+  const total = deduped.reduce((s, x) => s + x.weight, 0);
+  if (total > 0) deduped.forEach(s => { s.weight = s.weight / total; });
 
   // ── Enforce per-ETF caps (e.g. AVUV ≤ 15%, MTUM ≤ 8%, IAU ≤ 5%) ─────────
-  let result = enforceETFCaps(slices);
+  let result = enforceETFCaps(deduped);
 
   // ── Enforce core-satellite (broad-market core ≥ 50% of equity sleeve) ─────
   result = enforceCoreSatellite(result, capturedEquityTarget);
