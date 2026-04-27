@@ -1030,7 +1030,8 @@ function TaxPlanningTab({
   }
   waterfall.push({ label: 'Taxable Brokerage', reason: 'Index ETFs are highly tax-efficient in taxable accounts', badge: 'STANDARD', badgeColor: 'bg-gray-100 text-gray-600', pct: 100 });
 
-  // ── Roth vs Traditional analysis
+  // ── Roth vs Traditional analysis (only shown when agent flagged a conversion opportunity)
+  const rothConversionOpportunity = taxOpt.recommendations.some(r => r.type === 'roth_conversion');
   const currentRate = taxProfile.federalMarginalRate;
   const mc = plan.monteCarlo;
   const finalP50 = mc.projections.at(-1)?.p50 ?? 0;
@@ -1156,7 +1157,7 @@ function TaxPlanningTab({
       </div>
 
       {/* ── Roth vs Traditional */}
-      <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+      {rothConversionOpportunity && <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
         <h3 className="text-xs font-bold text-gray-900 uppercase tracking-widest mb-3">
           Roth vs. Traditional Analysis
         </h3>
@@ -1203,7 +1204,7 @@ function TaxPlanningTab({
             : `Current ${(currentRate * 100).toFixed(0)}% bracket is at or above retirement rate. Defer tax with traditional contributions.`
           }
         </div>
-      </div>
+      </div>}
 
       {/* ── Action Plan */}
       {actions.length > 0 && (
