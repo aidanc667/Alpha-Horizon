@@ -85,6 +85,57 @@ function saveCache(cacheKey: string, plan: V3Plan): void {
   })();
 }
 
+// ─── Intake format normalizer ─────────────────────────────────────────────────
+// OnboardingFlow (src/components/planner/) emits the old flat IntakeAnswers shape
+// (primaryGoal, hasEmergencyFund at top level). Agents expect the new nested shape
+// (goal, financialSnapshot.hasEmergencyFund). Detect by presence of `primaryGoal`.
+
+function normalizeIntakeAnswers(raw: unknown): IntakeAnswers {
+  const r = raw as Record<string, unknown>;
+
+  // Already new format
+  if (r.goal !== undefined && r.financialSnapshot !== undefined) {
+    return r as unknown as IntakeAnswers;
+  }
+
+  const marketDrop = String(r.marketDropReaction ?? 'passive');
+  const riskLevel: 'low' | 'medium' | 'high' =
+    marketDrop === 'aggressive' ? 'high' : marketDrop === 'panic' ? 'low' : 'medium';
+
+  return {
+    goal: (r.primaryGoal ?? 'max_growth') as IntakeAnswers['goal'],
+    ...(r.goalAmount != null && { goalAmount: Number(r.goalAmount) }),
+    timeHorizon: Number(r.yearsUntilWithdrawal ?? 10),
+    startingCapital: Number(r.startingCapital ?? 0),
+    monthlyContribution: Number(r.monthlyContribution ?? 0),
+    financialSnapshot: {
+      hasEmergencyFund: Boolean(r.hasEmergencyFund),
+      hasHighInterestDebt: String(r.debtLevel ?? '') === 'high',
+      ...(r.hasLargeExpense && r.largeExpenseAmount != null
+        ? { plannedExpense: Number(r.largeExpenseAmount) }
+        : {}),
+    },
+    filingStatus: (r.taxFilingStatus ?? 'single') as IntakeAnswers['filingStatus'],
+    annualIncome: Number(r.annualIncome ?? 0),
+    state: String(r.state ?? ''),
+    age: 40,
+    existingAccounts: { traditional: 0, roth: 0, hsa: 0 },
+    riskCapacity: riskLevel,
+    riskWillingness: riskLevel,
+    incomeStability: Number(r.incomeStability ?? 3) as IntakeAnswers['incomeStability'],
+    availableAccounts: (r.accounts as string[]) ?? [],
+    ...(r.favoredSectors != null || r.avoidedSectors != null
+      ? {
+          investmentPreferences: {
+            esgOnly: String(r.favoredSectors ?? '').includes('ESG'),
+            ...(r.favoredSectors ? { favoredSectors: String(r.favoredSectors) } : {}),
+            ...(r.avoidedSectors ? { avoidedSectors: String(r.avoidedSectors) } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
 // ─── POST handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -92,7 +143,7 @@ export async function POST(req: NextRequest) {
   let intakeAnswers: IntakeAnswers;
   try {
     const body = await req.json();
-    intakeAnswers = (body as { answers: IntakeAnswers }).answers;
+    intakeAnswers = normalizeIntakeAnswers((body as { answers: unknown }).answers);
     if (!intakeAnswers) return NextResponse.json({ error: 'Missing answers' }, { status: 400 });
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
