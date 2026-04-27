@@ -422,7 +422,7 @@ export default function IntakeWizard({ onComplete, onBack }: IntakeWizardProps) 
             style={{ backgroundColor: '#06b6d4', color: '#000' }}
             className="px-6 py-2.5 font-bold rounded-xl transition-all text-sm hover:opacity-90"
           >
-            {isLastQuestion ? 'Launch Portfolio Agent →' : 'Next →'}
+            {isLastQuestion ? 'Launch SONA →' : 'Next →'}
           </button>
         </div>
       </div>

@@ -23,7 +23,7 @@ import { db } from '@/lib/db';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 // Bump this string to invalidate all cached plans (e.g. after pipeline logic changes).
-const PLAN_CACHE_VERSION = 'v1';
+const PLAN_CACHE_VERSION = 'v2';
 
 interface CacheEntry {
   plan: PortfolioPlan;

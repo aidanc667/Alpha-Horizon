@@ -85,7 +85,7 @@ const NAV_ITEMS = [
   },
   {
     id: 'portfolio-agent' as ActiveTab,
-    label: 'Portfolio Agent',
+    label: 'SONA',
     sublabel: 'Multi-Agent Construction',
     icon: Bot,
     dotColor: 'bg-cyan-400',

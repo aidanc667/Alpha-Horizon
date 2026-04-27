@@ -430,6 +430,16 @@ function MacroTab({ plan }: { plan: PortfolioPlan }) {
     transitional:'bg-amber-500/15 text-amber-300 border-amber-500/20',
   }[m.regime];
 
+  const macroAge = m.fetchedAt
+    ? (() => {
+        const diffMs = Date.now() - new Date(m.fetchedAt).getTime();
+        const diffMin = Math.round(diffMs / 60_000);
+        if (diffMin < 60) return `${diffMin}m ago`;
+        const diffHr = Math.floor(diffMin / 60);
+        return diffHr < 24 ? `${diffHr}h ago` : `${Math.floor(diffHr / 24)}d ago`;
+      })()
+    : null;
+
   return (
     <div className="space-y-4">
       {/* Live data */}
@@ -438,6 +448,11 @@ function MacroTab({ plan }: { plan: PortfolioPlan }) {
         <StatCard label="10-Year Yield" value={m.tenYearYield} />
         <StatCard label="CPI (YoY)" value={m.cpi} />
       </div>
+      {macroAge && (
+        <p className="text-slate-500 text-xs text-right">
+          Market data fetched {macroAge} · refreshes every 6h
+        </p>
+      )}
 
       <div className="bg-slate-900 border border-white/8 rounded-2xl p-5 space-y-4">
         <div className="flex items-center gap-3">

@@ -8,8 +8,7 @@ export type AgentName =
   | 'portfolioConstruction'
   | 'riskAgent'
   | 'taxImplementation'
-  | 'criticEvaluator'
-  | 'ipsGenerator';
+  | 'criticEvaluator';
 
 export interface AgentResult<T = unknown> {
   agent: AgentName;
@@ -58,10 +57,6 @@ export interface IntakeAnswers {
   hasSectorPreferences: boolean;
   favoredSectors?: string;
   avoidedSectors?: string;
-  taxFilingStatus: 'single' | 'mfj' | 'mfs' | 'hoh';
-  debtLevel: 'none' | 'low' | 'medium' | 'high';
-  investmentExperience: 'beginner' | 'some' | 'experienced' | 'sophisticated';
-  goalAmount?: number;
 }
 
 // ─── Agent Outputs ────────────────────────────────────────────────────────────
@@ -91,6 +86,7 @@ export interface MacroContext {
   cmaSummary: string;
   narrative: string;
   sources: string[];
+  fetchedAt?: string; // ISO timestamp of when Gemini last fetched live data (absent on older cached entries)
 }
 
 export interface AllocationSlice {

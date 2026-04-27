@@ -2,7 +2,7 @@
 
 import type { AgentName, AllocationSlice } from './types';
 
-export const APP_NAME = 'Portfolio Agent';
+export const APP_NAME = 'SONA';
 export const APP_TAGLINE = 'Institutional-Grade Multi-Agent Portfolio Construction';
 
 export const AGENT_PIPELINE: AgentName[] = [
@@ -21,7 +21,6 @@ export const AGENT_LABELS: Record<AgentName, string> = {
   riskAgent:              'Risk Agent',
   taxImplementation:      'Tax & Implementation Agent',
   criticEvaluator:        'Critic / Evaluator Agent',
-  ipsGenerator:           'IPS Generator Agent',
 };
 
 export const AGENT_DESCRIPTIONS: Record<AgentName, string> = {
@@ -31,7 +30,6 @@ export const AGENT_DESCRIPTIONS: Record<AgentName, string> = {
   riskAgent:              'Stress testing drawdown, concentration, liquidity, duration, and sequence risk',
   taxImplementation:      'Optimizing asset location, tax efficiency, rebalancing strategy, and ETF selection',
   criticEvaluator:        'Scoring the plan 0–100 across 5 dimensions and identifying top deficiencies',
-  ipsGenerator:           'Generating your formal Investment Policy Statement document',
 };
 
 export const AGENT_ICONS: Record<AgentName, string> = {
@@ -41,7 +39,6 @@ export const AGENT_ICONS: Record<AgentName, string> = {
   riskAgent:              '🛡️',
   taxImplementation:      '⚖️',
   criticEvaluator:        '🔴',
-  ipsGenerator:           '📄',
 };
 
 export const CRITIC_PASS_THRESHOLD = 80;   // Revision only on genuinely broken plans — see deriveCriticScore() for criticalFailure thresholds
