@@ -17,7 +17,7 @@ function Section({ num, title, children }: { num: number; title: string; childre
     <section className="mb-8">
       <div className="flex items-baseline gap-3 mb-3 pb-2 border-b border-gray-200">
         <span className="font-mono text-xs text-gray-400 w-5 flex-shrink-0">{num}.</span>
-        <h2 className="font-serif text-lg font-semibold text-gray-900 tracking-tight">{title}</h2>
+        <h2 className="font-display text-lg font-semibold text-gray-900 tracking-tight">{title}</h2>
       </div>
       <div className="pl-8">{children}</div>
     </section>
@@ -81,7 +81,7 @@ export default function IPSDocumentTab({ ips }: Props) {
             <p className="text-xs font-mono text-slate-400 uppercase tracking-widest mb-1">
               Investment Policy Statement
             </p>
-            <h1 className="font-serif text-2xl font-bold text-white leading-tight">
+            <h1 className="font-display text-2xl font-bold text-white leading-tight">
               Personal Portfolio Policy
             </h1>
             <p className="text-xs text-slate-400 mt-2 font-mono">
