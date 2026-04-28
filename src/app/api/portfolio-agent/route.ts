@@ -51,7 +51,7 @@ interface V3Plan {
 
 function planCacheKey(intakeAnswers: IntakeAnswers): string {
   const date = new Date().toISOString().slice(0, 10); // YYYY-MM-DD — invalidates daily with market data
-  return `plan_v4_${date}_${createHash('sha256').update(JSON.stringify(intakeAnswers)).digest('hex').slice(0, 16)}`;
+  return `plan_v5_${date}_${createHash('sha256').update(JSON.stringify(intakeAnswers)).digest('hex').slice(0, 16)}`;
 }
 
 async function checkCache(cacheKey: string): Promise<V3Plan | null> {
@@ -265,27 +265,32 @@ export async function POST(req: NextRequest) {
         let finalScore       = criticScore;
 
         const MAX_CRITIC_PASSES = 3;
-        let equityCeiling = clientProfile.riskProfile.maxEquityAllowed;
-        let positionCap   = 0.25; // equity sleeve per-position cap
+        let equityCeiling  = clientProfile.riskProfile.maxEquityAllowed;
+        let positionCap    = 0.25;
+        // Each pass rotates through a different strategy so we don't hammer the
+        // same lever three times when it has no effect.
+        const passStrategies = ['diversification', 'alignment', 'riskManagement'] as const;
 
-        for (let pass = 1; pass <= MAX_CRITIC_PASSES && finalScore.scores.overall < 85; pass++) {
+        const dimLog = (s: typeof criticScore.scores) =>
+          `align=${s.alignment} div=${s.diversification} tax=${s.taxEfficiency} cost=${s.costEfficiency} risk=${s.riskManagement}`;
+        log(`Critic initial: ${criticScore.scores.overall}/100 — ${dimLog(criticScore.scores)}`);
+
+        for (let pass = 0; pass < MAX_CRITIC_PASSES && finalScore.scores.overall < 85; pass++) {
+          // Rotate strategy: first target the weakest of the three actionable dims,
+          // then cycle through the remaining two on subsequent passes.
           const s = finalScore.scores;
-          // Find the weakest dimension to target this pass
-          const lowestDim = (
-            [
-              ['alignment',       s.alignment],
-              ['diversification', s.diversification],
-              ['riskManagement',  s.riskManagement],
-            ] as [string, number][]
-          ).sort((a, b) => a[1] - b[1])[0][0];
+          const ranked = (['alignment', 'diversification', 'riskManagement'] as const)
+            .map(d => ({ d, v: s[d] }))
+            .sort((a, b) => a.v - b.v);
+          // Pick strategy by pass index mod 3, biased toward the weakest dim
+          const strategy = pass === 0 ? ranked[0].d : passStrategies[pass];
 
-          log(`Critic pass ${pass}: score ${finalScore.scores.overall}/100 — targeting ${lowestDim}...`);
+          log(`Critic pass ${pass + 1}: ${finalScore.scores.overall}/100 → strategy: ${strategy}`);
 
           let passPortfolio;
           let passClientProfile = { ...clientProfile };
 
-          if (lowestDim === 'diversification') {
-            // Tighten per-position cap to force broader weight spread
+          if (strategy === 'diversification') {
             positionCap = Math.max(0.15, positionCap - 0.05);
             passPortfolio = agent3_portfolioConstruction({
               clientProfile: passClientProfile,
@@ -293,14 +298,11 @@ export async function POST(req: NextRequest) {
               constructionOverrides: { maxEquityWeightPerPosition: positionCap },
             });
           } else {
-            // alignment or riskManagement: reduce equity ceiling by 5% per pass
+            // alignment or riskManagement: step down equity ceiling
             equityCeiling = Math.max(0.20, equityCeiling - 0.05);
             passClientProfile = {
               ...clientProfile,
-              riskProfile: {
-                ...clientProfile.riskProfile,
-                maxEquityAllowed: equityCeiling,
-              },
+              riskProfile: { ...clientProfile.riskProfile, maxEquityAllowed: equityCeiling },
             };
             passPortfolio = agent3_portfolioConstruction({ clientProfile: passClientProfile, economicIntel });
           }
@@ -317,17 +319,16 @@ export async function POST(req: NextRequest) {
             marketContext,
           });
 
+          log(`Critic pass ${pass + 1} result: ${passScore.scores.overall}/100 — ${dimLog(passScore.scores)}`);
+
           if (passScore.scores.overall > finalScore.scores.overall) {
             finalPortfolio = passPortfolio;
             finalRisk      = passRisk;
             finalTax       = passTax;
             finalScore     = passScore;
-            log(`Critic pass ${pass}: improved to ${passScore.scores.overall}/100`);
-          } else {
-            log(`Critic pass ${pass}: no improvement (${passScore.scores.overall}/100) — keeping best`);
           }
         }
-        log(`Critic final: ${finalScore.scores.overall}/100 ${finalScore.passesThreshold ? '✓ approved' : '— best achievable'}`);
+        log(`Critic final: ${finalScore.scores.overall}/100 ${finalScore.passesThreshold ? '✓ approved' : '(best achievable — proceeding)'}`);
 
         // ── Monte Carlo ───────────────────────────────────────────────────────
         await pace(600);
