@@ -2,7 +2,8 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import type { IntakeAnswers, AgentName } from '@/apps/portfolio-agent/types';
+import type { IntakeAnswers } from '@/lib/agents/types';
+import type { AgentName } from '@/apps/portfolio-agent/types';
 import type { V3Plan } from '@/lib/agents/types';
 import type { IPSDocument } from '@/types';
 import { AGENT_PIPELINE, AGENT_LABELS, AGENT_DESCRIPTIONS, AGENT_ICONS } from '@/apps/portfolio-agent/constants';

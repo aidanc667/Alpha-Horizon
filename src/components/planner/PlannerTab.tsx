@@ -1,11 +1,11 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Sparkles, RotateCcw, ShieldCheck, TrendingUp, Shield } from 'lucide-react';
+import { Sparkles, RotateCcw, ShieldCheck, UserCircle, Search, PieChart, Shield, Calculator, Star } from 'lucide-react';
 import OnboardingFlow from './OnboardingFlow';
 import AgentStreamPanel from './AgentStreamPanel';
 import PlanResults from './PlanResults';
-import type { IntakeAnswers } from '@/apps/portfolio-agent/types';
+import type { IntakeAnswers } from '@/lib/agents/types';
 import type { V3Plan } from '@/lib/agents/types';
 import type { IPSDocument, SimulationResult } from '@/types';
 import { runSimulation } from '@/lib/simulationEngine';
@@ -232,7 +232,7 @@ export default function PlannerTab() {
     const taxProfile = plan.clientProfile?.taxProfile;
     setPlannerSnapshot({
       riskProfile: riskProfile?.effectiveRiskTolerance ?? 'Moderate',
-      timeline: `${answers.yearsUntilWithdrawal} years`,
+      timeline: `${answers.timeHorizon} years`,
       goal: answers.goalAmount ? fmt$(answers.goalAmount) : 'N/A',
       monthlyContrib: fmt$(answers.monthlyContribution),
       buckets: 'N/A',
@@ -318,167 +318,161 @@ export default function PlannerTab() {
 
   return (
     <div className="h-full flex flex-col">
-      {/* Tab header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-emerald-600/10 flex items-center justify-center">
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-          </div>
-          <div>
-            <p className="text-sm font-bold text-gray-900">AI Financial Planner</p>
-            <p className="text-xs text-gray-600">7-Agent Institutional Portfolio Analysis</p>
-          </div>
-        </div>
-        {(view === 'active' || view === 'onboarding') && (
+      {/* Tab header — hidden on welcome to preserve dark immersion */}
+      {view !== 'welcome' && (
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center gap-3">
-            {saveStatus === 'saving' && <span className="text-xs text-gray-400 animate-pulse">Saving…</span>}
-            {saveStatus === 'saved' && <span className="text-xs text-emerald-600 font-semibold">✓ Saved</span>}
-            {saveStatus === 'error' && <span className="text-xs text-red-400">Save failed</span>}
-            <button
-              onClick={handleReset}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-600 hover:text-gray-700 bg-gray-100 rounded-lg transition-colors"
-            >
-              <RotateCcw className="w-3 h-3" />
-              New Plan
-            </button>
+            <div className="w-8 h-8 rounded-xl bg-emerald-600/10 flex items-center justify-center">
+              <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-gray-900">AI Financial Planner</p>
+              <p className="text-xs text-gray-600">6-Agent Institutional Portfolio Analysis</p>
+            </div>
           </div>
-        )}
-      </div>
+          {(view === 'active' || view === 'onboarding') && (
+            <div className="flex items-center gap-3">
+              {saveStatus === 'saving' && <span className="text-xs text-gray-400 animate-pulse">Saving…</span>}
+              {saveStatus === 'saved' && <span className="text-xs text-emerald-600 font-semibold">✓ Saved</span>}
+              {saveStatus === 'error' && <span className="text-xs text-red-400">Save failed</span>}
+              <button
+                onClick={handleReset}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-600 hover:text-gray-700 bg-gray-100 rounded-lg transition-colors"
+              >
+                <RotateCcw className="w-3 h-3" />
+                New Plan
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
         {/* ── Welcome ── */}
         {view === 'welcome' && (
-          <div className="flex flex-col animate-fade-in -mx-6 -mt-6">
-            <div
-              className="relative overflow-hidden px-8 pt-12 pb-10 text-center"
-              style={{
-                background:
-                  'linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f2b1f 100%)',
-              }}
-            >
-              <div
-                className="absolute inset-0 opacity-10"
-                style={{
-                  backgroundImage:
-                    'radial-gradient(circle at 20% 50%, #10b981 0%, transparent 50%), radial-gradient(circle at 80% 20%, #6366f1 0%, transparent 40%)',
-                }}
-              />
+          <div
+            className="flex flex-col animate-fade-in -mx-6 -mt-6 min-h-full"
+            style={{ background: 'linear-gradient(160deg, #060b16 0%, #0a0f1e 60%, #0d1117 100%)' }}
+          >
+            {/* Depth orbs */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ background: 'radial-gradient(ellipse 60% 40% at 15% 20%, rgba(6,182,212,0.05) 0%, transparent 70%)' }} />
+            <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ background: 'radial-gradient(ellipse 50% 40% at 85% 80%, rgba(52,211,153,0.04) 0%, transparent 70%)' }} />
+
+            {/* Hero */}
+            <div className="relative px-8 pt-12 pb-10 text-center">
               <div className="relative z-10 max-w-2xl mx-auto space-y-4">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-600 text-xs font-semibold uppercase tracking-widest mb-2">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-semibold uppercase tracking-widest mb-2"
+                  style={{ background: 'rgba(6,182,212,0.1)', borderColor: 'rgba(6,182,212,0.25)', color: '#06b6d4' }}>
                   <Sparkles className="w-3 h-3" />
-                  7-Agent AI · Tax-Optimized · Institutional Grade
+                  6 AI Agents · Tax-Optimized · Institutional Grade
                 </div>
-                <h1 className="text-3xl font-black tracking-tight text-white">
-                  Build Your Investment Plan
+                <h1 style={{
+                  fontSize: '3.25rem',
+                  fontWeight: 900,
+                  letterSpacing: '-0.03em',
+                  lineHeight: 1.1,
+                  background: 'linear-gradient(135deg, #ffffff 30%, #67e8f9 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  backgroundClip: 'text',
+                }}>
+                  AI Financial Planner
                 </h1>
-                <p className="text-slate-300 text-sm leading-relaxed max-w-lg mx-auto">
-                  Answer 8 questions and receive a personalized ETF portfolio built by 7 specialized
-                  AI agents — with live agent transparency, formal Investment Policy Statement, and
-                  historical backtest analysis.
+                <p className="text-slate-400 text-sm leading-relaxed max-w-lg mx-auto">
+                  Six specialized agents. One institutional-grade portfolio — built, stress-tested, and refined around your goals.
                 </p>
                 <div className="flex items-center justify-center gap-8 pt-2">
                   {[
-                    { value: '8', label: 'Questions' },
-                    { value: '7', label: 'AI Agents' },
+                    { value: '12', label: 'Questions' },
+                    { value: '6', label: 'AI Agents' },
                     { value: 'IPS', label: 'Document' },
                     { value: 'CMA', label: '2026 Data' },
                   ].map((s) => (
                     <div key={s.label} className="text-center">
-                      <p className="text-xl font-black font-mono text-emerald-600">{s.value}</p>
-                      <p className="text-xs text-slate-400 uppercase tracking-wider">{s.label}</p>
+                      <p className="text-xl font-black font-mono" style={{ color: '#06b6d4' }}>{s.value}</p>
+                      <p className="text-xs text-slate-500 uppercase tracking-wider">{s.label}</p>
                     </div>
                   ))}
                 </div>
               </div>
             </div>
 
-            <div className="px-6 py-8 flex flex-col items-center gap-6">
+            {/* Divider */}
+            <div className="mx-8 h-px" style={{ background: 'rgba(255,255,255,0.05)' }} />
+
+            {/* Agent cards */}
+            <div className="px-8 py-8 flex flex-col items-center gap-6">
               <div className="grid grid-cols-3 gap-4 w-full max-w-2xl">
-                {[
+                {([
                   {
-                    label: 'Safety Bucket',
-                    desc: 'Emergency reserves & liquid capital — your financial foundation',
-                    color: 'text-emerald-700',
-                    iconColor: 'text-emerald-600',
-                    bg: 'bg-white border-emerald-200',
-                    iconBg: 'bg-emerald-50',
-                    bar: 'bg-emerald-400',
-                    Icon: Shield,
+                    Icon: UserCircle, number: '01', title: 'Client Profile Agent',
+                    description: 'Scores your risk tolerance, time horizon, and tax bracket instantly.',
+                    color: '#06b6d4', bg: 'rgba(6,182,212,0.07)', border: 'rgba(6,182,212,0.18)',
                   },
                   {
-                    label: 'Growth Bucket',
-                    desc: 'Tax-efficient equity compounding for long-term wealth building',
-                    color: 'text-blue-700',
-                    iconColor: 'text-blue-600',
-                    bg: 'bg-white border-blue-200',
-                    iconBg: 'bg-blue-50',
-                    bar: 'bg-blue-400',
-                    Icon: TrendingUp,
+                    Icon: Search, number: '02', title: 'Capital Markets Agent',
+                    description: 'Pulls live macro data to classify the current investment regime.',
+                    color: '#818cf8', bg: 'rgba(129,140,248,0.07)', border: 'rgba(129,140,248,0.18)',
                   },
                   {
-                    label: 'IPS Document',
-                    desc: 'Formal Investment Policy Statement — the standard for $5M+ advisor clients',
-                    color: 'text-purple-700',
-                    iconColor: 'text-purple-600',
-                    bg: 'bg-white border-purple-200',
-                    iconBg: 'bg-purple-50',
-                    bar: 'bg-purple-400',
-                    Icon: Sparkles,
+                    Icon: PieChart, number: '03', title: 'Portfolio Construction Agent',
+                    description: 'Sharpe-optimizes across 28 institutional ETFs and 3 buckets.',
+                    color: '#34d399', bg: 'rgba(52,211,153,0.07)', border: 'rgba(52,211,153,0.18)',
                   },
-                ].map((f) => (
+                  {
+                    Icon: Shield, number: '04', title: 'Risk Analysis Agent',
+                    description: 'Stress-tests for drawdown, sequence risk, and inflation sensitivity.',
+                    color: '#f59e0b', bg: 'rgba(245,158,11,0.07)', border: 'rgba(245,158,11,0.18)',
+                  },
+                  {
+                    Icon: Calculator, number: '05', title: 'Tax & Implementation Agent',
+                    description: 'Maximizes after-tax returns across Taxable, Roth, and Traditional.',
+                    color: '#fb7185', bg: 'rgba(251,113,133,0.07)', border: 'rgba(251,113,133,0.18)',
+                  },
+                  {
+                    Icon: Star, number: '06', title: 'Critic & Evaluator Agent',
+                    description: 'Reruns the pipeline until your plan scores above 85/100.',
+                    color: '#a78bfa', bg: 'rgba(167,139,250,0.07)', border: 'rgba(167,139,250,0.18)',
+                  },
+                ] as const).map((agent) => (
                   <div
-                    key={f.label}
-                    className={`p-4 border rounded-xl ${f.bg} flex flex-col gap-3`}
+                    key={agent.number}
+                    className="rounded-2xl p-5 flex flex-col gap-3 border"
+                    style={{ background: agent.bg, borderColor: agent.border }}
                   >
-                    <div className="flex items-center gap-2.5">
-                      <div
-                        className={`w-8 h-8 rounded-xl ${f.iconBg} flex items-center justify-center flex-shrink-0`}
-                      >
-                        <f.Icon className={`w-4 h-4 ${f.iconColor}`} />
+                    <div className="flex items-center justify-between">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center border"
+                        style={{ background: agent.bg, borderColor: agent.border }}>
+                        <agent.Icon style={{ width: 18, height: 18, color: agent.color }} />
                       </div>
-                      <p className={`text-xs font-bold uppercase tracking-wide ${f.color}`}>
-                        {f.label}
-                      </p>
+                      <span className="text-xs font-mono font-bold" style={{ color: agent.color, opacity: 0.6 }}>{agent.number}</span>
                     </div>
-                    <div className={`h-0.5 w-8 rounded-full ${f.bar}`} />
-                    <p className="text-xs text-gray-500 leading-relaxed">{f.desc}</p>
+                    <div>
+                      <h3 className="text-white font-semibold text-sm mb-1.5">{agent.title}</h3>
+                      <p className="text-slate-400 text-xs leading-relaxed">{agent.description}</p>
+                    </div>
                   </div>
                 ))}
               </div>
 
-              <div className="grid grid-cols-2 gap-2 w-full max-w-2xl">
-                {[
-                  'Live 7-agent reasoning chain',
-                  'Formal Investment Policy Statement',
-                  'Sharpe optimizer · 28-ETF universe',
-                  'California + federal tax optimization',
-                  'Historical backtest Jan 2014 → present',
-                  '15-year Monte Carlo projection',
-                ].map((f) => (
-                  <div
-                    key={f}
-                    className="flex items-center gap-2 text-xs text-gray-600 bg-white border border-gray-100 rounded-lg px-3 py-2"
-                  >
-                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-600 flex-shrink-0" />
-                    {f}
-                  </div>
-                ))}
-              </div>
-
+              {/* CTA */}
               <button
                 onClick={() => setView('onboarding')}
-                className="px-10 py-3.5 bg-gray-900 hover:bg-gray-800 text-white rounded-xl font-bold text-sm transition-all active:scale-95 shadow-lg flex items-center gap-2"
+                className="group flex items-center gap-2 px-10 py-3.5 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-2xl hover:opacity-90 hover:scale-[1.02]"
+                style={{ backgroundColor: '#06b6d4', color: '#000' }}
               >
                 <Sparkles className="w-4 h-4" />
                 Start Planning →
               </button>
 
-              <p className="text-xs text-slate-500 max-w-lg text-center leading-relaxed px-4">
-                © 2026 Alpha Horizon. For informational and educational purposes only. Not
-                financial, investment, or tax advice. Consult a licensed financial advisor before
-                making any investment decisions.
-              </p>
+              {/* Disclaimer */}
+              <div className="rounded-2xl border p-4 text-center w-full max-w-2xl" style={{ borderColor: 'rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.02)' }}>
+                <p style={{ color: '#475569', fontSize: '0.72rem', lineHeight: 1.7 }}>
+                  © 2026 Alpha Horizon. For informational and educational purposes only. Not financial, investment, or tax advice.
+                  Past performance does not predict future results. Consult a licensed financial advisor (RIA/CFP) before making any investment decisions.
+                </p>
+              </div>
             </div>
           </div>
         )}

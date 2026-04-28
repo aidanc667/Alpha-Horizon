@@ -6,7 +6,6 @@ import HomeLanding from './HomeLanding';
 import MarketTab from '@/components/market/MarketTab';
 import AdvisorTab from '@/components/advisor/AdvisorTab';
 import ArenaTab from '@/components/arena/ArenaTab';
-import PortfolioAgentPage from '@/apps/portfolio-agent/page';
 import { useAppContext } from '@/lib/appContext';
 import type { ActiveTab } from '@/types';
 
@@ -48,8 +47,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           <AdvisorTab />
         ) : view === 'arena' ? (
           <ArenaTab />
-        ) : view === 'portfolio-agent' ? (
-          <PortfolioAgentPage />
         ) : (
           children(view as ActiveTab)
         )}

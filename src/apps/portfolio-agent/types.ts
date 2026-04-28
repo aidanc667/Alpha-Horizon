@@ -32,7 +32,7 @@ export interface AgentRunState {
 
 export interface IntakeAnswers {
   // Q1
-  primaryGoal: 'financial_independence' | 'major_purchase' | 'max_growth' | 'legacy';
+  primaryGoal: 'financial_independence' | 'max_growth' | 'legacy' | 'capital_preservation';
   // Q2
   startingCapital: number;
   // Q3

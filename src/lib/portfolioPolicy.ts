@@ -86,7 +86,7 @@ export function derivePortfolioPolicy(
   else if (answers.yearsUntilWithdrawal > 20) targetBondPct  = Math.max(0, targetBondPct - 0.05);
   if (macro.bondOpportunity === 'attractive') targetBondPct += 0.05;
   if (macro.regime === 'risk_off')            targetBondPct += 0.05;
-  if (answers.primaryGoal === 'major_purchase') targetBondPct = Math.max(targetBondPct, 0.25);
+  if (answers.primaryGoal === 'capital_preservation') targetBondPct = Math.max(targetBondPct, 0.30);
   targetBondPct = Math.min(0.60, targetBondPct);
   const bondPct = Math.round(targetBondPct * 100); // e.g. 40
 

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
-import type { IntakeAnswers } from '@/apps/portfolio-agent/types';
+import type { IntakeAnswers } from '@/lib/agents/types';
 import { US_STATES } from '@/apps/portfolio-agent/constants';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -15,23 +15,23 @@ interface Props {
 // ─── Draft (intermediate state, looser types for in-progress inputs) ──────────
 
 interface Draft {
-  primaryGoal?: IntakeAnswers['primaryGoal'];
+  primaryGoal?: 'financial_independence' | 'max_growth' | 'legacy' | 'capital_preservation';
   goalAmount?: number;
   yearsUntilWithdrawal?: number;
   startingCapital?: number;
   monthlyContribution?: number;
   annualIncome?: number;
-  taxFilingStatus: IntakeAnswers['taxFilingStatus'];
+  taxFilingStatus: 'single' | 'mfj' | 'mfs' | 'hoh';
   state: string;
-  incomeStability?: IntakeAnswers['incomeStability'];
+  incomeStability?: 1 | 2 | 3 | 4 | 5;
   emergencyFundStatus?: 'none' | '1_2mo' | '3mo' | '6mo_plus';
   majorExpenseType?: string;
   largeExpenseCost?: number;
-  debtLevel?: IntakeAnswers['debtLevel'];
+  debtLevel?: 'none' | 'low' | 'medium' | 'high';
   accounts: string[];
   marketDropReactionIdx?: number;
-  marketDropReaction?: IntakeAnswers['marketDropReaction'];
-  investmentExperience?: IntakeAnswers['investmentExperience'];
+  marketDropReaction?: 'panic' | 'passive' | 'aggressive';
+  investmentExperience?: 'beginner' | 'some' | 'experienced' | 'sophisticated';
   constraints: string[];
 }
 
@@ -45,13 +45,14 @@ const INITIAL: Draft = {
 // ─── Steps ────────────────────────────────────────────────────────────────────
 
 const STEPS = [
-  { label: 'Goal + Timeline',   subtitle: 'What are you building, and when do you need it?' },
-  { label: 'Capital',           subtitle: 'What can you invest?' },
-  { label: 'Income + Tax',      subtitle: 'Your income and tax situation' },
-  { label: 'Cash Foundation',   subtitle: 'Your cash cushion and near-term needs' },
-  { label: 'Accounts',          subtitle: 'Which investment accounts do you have or can access?' },
-  { label: 'Risk DNA',          subtitle: 'How you handle volatility' },
-  { label: 'Constraints',       subtitle: 'Any investment restrictions? (optional — skip to continue)' },
+  { label: 'Goal + Timeline',  subtitle: 'What is your primary investment goal?' },
+  { label: 'Capital',          subtitle: 'What can you invest?' },
+  { label: 'Income + Tax',     subtitle: 'Your income and tax situation' },
+  { label: 'Cash Foundation',  subtitle: 'Your cash cushion and debt situation' },
+  { label: 'Major Expenses',   subtitle: 'Any large purchases coming up?' },
+  { label: 'Accounts',         subtitle: 'Which investment accounts do you have or can access?' },
+  { label: 'Risk DNA',         subtitle: 'How do you handle volatility?' },
+  { label: 'Constraints',      subtitle: 'Any investment restrictions? (optional — skip to continue)' },
 ] as const;
 
 // ─── Motion ───────────────────────────────────────────────────────────────────
@@ -77,20 +78,23 @@ function parseNum(raw: string): number | undefined {
 
 function canAdvance(step: number, d: Draft): boolean {
   switch (step) {
-    case 0: return !!(d.primaryGoal && d.yearsUntilWithdrawal !== undefined && d.yearsUntilWithdrawal > 0);
+    case 0:
+      if (!d.primaryGoal || !d.yearsUntilWithdrawal || d.yearsUntilWithdrawal <= 0) return false;
+      if (d.primaryGoal === 'max_growth' && !d.goalAmount) return false;
+      return true;
     case 1: return d.startingCapital !== undefined && d.monthlyContribution !== undefined;
     case 2: return !!(d.annualIncome !== undefined && d.incomeStability);
     case 3: return !!(d.emergencyFundStatus && d.debtLevel);
-    case 4: return true;
-    case 5: return !!(d.marketDropReaction && d.investmentExperience);
-    case 6: return true;
+    case 4: return !!d.majorExpenseType;
+    case 5: return true;
+    case 6: return !!(d.marketDropReaction && d.investmentExperience);
+    case 7: return true;
     default: return false;
   }
 }
 
 function buildAnswers(d: Draft): IntakeAnswers {
   const active = d.constraints.filter(c => c !== 'no_restrictions');
-  const hasSectorPreferences = active.length > 0;
   const favored: string[] = [];
   const avoided: string[] = [];
   if (active.includes('esg'))           favored.push('ESG');
@@ -99,26 +103,63 @@ function buildAnswers(d: Draft): IntakeAnswers {
   if (active.includes('avoid_sectors')) avoided.push('tobacco,weapons,fossil_fuels');
   if (active.includes('us_only'))       avoided.push('international');
 
+  let goalAmount = d.goalAmount;
+  if (!goalAmount) {
+    if (d.primaryGoal === 'financial_independence' || d.primaryGoal === 'legacy') {
+      goalAmount = (d.annualIncome ?? 0) * 25;
+    } else if (d.primaryGoal === 'capital_preservation') {
+      goalAmount = Math.round((d.startingCapital ?? 0) * Math.pow(1.025, d.yearsUntilWithdrawal ?? 10));
+    }
+  }
+
+  const filingMap = {
+    single: 'single',
+    mfj:    'married_filing_jointly',
+    mfs:    'married_filing_separately',
+    hoh:    'head_of_household',
+  } as const;
+
+  const riskWillingnessMap = {
+    panic:      'low',
+    passive:    'medium',
+    aggressive: 'high',
+  } as const;
+
+  const stability = d.incomeStability ?? 3;
+  const hasEmergencyFund = d.emergencyFundStatus !== 'none' && !!d.emergencyFundStatus;
+  const riskCapacity =
+    stability >= 4 && hasEmergencyFund ? 'high' :
+    stability <= 2 && !hasEmergencyFund ? 'low' :
+    'medium';
+
+  const hasLargeExpense = !!(d.majorExpenseType && d.majorExpenseType !== 'none');
+
   return {
-    primaryGoal:          d.primaryGoal!,
-    goalAmount:           d.goalAmount,
-    yearsUntilWithdrawal: d.yearsUntilWithdrawal!,
-    startingCapital:      d.startingCapital!,
-    monthlyContribution:  d.monthlyContribution!,
-    annualIncome:         d.annualIncome!,
-    taxFilingStatus:      d.taxFilingStatus,
-    state:                d.state,
-    incomeStability:      d.incomeStability!,
-    hasEmergencyFund:     d.emergencyFundStatus !== 'none',
-    hasLargeExpense:      !!(d.majorExpenseType && d.majorExpenseType !== 'none'),
-    largeExpenseAmount:   (d.majorExpenseType && d.majorExpenseType !== 'none') ? d.largeExpenseCost : undefined,
-    debtLevel:            d.debtLevel!,
-    accounts:             d.accounts,
-    marketDropReaction:   d.marketDropReaction!,
-    investmentExperience: d.investmentExperience!,
-    hasSectorPreferences,
-    favoredSectors:       favored.length ? favored.join(',') : undefined,
-    avoidedSectors:       avoided.length ? avoided.join(',') : undefined,
+    goal:               d.primaryGoal!,
+    goalAmount,
+    timeHorizon:        d.yearsUntilWithdrawal!,
+    startingCapital:    d.startingCapital!,
+    monthlyContribution: d.monthlyContribution!,
+    financialSnapshot: {
+      hasEmergencyFund,
+      hasHighInterestDebt: d.debtLevel === 'high',
+      ...(hasLargeExpense && d.largeExpenseCost ? { plannedExpense: d.largeExpenseCost } : {}),
+    },
+    filingStatus:       filingMap[d.taxFilingStatus],
+    annualIncome:       d.annualIncome!,
+    state:              d.state,
+    age:                35,
+    existingAccounts:   { traditional: 0, roth: 0, hsa: 0 },
+    riskCapacity,
+    riskWillingness:    riskWillingnessMap[d.marketDropReaction ?? 'passive'],
+    incomeStability:    d.incomeStability!,
+    availableAccounts:  d.accounts,
+    investmentPreferences: {
+      ...(favored.length ? { favoredSectors: favored.join(',') } : {}),
+      ...(avoided.length ? { avoidedSectors: avoided.join(',') } : {}),
+      esgOnly: active.includes('esg'),
+      experienceLevel: d.investmentExperience,
+    },
   };
 }
 
@@ -193,14 +234,14 @@ function CheckBtn({
 
 // ─── Step renders ─────────────────────────────────────────────────────────────
 
-const GOALS: Array<{ value: IntakeAnswers['primaryGoal']; label: string; desc: string }> = [
-  { value: 'financial_independence', label: 'Retirement / Financial Independence', desc: 'Build a portfolio that replaces your income' },
-  { value: 'max_growth',             label: 'Long-Term Wealth Building',           desc: 'Maximize compound growth over many years' },
-  { value: 'major_purchase',         label: 'Major Purchase',                      desc: 'Save for a home, business, or large expense' },
-  { value: 'legacy',                 label: 'Passive Income / Legacy',             desc: 'Generate cash flow or build generational wealth' },
+const GOALS: Array<{ value: Draft['primaryGoal']; label: string; desc: string }> = [
+  { value: 'financial_independence', label: '💰 Retirement / Financial Independence', desc: "Build a portfolio that replaces your income — we'll target 25× your annual spending" },
+  { value: 'max_growth',             label: '📈 Wealth Accumulation',                 desc: 'Grow to a specific dollar target you define' },
+  { value: 'capital_preservation',   label: '🛡️ Capital Preservation',               desc: 'Protect and grow existing wealth with minimal drawdown' },
+  { value: 'legacy',                 label: '🏛️ Passive Income / Legacy',             desc: 'Generate cash flow or build generational wealth' },
 ];
 
-const STABILITY: Array<{ value: IntakeAnswers['incomeStability']; label: string }> = [
+const STABILITY: Array<{ value: Draft['incomeStability']; label: string }> = [
   { value: 5, label: 'Very Stable — government, tenured, long-term contract' },
   { value: 4, label: 'Stable — salaried corporate employee' },
   { value: 3, label: 'Variable — freelance, commission, self-employed' },
@@ -240,7 +281,7 @@ const ACCOUNTS_LIST = [
   'None — taxable brokerage only',
 ];
 
-const REACTIONS: Array<{ label: string; value: IntakeAnswers['marketDropReaction'] }> = [
+const REACTIONS: Array<{ label: string; value: Draft['marketDropReaction'] }> = [
   { label: 'Sell everything — preserving capital is critical',       value: 'panic'      },
   { label: 'Reduce exposure — large losses make me uncomfortable',   value: 'panic'      },
   { label: 'Hold steady — I trust the long-term plan',               value: 'passive'    },
@@ -248,7 +289,7 @@ const REACTIONS: Array<{ label: string; value: IntakeAnswers['marketDropReaction
   { label: 'Rebalance to target — sell what held up, buy what fell', value: 'aggressive' },
 ];
 
-const EXPERIENCE: Array<{ value: IntakeAnswers['investmentExperience']; label: string; desc: string }> = [
+const EXPERIENCE: Array<{ value: Draft['investmentExperience']; label: string; desc: string }> = [
   { value: 'beginner',      label: 'First-time investor',       desc: 'Never managed an investment portfolio' },
   { value: 'some',          label: 'Some experience (1–3 yrs)', desc: 'Have a 401k or basic brokerage account' },
   { value: 'experienced',   label: 'Experienced (3–10 yrs)',    desc: 'Comfortable with ETFs, rebalancing, and taxes' },
@@ -264,7 +305,7 @@ const CONSTRAINTS = [
   { value: 'no_restrictions', label: 'No restrictions' },
 ];
 
-const FILING: Array<{ value: IntakeAnswers['taxFilingStatus']; label: string }> = [
+const FILING: Array<{ value: Draft['taxFilingStatus']; label: string }> = [
   { value: 'single', label: 'Single' },
   { value: 'mfj',    label: 'Married Filing Jointly' },
   { value: 'mfs',    label: 'Married Filing Separately' },
@@ -292,7 +333,7 @@ function renderStep(step: number, draft: Draft, update: (k: keyof Draft, v: unkn
             </button>
           ))}
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className={`grid gap-3 ${(draft.primaryGoal === 'financial_independence' || draft.primaryGoal === 'max_growth') ? 'grid-cols-2' : 'grid-cols-1'}`}>
           <div className="space-y-1.5">
             <label className="text-xs font-mono uppercase tracking-widest text-gray-500">Years Until Withdrawal</label>
             <div className="relative">
@@ -308,20 +349,25 @@ function renderStep(step: number, draft: Draft, update: (k: keyof Draft, v: unkn
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 uppercase tracking-widest pointer-events-none">yrs</span>
             </div>
           </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-mono uppercase tracking-widest text-gray-500">
-              Target Amount <span className="normal-case font-normal text-gray-400">(optional)</span>
-            </label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-mono pointer-events-none">$</span>
-              <input
-                type="text" inputMode="numeric" placeholder="1,000,000"
-                value={fmtNum(draft.goalAmount)}
-                onChange={e => update('goalAmount', parseNum(e.target.value))}
-                className="w-full pl-7 pr-4 py-3 bg-gray-50 border border-gray-200 focus:border-emerald-500/60 rounded-xl outline-none font-mono text-xl font-bold text-gray-900 placeholder-gray-300 transition-colors"
-              />
+          {(draft.primaryGoal === 'financial_independence' || draft.primaryGoal === 'max_growth') && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-mono uppercase tracking-widest text-gray-500">
+                Target Amount{' '}
+                {draft.primaryGoal === 'financial_independence'
+                  ? <span className="normal-case font-normal text-gray-400">(optional)</span>
+                  : <span className="normal-case font-normal text-red-400">*required</span>}
+              </label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-mono pointer-events-none">$</span>
+                <input
+                  type="text" inputMode="numeric" placeholder="1,000,000"
+                  value={fmtNum(draft.goalAmount)}
+                  onChange={e => update('goalAmount', parseNum(e.target.value))}
+                  className="w-full pl-7 pr-4 py-3 bg-gray-50 border border-gray-200 focus:border-emerald-500/60 rounded-xl outline-none font-mono text-xl font-bold text-gray-900 placeholder-gray-300 transition-colors"
+                />
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     );
@@ -358,7 +404,7 @@ function renderStep(step: number, draft: Draft, update: (k: keyof Draft, v: unkn
             <label className="text-xs font-mono uppercase tracking-widest text-gray-500">Tax Filing Status</label>
             <select
               value={draft.taxFilingStatus}
-              onChange={e => update('taxFilingStatus', e.target.value as IntakeAnswers['taxFilingStatus'])}
+              onChange={e => update('taxFilingStatus', e.target.value as Draft['taxFilingStatus'])}
               className="w-full px-3 py-3 bg-gray-50 border border-gray-200 focus:border-emerald-500/60 rounded-xl outline-none text-sm font-medium text-gray-800 appearance-none cursor-pointer transition-colors"
             >
               {FILING.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
@@ -402,6 +448,22 @@ function renderStep(step: number, draft: Draft, update: (k: keyof Draft, v: unkn
           </div>
         </div>
         <div className="space-y-1.5">
+          <label className="text-xs font-mono uppercase tracking-widest text-gray-500">Current Debt Level</label>
+          <div className="space-y-2">
+            {DEBT.map(d => (
+              <RadioBtn key={d.value} selected={draft.debtLevel === d.value} onClick={() => update('debtLevel', d.value)}>
+                <span className={`text-sm font-medium ${draft.debtLevel === d.value ? 'text-emerald-700' : ''}`}>{d.label}</span>
+              </RadioBtn>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+
+    // ── Q5: Major Expenses ─────────────────────────────────────────────────────
+    case 4: return (
+      <div className="space-y-5">
+        <div className="space-y-1.5">
           <label className="text-xs font-mono uppercase tracking-widest text-gray-500">Major Expense in Next 5 Years</label>
           <div className="space-y-2">
             {MAJOR_EXPENSE.map(e => (
@@ -426,21 +488,11 @@ function renderStep(step: number, draft: Draft, update: (k: keyof Draft, v: unkn
             </motion.div>
           )}
         </div>
-        <div className="space-y-1.5">
-          <label className="text-xs font-mono uppercase tracking-widest text-gray-500">Current Debt Level</label>
-          <div className="space-y-2">
-            {DEBT.map(d => (
-              <RadioBtn key={d.value} selected={draft.debtLevel === d.value} onClick={() => update('debtLevel', d.value)}>
-                <span className={`text-sm font-medium ${draft.debtLevel === d.value ? 'text-emerald-700' : ''}`}>{d.label}</span>
-              </RadioBtn>
-            ))}
-          </div>
-        </div>
       </div>
     );
 
-    // ── Q5: Accounts ───────────────────────────────────────────────────────────
-    case 4: {
+    // ── Q6: Accounts ───────────────────────────────────────────────────────────
+    case 5: {
       const toggleAcct = (acct: string) => {
         const NONE = 'None — taxable brokerage only';
         if (acct === NONE) {
@@ -492,8 +544,8 @@ function renderStep(step: number, draft: Draft, update: (k: keyof Draft, v: unkn
       );
     }
 
-    // ── Q6: Risk DNA ───────────────────────────────────────────────────────────
-    case 5: return (
+    // ── Q7: Risk DNA ───────────────────────────────────────────────────────────
+    case 6: return (
       <div className="space-y-5">
         <div className="space-y-1.5">
           <label className="text-xs font-mono uppercase tracking-widest text-gray-500">
@@ -533,8 +585,8 @@ function renderStep(step: number, draft: Draft, update: (k: keyof Draft, v: unkn
       </div>
     );
 
-    // ── Q7: Constraints ────────────────────────────────────────────────────────
-    case 6: {
+    // ── Q8: Constraints ────────────────────────────────────────────────────────
+    case 7: {
       const toggleConstraint = (val: string) => {
         if (val === 'no_restrictions') {
           update('constraints', draft.constraints.includes('no_restrictions') ? [] : ['no_restrictions']);
@@ -604,8 +656,7 @@ export default function OnboardingFlow({ onComplete }: Props) {
             <ChevronLeft className="w-4 h-4" />
           </button>
           <div className="flex items-center gap-2 text-xs font-mono text-gray-500">
-            <span className="uppercase tracking-widest">{step + 1} / {STEPS.length}</span>
-            <span className="text-emerald-600 font-bold">{pct}%</span>
+            <span className="uppercase tracking-widest">Question {step + 1} of {STEPS.length}</span>
           </div>
         </div>
         <div className="h-1 bg-gray-100 rounded-full overflow-hidden">

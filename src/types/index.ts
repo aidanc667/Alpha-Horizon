@@ -1,6 +1,6 @@
 // ─── Shared Platform Types ──────────────────────────────────────────────────
 
-export type ActiveTab = 'planner' | 'lab' | 'market-home' | 'market-long' | 'market-near' | 'advisor' | 'arena' | 'portfolio-agent';
+export type ActiveTab = 'planner' | 'lab' | 'market-home' | 'market-long' | 'market-near' | 'advisor' | 'arena';
 
 // ─── Financial Planner Types ─────────────────────────────────────────────────
 

@@ -35,7 +35,8 @@ export type PrimaryGoal =
   | 'financial_independence'  // Cash-flow / FIRE target
   | 'major_purchase'          // House, business, education
   | 'max_growth'              // Long-horizon wealth accumulation
-  | 'legacy';                 // Tax-efficient wealth transfer
+  | 'legacy'                  // Tax-efficient wealth transfer
+  | 'capital_preservation';   // Protect real purchasing power, inflation-adjusted target
 
 /** Investor time-horizon bucket derived from raw years-to-goal. */
 export type TimeHorizonBucket = 'short' | 'medium' | 'long' | 'very_long';
@@ -128,6 +129,8 @@ export interface InvestmentPreferences {
    * May reduce Sharpe ratio — agent will note the trade-off.
    */
   esgOnly?: boolean;
+  /** Investor's self-reported experience level — used to cap portfolio complexity. */
+  experienceLevel?: 'beginner' | 'some' | 'experienced' | 'sophisticated';
 }
 
 /**

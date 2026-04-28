@@ -11,7 +11,6 @@ import {
   LogOut,
   Brain,
   Swords,
-  Bot,
 } from 'lucide-react';
 import { useClerk } from '@clerk/nextjs';
 import type { ActiveTab } from '@/types';
@@ -81,18 +80,6 @@ const NAV_ITEMS = [
     activeBorder: 'border-amber-500/40',
     activeText: 'text-amber-300',
     activeIcon: 'text-amber-400',
-    hoverBg: 'hover:bg-white/8',
-  },
-  {
-    id: 'portfolio-agent' as ActiveTab,
-    label: 'SONA',
-    sublabel: 'Multi-Agent Construction',
-    icon: Bot,
-    dotColor: 'bg-cyan-400',
-    activeBg: 'bg-cyan-500/20',
-    activeBorder: 'border-cyan-500/40',
-    activeText: 'text-cyan-300',
-    activeIcon: 'text-cyan-400',
     hoverBg: 'hover:bg-white/8',
   },
 ] as const;

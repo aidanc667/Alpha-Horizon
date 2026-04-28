@@ -7,7 +7,7 @@ import {
 } from 'recharts';
 import type { V3Plan } from '@/lib/agents/types';
 import type { BacktestState } from './PlannerTab';
-import type { IntakeAnswers } from '@/apps/portfolio-agent/types';
+import type { IntakeAnswers } from '@/lib/agents/types';
 import type { IPSDocument } from '@/types';
 import { IPSTab } from './IPSDocument';
 import { generateProjectionSeries } from '@/lib/projectionSeries';
@@ -1002,7 +1002,7 @@ function TaxPlanningTab({
   };
 
   // ── Paycheck waterfall (priority-ranked)
-  const accts = answers.accounts.map((a: string) => a.toLowerCase());
+  const accts = answers.availableAccounts.map((a: string) => a.toLowerCase());
   const hasHSA    = accts.some((a: string) => a.includes('hsa'));
   const has401k   = accts.some((a: string) => a.includes('401k') || a.includes('401(k)') || a.includes('traditional'));
   const hasRoth   = accts.some((a: string) => a.includes('roth'));
@@ -1010,10 +1010,10 @@ function TaxPlanningTab({
   type WfStep = { label: string; reason: string; badge: string; badgeColor: string; pct: number };
   const waterfall: WfStep[] = [];
 
-  if (!answers.hasEmergencyFund) {
+  if (!answers.financialSnapshot?.hasEmergencyFund) {
     waterfall.push({ label: 'Emergency Fund (3–6 months)', reason: 'Prevents forced selling in a downturn', badge: 'CRITICAL', badgeColor: 'bg-red-100 text-red-700', pct: 20 });
   }
-  if (answers.debtLevel === 'high') {
+  if (answers.financialSnapshot?.hasHighInterestDebt) {
     waterfall.push({ label: 'High-Interest Debt Payoff', reason: 'Guaranteed 8–24% return; beats any portfolio', badge: 'CRITICAL', badgeColor: 'bg-red-100 text-red-700', pct: 20 });
   }
   if (hasHSA) {
