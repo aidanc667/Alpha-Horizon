@@ -283,11 +283,18 @@ export async function POST(req: NextRequest) {
 
         for (let pass = 0; pass < MAX_CRITIC_PASSES && finalScore.scores.overall < 85; pass++) {
           // Always target the actual weakest actionable dimension this pass.
+          // taxEfficiency and costEfficiency can't be fixed by portfolio reweighting,
+          // so when they're weakest, fall back to the worst reweightable dimension.
           const s = finalScore.scores;
-          const ranked = (['alignment', 'diversification', 'riskManagement'] as const)
+          const allRanked = (['alignment', 'diversification', 'riskManagement', 'taxEfficiency', 'costEfficiency'] as const)
             .map(d => ({ d, v: s[d] }))
             .sort((a, b) => a.v - b.v);
-          const strategy = ranked[0].d;
+          const weakestDim = allRanked[0].d;
+          const strategy = (weakestDim === 'taxEfficiency' || weakestDim === 'costEfficiency')
+            ? (['alignment', 'diversification', 'riskManagement'] as const)
+                .map(d => ({ d, v: s[d] }))
+                .sort((a, b) => a.v - b.v)[0].d
+            : weakestDim;
 
           // Combo strategy: when both alignment and riskManagement are weak,
           // hard-cap equity at 0.50 to address both at once.
@@ -353,7 +360,7 @@ export async function POST(req: NextRequest) {
         }
 
         if (!finalScore.passesThreshold) {
-          const weakest = (['alignment', 'diversification', 'riskManagement'] as const)
+          const weakest = (['alignment', 'diversification', 'riskManagement', 'taxEfficiency', 'costEfficiency'] as const)
             .reduce((a, b) => finalScore.scores[a] <= finalScore.scores[b] ? a : b);
           log(`Warning: best achievable score is ${finalScore.scores.overall}/100 — below 85/100 quality threshold. Weakest: ${weakest}.`);
           push({ type: 'quality_warning', score: finalScore.scores.overall, threshold: 85, weakestDim: weakest });
