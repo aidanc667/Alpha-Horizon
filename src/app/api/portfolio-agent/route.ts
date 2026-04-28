@@ -51,7 +51,7 @@ interface V3Plan {
 
 function planCacheKey(intakeAnswers: IntakeAnswers): string {
   const date = new Date().toISOString().slice(0, 10); // YYYY-MM-DD — invalidates daily with market data
-  return `plan_v3_${date}_${createHash('sha256').update(JSON.stringify(intakeAnswers)).digest('hex').slice(0, 16)}`;
+  return `plan_v4_${date}_${createHash('sha256').update(JSON.stringify(intakeAnswers)).digest('hex').slice(0, 16)}`;
 }
 
 async function checkCache(cacheKey: string): Promise<V3Plan | null> {

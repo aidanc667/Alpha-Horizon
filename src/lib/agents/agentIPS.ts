@@ -254,6 +254,169 @@ CRITIC SCORE: ${criticScore.scores.overall}/100
 Write the IPS prose fields for this specific client. Each must reference actual numbers from above.`;
 }
 
+// ─── Deterministic narrative fallback ────────────────────────────────────────
+//
+// Produces all 11 prose fields from templates when GEMINI_API_KEY is absent.
+// Every sentence references actual numbers from prior agent outputs so the IPS
+// remains informative and client-specific without an LLM call.
+
+function buildDeterministicNarrative(input: {
+  clientProfile:   Agent1Output;
+  portfolio:       Agent3Output;
+  taxOptimization: Agent5Output;
+  criticScore:     Agent6Output;
+  intakeAnswers:   IntakeAnswers;
+}): IPSNarrative {
+  const { clientProfile, portfolio, taxOptimization, criticScore, intakeAnswers } = input;
+  const rf   = clientProfile.riskProfile;
+  const tx   = clientProfile.taxProfile;
+  const th   = clientProfile.timeHorizon;
+  const goal = clientProfile.goalAnalysis;
+  const stats = portfolio.statistics;
+
+  const maxConc = Math.max(...portfolio.allocation.map(s => s.weight));
+  const scoreLabel = criticScore.scores.overall >= 90 ? 'excellent' : criticScore.scores.overall >= 80 ? 'strong' : 'acceptable';
+
+  const byPlacement = (acct: string) =>
+    portfolio.allocation.filter(s => s.accountPlacement === acct).map(s => s.ticker).join(', ');
+  const taxableETFs = byPlacement('taxable');
+  const rothETFs    = byPlacement('roth');
+  const tradETFs    = byPlacement('traditional');
+
+  const locationParts: string[] = [];
+  if (taxableETFs) locationParts.push(`${taxableETFs} in taxable for tax efficiency`);
+  if (rothETFs)    locationParts.push(`${rothETFs} in Roth IRA for tax-free compounding`);
+  if (tradETFs)    locationParts.push(`${tradETFs} in tax-deferred accounts to reduce current income`);
+
+  return {
+    investmentObjective: goal.goalAmount
+      ? `Accumulate $${goal.goalAmount.toLocaleString()} over ${th.yearsToGoal} years (${(goal.fundedStatus * 100).toFixed(0)}% currently funded, rated ${goal.feasibility}) through a ${rf.effectiveRiskTolerance} portfolio targeting ${(stats.expectedReturn * 100).toFixed(1)}% expected annual return.`
+      : `Maximize portfolio growth over a ${th.yearsToGoal}-year horizon through a ${rf.effectiveRiskTolerance} allocation targeting ${(stats.expectedReturn * 100).toFixed(1)}% expected annual return and a Sharpe ratio of ${stats.sharpeRatio.toFixed(2)}.`,
+
+    liquidityRequirement: intakeAnswers.financialSnapshot?.hasEmergencyFund
+      ? `Client maintains an adequate emergency fund outside this portfolio; no additional liquidity sleeve is required.`
+      : `A 3–6 month expense reserve is recommended before deploying the full capital; the portfolio assumes this buffer is established separately.`,
+
+    taxConsiderations: `Combined marginal rate of ${(tx.combinedMarginalRate * 100).toFixed(0)}% (${(tx.federalMarginalRate * 100).toFixed(0)}% federal + ${(tx.stateMarginalRate * 100).toFixed(0)}% ${intakeAnswers.state} state). ${tx.combinedMarginalRate >= 0.22 ? 'Tax-exempt municipal bonds are cost-effective at this bracket; VTEB is included where applicable.' : 'Standard broad-market index funds are appropriate at the current tax rate.'}`,
+
+    rebalancingPolicy: `Rebalance when any holding drifts more than 5% from its target weight; conduct a full review at least annually.`,
+
+    reviewSchedule: `Annual review of asset allocation, contributions, and goal feasibility; additional reviews triggered by major life events, income changes >20%, or a market decline exceeding 20%.`,
+
+    maxDrawdownTolerance: `Estimated maximum peak-to-trough drawdown of −${(stats.maxDrawdownEstimate * 100).toFixed(1)}% under a 2008-type stress scenario; the client's risk score of ${rf.riskScore}/10 indicates ${rf.effectiveRiskTolerance} loss tolerance.`,
+
+    concentrationLimit: `No single position exceeds ${(maxConc * 100).toFixed(0)}% of the total portfolio; the ${portfolio.allocation.length}-holding structure limits concentration risk at the security level.`,
+
+    sequenceRisk: th.yearsToGoal >= 15
+      ? `With a ${th.yearsToGoal}-year horizon, sequence-of-returns risk is low; early drawdowns have time to recover through continued contributions.`
+      : `At ${th.yearsToGoal} years to goal, sequence-of-returns risk warrants monitoring; consider gradually reducing equity exposure as the drawdown date approaches.`,
+
+    expectedVolatilityNote: `Expected annualized volatility of ${(stats.expectedVolatility * 100).toFixed(1)}% implies a typical adverse calendar year of approximately −${(stats.expectedVolatility * 100).toFixed(1)}% to −${(stats.expectedVolatility * 150).toFixed(1)}%.`,
+
+    assetLocationSummary: locationParts.length > 0
+      ? `Asset location optimized for after-tax returns: ${locationParts.join('; ')}. This placement targets the estimated ${taxOptimization.estimatedAnnualSavings} bps annual tax alpha.`
+      : `All positions placed in taxable accounts; introducing tax-advantaged accounts in future years would improve after-tax compounding.`,
+
+    executiveSummary: `This ${rf.riskScore}/10 risk-score portfolio achieves a ${scoreLabel} Critic score of ${criticScore.scores.overall}/100, with ${(stats.expectedReturn * 100).toFixed(1)}% expected return and a ${stats.sharpeRatio.toFixed(2)} Sharpe ratio. ${goal.goalAmount ? `The $${goal.goalAmount.toLocaleString()} goal is rated ${goal.feasibility} at ${(goal.fundedStatus * 100).toFixed(0)}% funded status.` : ''} Tax optimization targets ${taxOptimization.estimatedAnnualSavings} bps in annual savings through systematic asset location.`,
+  };
+}
+
+// ─── Shared IPS assembler ─────────────────────────────────────────────────────
+//
+// Combines the prose narrative (LLM or deterministic) with deterministic
+// structured fields to produce the final IPSDocument.
+
+function buildIPSFromNarrative(
+  narrative: IPSNarrative,
+  input: {
+    clientProfile:   Agent1Output;
+    portfolio:       Agent3Output;
+    taxOptimization: Agent5Output;
+    criticScore:     Agent6Output;
+    intakeAnswers:   IntakeAnswers;
+  },
+): IPSDocument {
+  const { clientProfile, portfolio, taxOptimization, criticScore, intakeAnswers } = input;
+  const tx = clientProfile.taxProfile;
+
+  const muniBondSuitable = tx.combinedMarginalRate >= 0.22;
+  const rothConversionOpportunity =
+    tx.combinedMarginalRate < 0.22 &&
+    clientProfile.accountStructure.availableAccounts.some(a =>
+      a.toLowerCase().includes('traditional') || a.toLowerCase().includes('401')
+    );
+  const annualAUM = clientProfile.startingCapital + clientProfile.monthlyContribution * 12;
+  const estimatedAnnualTaxAlpha = Math.round(
+    (taxOptimization.estimatedAnnualSavings / 10000) * annualAUM
+  );
+
+  const restrictions: string[] = [];
+  if (clientProfile.investmentPreferences?.esgOnly) restrictions.push('ESG-screened funds only');
+  if (clientProfile.investmentPreferences?.avoidedSectors)
+    restrictions.push(`Excluded sectors: ${clientProfile.investmentPreferences.avoidedSectors}`);
+  if (clientProfile.investmentPreferences?.favoredSectors)
+    restrictions.push(`Tilts toward: ${clientProfile.investmentPreferences.favoredSectors}`);
+
+  return {
+    generatedDate: new Date().toISOString(),
+
+    clientProfile: {
+      riskScore:             clientProfile.riskProfile.riskScore,
+      derivedRiskTolerance:  clientProfile.riskProfile.effectiveRiskTolerance,
+      effectiveMarginalRate: tx.combinedMarginalRate,
+      horizon:               clientProfile.timeHorizon.yearsToGoal,
+      state:                 intakeAnswers.state,
+      filingStatus:          intakeAnswers.filingStatus,
+      primaryGoal:           intakeAnswers.goal,
+      goalAmount:            intakeAnswers.goalAmount,
+    },
+
+    investmentObjective: narrative.investmentObjective,
+
+    constraints: {
+      liquidityRequirement: narrative.liquidityRequirement,
+      taxConsiderations:    narrative.taxConsiderations,
+      restrictions,
+      rebalancingPolicy:    narrative.rebalancingPolicy,
+      reviewSchedule:       narrative.reviewSchedule,
+    },
+
+    targetAllocation: buildTargetAllocation(portfolio),
+
+    riskParameters: {
+      maxDrawdownTolerance: narrative.maxDrawdownTolerance,
+      concentrationLimit:   narrative.concentrationLimit,
+      sequenceRisk:         narrative.sequenceRisk,
+      expectedVolatility:   narrative.expectedVolatilityNote,
+    },
+
+    taxStrategy: {
+      assetLocationSummary:   narrative.assetLocationSummary,
+      keyTaxActions:          taxOptimization.recommendations
+        .filter(r => r.priority === 'high')
+        .map(r => r.title),
+      estimatedAnnualTaxAlpha,
+      rothConversionOpportunity,
+      muniBondSuitable,
+    },
+
+    benchmarks: {
+      primary:                   'VT (Vanguard Total World ETF)',
+      secondary:                 'VBINX (Vanguard Balanced Index Fund)',
+      expectedReturnVsBenchmark: Math.round(
+        (portfolio.statistics.expectedReturn - VT_EXPECTED_RETURN) * 10000
+      ) / 100,
+      sharpeVsBenchmark: Math.round(
+        (portfolio.statistics.sharpeRatio - VT_SHARPE_ESTIMATE) * 100
+      ) / 100,
+    },
+
+    executiveSummary: narrative.executiveSummary,
+    criticScore:      criticScore.scores.overall,
+    disclaimer:       DISCLAIMER,
+  };
+}
+
 // ─── Main agent function ──────────────────────────────────────────────────────
 
 export async function agentIPS(input: {
@@ -265,12 +428,8 @@ export async function agentIPS(input: {
 }): Promise<IPSDocument | null> {
   const apiKey = process.env.GEMINI_API_KEY ?? process.env.API_KEY;
   if (!apiKey) {
-    console.warn('[agentIPS] GEMINI_API_KEY not set — skipping IPS generation');
-    return null;
+    return buildIPSFromNarrative(buildDeterministicNarrative(input), input);
   }
-
-  const { clientProfile, portfolio, taxOptimization, criticScore, intakeAnswers } = input;
-  const tx = clientProfile.taxProfile;
 
   try {
     const ai = new GoogleGenAI({ apiKey });
@@ -287,94 +446,12 @@ export async function agentIPS(input: {
     });
 
     const jsonText = (response.text ?? '').trim();
-    if (!jsonText) return null;
+    if (!jsonText) return buildIPSFromNarrative(buildDeterministicNarrative(input), input);
 
     const narrative = JSON.parse(jsonText) as IPSNarrative;
-
-    // ── Deterministic fields assembled from prior agent outputs ──────────────
-    const muniBondSuitable = tx.combinedMarginalRate >= 0.22;
-
-    const rothConversionOpportunity =
-      tx.combinedMarginalRate < 0.22 &&
-      clientProfile.accountStructure.availableAccounts.some(a =>
-        a.toLowerCase().includes('traditional') || a.toLowerCase().includes('401')
-      );
-
-    // Convert bps savings to estimated annual dollars
-    const annualAUM = clientProfile.startingCapital + clientProfile.monthlyContribution * 12;
-    const estimatedAnnualTaxAlpha = Math.round(
-      (taxOptimization.estimatedAnnualSavings / 10000) * annualAUM
-    );
-
-    const restrictions: string[] = [];
-    if (clientProfile.investmentPreferences?.esgOnly) restrictions.push('ESG-screened funds only');
-    if (clientProfile.investmentPreferences?.avoidedSectors)
-      restrictions.push(`Excluded sectors: ${clientProfile.investmentPreferences.avoidedSectors}`);
-    if (clientProfile.investmentPreferences?.favoredSectors)
-      restrictions.push(`Tilts toward: ${clientProfile.investmentPreferences.favoredSectors}`);
-
-    const ips: IPSDocument = {
-      generatedDate: new Date().toISOString(),
-
-      clientProfile: {
-        riskScore:             clientProfile.riskProfile.riskScore,
-        derivedRiskTolerance:  clientProfile.riskProfile.effectiveRiskTolerance,
-        effectiveMarginalRate: tx.combinedMarginalRate,
-        horizon:               clientProfile.timeHorizon.yearsToGoal,
-        state:                 intakeAnswers.state,
-        filingStatus:          intakeAnswers.filingStatus,
-        primaryGoal:           intakeAnswers.goal,
-        goalAmount:            intakeAnswers.goalAmount,
-      },
-
-      investmentObjective: narrative.investmentObjective,
-
-      constraints: {
-        liquidityRequirement: narrative.liquidityRequirement,
-        taxConsiderations:    narrative.taxConsiderations,
-        restrictions,
-        rebalancingPolicy:    narrative.rebalancingPolicy,
-        reviewSchedule:       narrative.reviewSchedule,
-      },
-
-      targetAllocation: buildTargetAllocation(portfolio),
-
-      riskParameters: {
-        maxDrawdownTolerance: narrative.maxDrawdownTolerance,
-        concentrationLimit:   narrative.concentrationLimit,
-        sequenceRisk:         narrative.sequenceRisk,
-        expectedVolatility:   narrative.expectedVolatilityNote,
-      },
-
-      taxStrategy: {
-        assetLocationSummary:       narrative.assetLocationSummary,
-        keyTaxActions:              taxOptimization.recommendations
-          .filter(r => r.priority === 'high')
-          .map(r => r.title),
-        estimatedAnnualTaxAlpha,
-        rothConversionOpportunity,
-        muniBondSuitable,
-      },
-
-      benchmarks: {
-        primary:                   'VT (Vanguard Total World ETF)',
-        secondary:                 'VBINX (Vanguard Balanced Index Fund)',
-        expectedReturnVsBenchmark: Math.round(
-          (portfolio.statistics.expectedReturn - VT_EXPECTED_RETURN) * 10000
-        ) / 100,
-        sharpeVsBenchmark: Math.round(
-          (portfolio.statistics.sharpeRatio - VT_SHARPE_ESTIMATE) * 100
-        ) / 100,
-      },
-
-      executiveSummary: narrative.executiveSummary,
-      criticScore:      criticScore.scores.overall,
-      disclaimer:       DISCLAIMER,
-    };
-
-    return ips;
+    return buildIPSFromNarrative(narrative, input);
   } catch (e) {
-    console.error('[agentIPS] IPS generation failed:', e);
-    return null;
+    console.error('[agentIPS] IPS generation failed — falling back to deterministic:', e);
+    return buildIPSFromNarrative(buildDeterministicNarrative(input), input);
   }
 }

@@ -284,6 +284,62 @@ function enforceCoreSatellite(slices: AllocationSlice[], equityTarget: number): 
   return adjusted;
 }
 
+// ─── Portfolio consolidation ──────────────────────────────────────────────────
+//
+// Enforces two constraints:
+//   1. At most maxPositions ETFs total (drops smallest, merges weight into same-
+//      category neighbour or the overall largest).
+//   2. Every position ≥ minWeight of the total portfolio (repeatedly merges the
+//      lightest holding until the constraint is satisfied).
+//
+// These two passes are applied after all cap/core-satellite/overlap enforcement
+// and before rounding, so the final rounded portfolio has 3–5 meaningful holdings.
+
+function consolidatePortfolio(
+  slices: AllocationSlice[],
+  maxPositions = 5,
+  minWeight = 0.20,
+): AllocationSlice[] {
+  if (slices.length === 0) return slices;
+
+  const normalize = (arr: AllocationSlice[]): AllocationSlice[] => {
+    const total = arr.reduce((s, x) => s + x.weight, 0);
+    return total > 0 ? arr.map(s => ({ ...s, weight: s.weight / total })) : arr;
+  };
+
+  const mergeInto = (arr: AllocationSlice[], victim: AllocationSlice): AllocationSlice[] => {
+    const remaining = arr.filter(s => s !== victim);
+    const sameCategory = remaining.filter(s => s.category === victim.category);
+    const target = (sameCategory.length > 0 ? sameCategory : remaining)
+      .reduce((a, b) => a.weight > b.weight ? a : b);
+    return remaining.map(s =>
+      s === target ? { ...s, weight: s.weight + victim.weight } : s,
+    );
+  };
+
+  let result = [...slices].sort((a, b) => b.weight - a.weight);
+
+  // Pass 1 — trim to maxPositions
+  while (result.length > maxPositions) {
+    const smallest = result[result.length - 1];
+    result = mergeInto(result, smallest);
+    result = normalize(result).sort((a, b) => b.weight - a.weight);
+  }
+
+  // Pass 2 — eliminate sub-minWeight positions
+  let changed = true;
+  while (changed && result.length > 1) {
+    changed = false;
+    result.sort((a, b) => b.weight - a.weight);
+    const below = result.find(s => s.weight < minWeight - 0.001);
+    if (!below) break;
+    changed = true;
+    result = normalize(mergeInto(result, below));
+  }
+
+  return result;
+}
+
 // ─── Weight rounding ──────────────────────────────────────────────────────────
 //
 // Rounds each position to the nearest 5% increment (e.g. 30.85% → 30%, 32.5% → 35%).
@@ -435,6 +491,13 @@ export function selectETFsForAllocation(
   if (Math.abs(sum - 1.0) > 0.01) {
     throw new Error(`portfolioRules: weights sum to ${sum.toFixed(4)}, expected 1.0 ±0.01`);
   }
+
+  // ── Consolidate to 3–5 holdings with ≥ 20% each ──────────────────────────
+  result = consolidatePortfolio(result, 5, 0.20);
+
+  // ── Re-normalize after consolidation ─────────────────────────────────────
+  const finalTotal = result.reduce((s, x) => s + x.weight, 0);
+  if (finalTotal > 0) result.forEach(s => { s.weight = s.weight / finalTotal; });
 
   // ── Round to nearest 5% (largest-remainder) ───────────────────────────────
   return roundWeightsToFive(result);

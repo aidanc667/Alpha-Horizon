@@ -38,8 +38,8 @@ export async function POST(req: NextRequest) {
       await sql`
         UPDATE saved_plans
         SET name = ${name || 'My Financial Plan'},
-            plan_json = ${JSON.stringify(plan)},
-            responses_json = ${JSON.stringify(responses)},
+            plan_json = ${plan},
+            responses_json = ${responses},
             updated_at = NOW()
         WHERE id = ${id} AND user_id = ${userId}
       `;
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
       // Create new
       const rows = await sql`
         INSERT INTO saved_plans (user_id, name, plan_json, responses_json)
-        VALUES (${userId}, ${name || 'My Financial Plan'}, ${JSON.stringify(plan)}, ${JSON.stringify(responses)})
+        VALUES (${userId}, ${name || 'My Financial Plan'}, ${plan}, ${responses})
         RETURNING id
       `;
       return NextResponse.json({ success: true, id: rows[0].id });

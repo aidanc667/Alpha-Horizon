@@ -4,6 +4,7 @@ import React, { useState, useMemo } from 'react';
 import {
   ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceArea, ReferenceLine,
+  PieChart, Pie, Cell,
 } from 'recharts';
 import type { V3Plan } from '@/lib/agents/types';
 import type { BacktestState } from './PlannerTab';
@@ -51,6 +52,8 @@ function MetricCard({ label, value, sub }: { label: string; value: string; sub?:
     </div>
   );
 }
+
+const SLICE_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#64748b'];
 
 const ACCOUNT_COLORS: Record<string, { bg: string; text: string; label: string }> = {
   taxable:     { bg: 'bg-slate-100',  text: 'text-slate-600',  label: 'Taxable' },
@@ -190,41 +193,74 @@ function PortfolioTab({
 
       {/* ── Allocation + risk metrics */}
       <div className="grid grid-cols-1 lg:grid-cols-[55fr_45fr] gap-4">
-        {/* Allocation bars */}
+        {/* Allocation pie + bars */}
         <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
           <h3 className="text-xs font-bold text-gray-900 uppercase tracking-widest mb-4">
             Portfolio Allocation
           </h3>
-          <div className="space-y-3">
-            {alloc.map((s) => {
-              const pctVal = (s.weight * 100).toFixed(0);
-              const dollars = fmt$(Math.round(s.weight * answers.startingCapital));
-              const acc = ACCOUNT_COLORS[s.accountPlacement] ?? ACCOUNT_COLORS.any;
-              return (
-                <div key={s.ticker} className="flex items-center gap-3">
-                  <span className="font-mono text-xs font-bold text-gray-900 w-10 flex-shrink-0">
-                    {s.ticker}
-                  </span>
-                  <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-emerald-600 rounded-full"
-                      style={{ width: `${pctVal}%` }}
-                    />
-                  </div>
-                  <span className="font-mono text-xs text-gray-700 w-8 text-right flex-shrink-0">
-                    {pctVal}%
-                  </span>
-                  <span className="font-mono text-xs text-gray-400 w-16 text-right flex-shrink-0 hidden sm:block">
-                    {dollars}
-                  </span>
-                  <span
-                    className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${acc.bg} ${acc.text} w-16 text-center flex-shrink-0 hidden md:block`}
+          <div className="flex gap-5 items-center">
+            {/* Pie chart */}
+            <div className="w-28 h-28 flex-shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={alloc.map((s) => ({ name: s.ticker, value: Math.round(s.weight * 100) }))}
+                    dataKey="value"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={52}
+                    innerRadius={20}
+                    strokeWidth={2}
+                    stroke="#fff"
                   >
-                    {acc.label}
-                  </span>
-                </div>
-              );
-            })}
+                    {alloc.map((_, i) => (
+                      <Cell key={i} fill={SLICE_COLORS[i % SLICE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(val) => [`${val}%`, '']}
+                    contentStyle={{ fontSize: 11, borderRadius: 6, border: '1px solid #e5e7eb' }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            {/* Bars */}
+            <div className="flex-1 space-y-3 min-w-0">
+              {alloc.map((s, i) => {
+                const color = SLICE_COLORS[i % SLICE_COLORS.length];
+                const pctVal = (s.weight * 100).toFixed(0);
+                const dollars = fmt$(Math.round(s.weight * answers.startingCapital));
+                const acc = ACCOUNT_COLORS[s.accountPlacement] ?? ACCOUNT_COLORS.any;
+                return (
+                  <div key={s.ticker} className="flex items-center gap-2">
+                    <span
+                      className="w-2 h-2 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: color }}
+                    />
+                    <span className="font-mono text-xs font-bold text-gray-900 w-10 flex-shrink-0">
+                      {s.ticker}
+                    </span>
+                    <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{ width: `${pctVal}%`, backgroundColor: color }}
+                      />
+                    </div>
+                    <span className="font-mono text-xs text-gray-700 w-8 text-right flex-shrink-0">
+                      {pctVal}%
+                    </span>
+                    <span className="font-mono text-xs text-gray-400 w-16 text-right flex-shrink-0 hidden sm:block">
+                      {dollars}
+                    </span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${acc.bg} ${acc.text} w-16 text-center flex-shrink-0 hidden md:block`}
+                    >
+                      {acc.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
 
@@ -1067,8 +1103,149 @@ function TaxPlanningTab({
     })),
   ];
 
+  // ── Tax profile table data ────────────────────────────────────────────────
+  const niitApplies = taxProfile.investmentIncomeMarginalRate > taxProfile.combinedMarginalRate;
+  const niitRate    = niitApplies ? taxProfile.investmentIncomeMarginalRate - taxProfile.combinedMarginalRate : 0;
+
+  // Estimate tax drag without asset location: bonds taxed at ordinary rates in taxable
+  const bondAlloc   = alloc.filter(s => s.category === 'income' || s.category === 'safety');
+  const equityAlloc = alloc.filter(s => s.category === 'growth' || s.category === 'alternative');
+  const bondWeight  = bondAlloc.reduce((s, x) => s + x.weight, 0);
+  const equityWeight = equityAlloc.reduce((s, x) => s + x.weight, 0);
+  const assumedBondYield = 0.045;
+  const assumedDividendYield = 0.016;
+  const annualCapital = answers.startingCapital;
+  // Unoptimized: all in taxable, bonds at ordinary income rate
+  const dragUnoptimized = Math.round(
+    annualCapital * (
+      bondWeight * assumedBondYield * taxProfile.investmentIncomeMarginalRate +
+      equityWeight * assumedDividendYield * taxProfile.ltcgRate
+    )
+  );
+  // Optimized: bonds sheltered in tax-deferred (0 current drag), equity dividends at LTCG rate
+  const sheltered = alloc.filter(s => s.accountPlacement === 'traditional' || s.accountPlacement === 'hsa');
+  const shelteredWeight = sheltered.reduce((s, x) => s + x.weight, 0);
+  const rothHeld = alloc.filter(s => s.accountPlacement === 'roth');
+  const rothWeight = rothHeld.reduce((s, x) => s + x.weight, 0);
+  const taxableHeld = alloc.filter(s => s.accountPlacement === 'taxable' || s.accountPlacement === 'any');
+  const taxableWeight = taxableHeld.reduce((s, x) => s + x.weight, 0);
+  const dragOptimized = Math.round(
+    annualCapital * taxableWeight * assumedDividendYield * taxProfile.ltcgRate
+  );
+  const locationSaving$ = Math.max(0, dragUnoptimized - dragOptimized);
+
+  type RateRow = { label: string; rate: string; applies: boolean; highlight?: boolean; note?: string };
+  const rateRows: RateRow[] = [
+    {
+      label: `Federal Income Tax`,
+      rate: `${(taxProfile.federalMarginalRate * 100).toFixed(0)}%`,
+      applies: true,
+      note: 'Marginal rate on ordinary income',
+    },
+    {
+      label: `${answers.state} State Tax`,
+      rate: taxProfile.stateMarginalRate === 0 ? 'None' : `${(taxProfile.stateMarginalRate * 100).toFixed(1)}%`,
+      applies: true,
+      note: taxProfile.stateMarginalRate === 0 ? 'No state income tax' : 'Marginal state rate',
+    },
+    {
+      label: 'Combined Marginal Rate',
+      rate: `${(taxProfile.combinedMarginalRate * 100).toFixed(0)}%`,
+      applies: true,
+      highlight: true,
+      note: 'Federal + state — applies to bond interest & dividends',
+    },
+    {
+      label: 'Long-Term Capital Gains',
+      rate: taxProfile.ltcgRate === 0 ? '0%' : `${(taxProfile.ltcgRate * 100).toFixed(0)}%`,
+      applies: true,
+      note: 'ETF appreciation held >1 year — lower than ordinary income',
+    },
+    {
+      label: 'Net Investment Income Tax (§1411)',
+      rate: `${(niitRate * 100).toFixed(1)}%`,
+      applies: niitApplies,
+      note: `Added on investment income above $${answers.filingStatus === 'married_filing_jointly' ? '250K' : '200K'} AGI`,
+    },
+    {
+      label: 'Effective Investment Income Rate',
+      rate: `${(taxProfile.investmentIncomeMarginalRate * 100).toFixed(1)}%`,
+      applies: niitApplies,
+      highlight: true,
+      note: 'Combined + NIIT — applies to bond interest in taxable accounts',
+    },
+  ];
+
   return (
     <div className="space-y-4">
+      {/* ── Tax Profile Table */}
+      <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+        <h3 className="text-xs font-bold text-gray-900 uppercase tracking-widest mb-4">
+          Your Tax Profile
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-6">
+          {/* Rate table */}
+          <div>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-[10px] uppercase tracking-wider text-gray-400 border-b border-gray-100">
+                  <th className="text-left pb-2 font-medium">Tax Type</th>
+                  <th className="text-right pb-2 font-medium">Your Rate</th>
+                  <th className="text-left pb-2 pl-3 font-medium hidden sm:table-cell">Applies to</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {rateRows.filter(r => r.applies).map(row => (
+                  <tr key={row.label} className={row.highlight ? 'bg-slate-50' : ''}>
+                    <td className={`py-2 ${row.highlight ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
+                      {row.label}
+                    </td>
+                    <td className={`py-2 text-right font-mono font-bold ${row.highlight ? 'text-gray-900' : 'text-gray-700'}`}>
+                      {row.rate}
+                    </td>
+                    <td className="py-2 pl-3 text-gray-400 hidden sm:table-cell">{row.note}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Asset location impact */}
+          <div className="rounded-lg bg-slate-50 p-4 flex flex-col justify-between">
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-3">
+                Asset Location Impact
+              </p>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-500">Without optimization</span>
+                  <span className="font-mono text-xs font-bold text-red-500">−{fmt$(dragUnoptimized)}/yr</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-500">With asset location</span>
+                  <span className="font-mono text-xs font-bold text-gray-700">−{fmt$(dragOptimized)}/yr</span>
+                </div>
+                <div className="border-t border-gray-200 pt-2 flex justify-between items-center">
+                  <span className="text-xs font-semibold text-emerald-700">You save</span>
+                  <span className="font-mono text-sm font-black text-emerald-600">+{fmt$(locationSaving$)}/yr</span>
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 space-y-1 text-[10px] text-gray-400">
+              {shelteredWeight > 0 && (
+                <p>• {(shelteredWeight * 100).toFixed(0)}% sheltered in tax-deferred accounts</p>
+              )}
+              {rothWeight > 0 && (
+                <p>• {(rothWeight * 100).toFixed(0)}% in Roth for tax-free growth</p>
+              )}
+              {taxableWeight > 0 && (
+                <p>• {(taxableWeight * 100).toFixed(0)}% in taxable (index ETFs — low turnover)</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ── Tax Alpha Callout */}
       <div className="rounded-xl bg-emerald-600 p-4 text-white">
         <p className="text-[10px] uppercase tracking-widest text-emerald-200 font-bold mb-1">
