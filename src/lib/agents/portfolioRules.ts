@@ -403,7 +403,7 @@ export function selectETFsForAllocation(
   riskFreeRate: number = 0.048,
   marketRates?: MarketRates,
   preferences?: InvestmentPreferences,
-  overrides?: { maxEquityWeightPerPosition?: number },
+  overrides?: { maxEquityWeightPerPosition?: number; seedAllocation?: Record<string, number> },
 ): AllocationSlice[] {
   // calculateAllETFReturns applies TEY for muni bonds and, when marketRates is
   // provided, anchors bond/cash returns to live FRED yields instead of static CMAs.
@@ -419,10 +419,18 @@ export function selectETFsForAllocation(
     const maxWeightPerPosition = overrides?.maxEquityWeightPerPosition ?? defaultCap;
     const returns = Object.fromEntries(tickers.map(t => [t, etfReturns[t] ?? 0]));
 
+    const equitySeed = overrides?.seedAllocation
+      ? Object.fromEntries(
+          tickers
+            .filter(t => (overrides.seedAllocation![t] ?? 0) > 0)
+            .map(t => [t, overrides.seedAllocation![t]]),
+        )
+      : undefined;
     const weights = optimizeSharpeWeights(tickers, returns, riskFreeRate, {
       maxWeightPerPosition,
       iterations: 500,
       minWeight: 0.02,
+      ...(equitySeed && Object.keys(equitySeed).length > 0 ? { seedWeights: equitySeed } : {}),
     });
 
     for (const [ticker, w] of Object.entries(weights)) {
@@ -442,10 +450,18 @@ export function selectETFsForAllocation(
     const { tickers, maxWeightPerPosition } = buildBondSleeveSpec(riskScore, taxBracket, accounts);
     const returns = Object.fromEntries(tickers.map(t => [t, etfReturns[t] ?? 0]));
 
+    const bondSeed = overrides?.seedAllocation
+      ? Object.fromEntries(
+          tickers
+            .filter(t => (overrides.seedAllocation![t] ?? 0) > 0)
+            .map(t => [t, overrides.seedAllocation![t]]),
+        )
+      : undefined;
     const weights = optimizeSharpeWeights(tickers, returns, riskFreeRate, {
       maxWeightPerPosition,
       iterations: 400,
       minWeight: 0.03,
+      ...(bondSeed && Object.keys(bondSeed).length > 0 ? { seedWeights: bondSeed } : {}),
     });
 
     for (const [ticker, w] of Object.entries(weights)) {

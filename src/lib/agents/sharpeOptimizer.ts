@@ -207,6 +207,8 @@ export interface SharpeOptimizerOpts {
   learningRate?: number;
   /** Minimum final weight to include in result (default 0.01 = 1%). */
   minWeight?: number;
+  /** Warm-start weights (ticker → weight, need not sum to 1). Filtered to candidate tickers. */
+  seedWeights?: Record<string, number>;
 }
 
 /**
@@ -239,8 +241,11 @@ export function optimizeSharpeWeights(
   const σ = tickers.map(t => getVol(t));
   const Σ = buildCovMatrix(tickers, σ);
 
-  // Initialise: equal weights projected to respect maxW
-  let w = projectToSimplex(Array(n).fill(1 / n), maxW);
+  // Initialise: seed weights if provided, else equal weights
+  const rawSeed = opts.seedWeights
+    ? tickers.map(t => opts.seedWeights![t] ?? 0)
+    : Array(n).fill(1 / n);
+  let w = projectToSimplex(rawSeed, maxW);
 
   for (let iter = 0; iter < iters; iter++) {
     const { vol: pVol } = portfolioVarAndVol(w, Σ);

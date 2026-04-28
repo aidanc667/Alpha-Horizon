@@ -127,8 +127,8 @@ function scoreRiskManagement(
   risk: Agent4Output,
   marketContext?: { regime: string; cape: number },
 ): number {
-  // Start from warning count (0 warnings = 100, each -20)
-  let score = Math.max(0, 100 - risk.warnings.length * 20);
+  // Start from warning count (0 warnings = 100, each -10, floor 60)
+  let score = Math.max(60, 100 - Math.min(risk.warnings.length, 4) * 10);
 
   // Drawdown acceptability (±20) — uses same regime-adjusted thresholds as agent4
   // so the critic never disagrees with the risk agent on whether drawdown is acceptable.

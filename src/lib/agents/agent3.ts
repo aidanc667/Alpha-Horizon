@@ -22,7 +22,7 @@ const ETF_ER = Object.fromEntries(ETF_UNIVERSE.map((e) => [e.ticker, e.expenseRa
 export function agent3_portfolioConstruction(input: {
   clientProfile: Agent1Output;
   economicIntel: Agent2Output;
-  constructionOverrides?: { maxEquityWeightPerPosition?: number };
+  constructionOverrides?: { maxEquityWeightPerPosition?: number; seedAllocation?: Record<string, number> };
 }): Agent3Output {
   const startTime = Date.now();
 

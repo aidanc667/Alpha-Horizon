@@ -10,6 +10,7 @@ import { agent5_taxOptimization }       from '@/lib/agents/agent5';
 import { agent6_critic }                from '@/lib/agents/agent6';
 import { agent7_synthesis }             from '@/lib/agents/agent7_synthesis';
 import { agentIPS }                      from '@/lib/agents/agentIPS';
+import { getBaselineSeed }               from '@/lib/agents/baselinePlans';
 import { runMonteCarlo }                from '@/lib/monteCarlo/analyticalMonteCarlo';
 import type { IPSDocument } from '@/types/index';
 import type {
@@ -215,7 +216,15 @@ export async function POST(req: NextRequest) {
         await pace(900);
         agentStart('portfolioConstruction');
         log('Agent 3/7: Running Sharpe optimiser across ETF universe...');
-        const portfolio = agent3_portfolioConstruction({ clientProfile, economicIntel });
+        const baselineSeed = getBaselineSeed(
+          clientProfile.riskProfile.riskScore,
+          clientProfile.timeHorizon.yearsToGoal,
+        );
+        const portfolio = agent3_portfolioConstruction({
+          clientProfile,
+          economicIntel,
+          constructionOverrides: { seedAllocation: baselineSeed },
+        });
         await pace(1800);
         const agent3Summary = `${portfolio.allocation.length} ETFs · Expected ${(portfolio.statistics.expectedReturn * 100).toFixed(1)}% return · Vol ${(portfolio.statistics.expectedVolatility * 100).toFixed(1)}% · Sharpe ${portfolio.statistics.sharpeRatio.toFixed(2)}`;
         log(`Portfolio: ${portfolio.allocation.length} holdings | expected return ${(portfolio.statistics.expectedReturn * 100).toFixed(1)}% | Sharpe ${portfolio.statistics.sharpeRatio.toFixed(2)}`);
@@ -295,13 +304,17 @@ export async function POST(req: NextRequest) {
               ...clientProfile,
               riskProfile: { ...clientProfile.riskProfile, maxEquityAllowed: equityCeiling },
             };
-            passPortfolio = agent3_portfolioConstruction({ clientProfile: passClientProfile, economicIntel });
+            passPortfolio = agent3_portfolioConstruction({
+              clientProfile: passClientProfile,
+              economicIntel,
+              constructionOverrides: { seedAllocation: baselineSeed },
+            });
           } else if (strategy === 'diversification') {
             positionCap = Math.max(0.12, positionCap - 0.08);
             passPortfolio = agent3_portfolioConstruction({
               clientProfile: passClientProfile,
               economicIntel,
-              constructionOverrides: { maxEquityWeightPerPosition: positionCap },
+              constructionOverrides: { maxEquityWeightPerPosition: positionCap, seedAllocation: baselineSeed },
             });
           } else {
             // alignment or riskManagement: step down equity ceiling more aggressively
@@ -310,7 +323,11 @@ export async function POST(req: NextRequest) {
               ...clientProfile,
               riskProfile: { ...clientProfile.riskProfile, maxEquityAllowed: equityCeiling },
             };
-            passPortfolio = agent3_portfolioConstruction({ clientProfile: passClientProfile, economicIntel });
+            passPortfolio = agent3_portfolioConstruction({
+              clientProfile: passClientProfile,
+              economicIntel,
+              constructionOverrides: { seedAllocation: baselineSeed },
+            });
           }
 
           const [passRisk, passTax] = await Promise.all([
