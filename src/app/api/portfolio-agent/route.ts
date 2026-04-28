@@ -256,50 +256,56 @@ export async function POST(req: NextRequest) {
         agentDone('critic', agent6Summary);
 
         // ── Agent 6 iterative improvement loop ────────────────────────────────
-        // Runs up to 3 revision passes. Each pass targets the lowest-scoring
-        // dimension with a concrete construction change, then re-scores.
+        // Runs up to 5 revision passes. Each pass always targets the actual
+        // weakest scoring dimension with a concrete construction change.
         // The best plan seen across all iterations is kept.
         let finalPortfolio   = portfolio;
         let finalRisk        = riskAnalysis;
         let finalTax         = taxOptimization;
         let finalScore       = criticScore;
 
-        const MAX_CRITIC_PASSES = 3;
+        const MAX_CRITIC_PASSES = 5;
         let equityCeiling  = clientProfile.riskProfile.maxEquityAllowed;
         let positionCap    = 0.25;
-        // Each pass rotates through a different strategy so we don't hammer the
-        // same lever three times when it has no effect.
-        const passStrategies = ['diversification', 'alignment', 'riskManagement'] as const;
 
         const dimLog = (s: typeof criticScore.scores) =>
           `align=${s.alignment} div=${s.diversification} tax=${s.taxEfficiency} cost=${s.costEfficiency} risk=${s.riskManagement}`;
         log(`Critic initial: ${criticScore.scores.overall}/100 — ${dimLog(criticScore.scores)}`);
 
         for (let pass = 0; pass < MAX_CRITIC_PASSES && finalScore.scores.overall < 85; pass++) {
-          // Rotate strategy: first target the weakest of the three actionable dims,
-          // then cycle through the remaining two on subsequent passes.
+          // Always target the actual weakest actionable dimension this pass.
           const s = finalScore.scores;
           const ranked = (['alignment', 'diversification', 'riskManagement'] as const)
             .map(d => ({ d, v: s[d] }))
             .sort((a, b) => a.v - b.v);
-          // Pick strategy by pass index mod 3, biased toward the weakest dim
-          const strategy = pass === 0 ? ranked[0].d : passStrategies[pass];
+          const strategy = ranked[0].d;
 
-          log(`Critic pass ${pass + 1}: ${finalScore.scores.overall}/100 → strategy: ${strategy}`);
+          // Combo strategy: when both alignment and riskManagement are weak,
+          // hard-cap equity at 0.50 to address both at once.
+          const useComboCap = s.alignment < 70 && s.riskManagement < 70;
+
+          log(`Critic pass ${pass + 1}: ${finalScore.scores.overall}/100 → strategy: ${useComboCap ? 'combo-equity-cap' : strategy}`);
 
           let passPortfolio;
           let passClientProfile = { ...clientProfile };
 
-          if (strategy === 'diversification') {
-            positionCap = Math.max(0.15, positionCap - 0.05);
+          if (useComboCap) {
+            equityCeiling = Math.min(equityCeiling, 0.50);
+            passClientProfile = {
+              ...clientProfile,
+              riskProfile: { ...clientProfile.riskProfile, maxEquityAllowed: equityCeiling },
+            };
+            passPortfolio = agent3_portfolioConstruction({ clientProfile: passClientProfile, economicIntel });
+          } else if (strategy === 'diversification') {
+            positionCap = Math.max(0.12, positionCap - 0.08);
             passPortfolio = agent3_portfolioConstruction({
               clientProfile: passClientProfile,
               economicIntel,
               constructionOverrides: { maxEquityWeightPerPosition: positionCap },
             });
           } else {
-            // alignment or riskManagement: step down equity ceiling
-            equityCeiling = Math.max(0.20, equityCeiling - 0.05);
+            // alignment or riskManagement: step down equity ceiling more aggressively
+            equityCeiling = Math.max(0.20, equityCeiling - 0.10);
             passClientProfile = {
               ...clientProfile,
               riskProfile: { ...clientProfile.riskProfile, maxEquityAllowed: equityCeiling },
@@ -328,7 +334,14 @@ export async function POST(req: NextRequest) {
             finalScore     = passScore;
           }
         }
-        log(`Critic final: ${finalScore.scores.overall}/100 ${finalScore.passesThreshold ? '✓ approved' : '(best achievable — proceeding)'}`);
+
+        if (!finalScore.passesThreshold) {
+          const weakest = (['alignment', 'diversification', 'riskManagement'] as const)
+            .reduce((a, b) => finalScore.scores[a] <= finalScore.scores[b] ? a : b);
+          log(`Warning: best achievable score is ${finalScore.scores.overall}/100 — below 85/100 quality threshold. Weakest: ${weakest}.`);
+          push({ type: 'quality_warning', score: finalScore.scores.overall, threshold: 85, weakestDim: weakest });
+        }
+        log(`Critic final: ${finalScore.scores.overall}/100 ${finalScore.passesThreshold ? '✓ approved' : '↑ best achievable'}`);
 
         // ── Monte Carlo ───────────────────────────────────────────────────────
         await pace(600);

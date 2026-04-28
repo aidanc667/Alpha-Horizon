@@ -1436,9 +1436,24 @@ interface Props {
 
 export default function PlanResults({ plan, backtest, answers, ips }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>('portfolio');
+  const belowThreshold = plan.criticScore.scores.overall < 85;
 
   return (
     <div className="space-y-4">
+      {/* Quality warning banner */}
+      {belowThreshold && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-3">
+          <span className="text-amber-500 text-base leading-none mt-0.5">⚠</span>
+          <div>
+            <p className="text-xs font-bold text-amber-800">
+              Portfolio scored {plan.criticScore.scores.overall}/100 — below the 85/100 quality threshold
+            </p>
+            <p className="text-[11px] text-amber-700 mt-0.5">
+              {plan.criticScore.improvementSuggestions[0] ?? 'Consider adjusting your risk tolerance or time horizon inputs and re-running the planner.'}
+            </p>
+          </div>
+        </div>
+      )}
       {/* Tab bar */}
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
         {TABS.map((tab) => (
