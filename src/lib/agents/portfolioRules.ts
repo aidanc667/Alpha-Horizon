@@ -326,9 +326,9 @@ function consolidatePortfolio(
     result = normalize(result).sort((a, b) => b.weight - a.weight);
   }
 
-  // Pass 2 — eliminate sub-minWeight positions
+  // Pass 2 — eliminate sub-minWeight positions (never below 3 holdings)
   let changed = true;
-  while (changed && result.length > 1) {
+  while (changed && result.length > 3) {
     changed = false;
     result.sort((a, b) => b.weight - a.weight);
     const below = result.find(s => s.weight < minWeight - 0.001);

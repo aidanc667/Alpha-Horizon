@@ -55,21 +55,22 @@ function scoreDiversification(portfolio: Agent3Output): number {
   let score = 100;
   const { allocation } = portfolio;
 
-  // Holding count — 5-7 is optimal
+  // Holding count — 3-5 is the target range
   const n = allocation.length;
-  if (n < 4) score -= 20;
-  else if (n < 5 || n > 8) score -= 10;
+  if (n < 2) score -= 30;
+  else if (n < 3) score -= 15;
+  else if (n > 7) score -= 10;
 
-  // Single-position concentration
+  // Single-position concentration — penalise beyond 65% (expected with 2 holdings)
   const maxWeight = Math.max(...allocation.map((s) => s.weight));
-  if (maxWeight > 0.40) score -= 20;
-  else if (maxWeight > 0.30) score -= 10;
+  if (maxWeight > 0.75) score -= 20;
+  else if (maxWeight > 0.65) score -= 10;
 
-  // Top-3 concentration
+  // Top-2 concentration (adjusted for 3-5 ETF portfolios)
   const sorted = [...allocation].sort((a, b) => b.weight - a.weight);
-  const top3 = sorted.slice(0, 3).reduce((sum, s) => sum + s.weight, 0);
-  if (top3 > 0.75) score -= 15;
-  else if (top3 > 0.65) score -= 5;
+  const top2 = sorted.slice(0, 2).reduce((sum, s) => sum + s.weight, 0);
+  if (top2 > 0.95) score -= 15;
+  else if (top2 > 0.85) score -= 5;
 
   // Category spread — penalise missing income or safety sleeves
   const categories = new Set(allocation.map((s) => s.category));

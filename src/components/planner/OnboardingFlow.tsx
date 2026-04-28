@@ -106,7 +106,7 @@ function buildAnswers(d: Draft): IntakeAnswers {
   let goalAmount = d.goalAmount;
   if (!goalAmount) {
     if (d.primaryGoal === 'financial_independence' || d.primaryGoal === 'legacy') {
-      goalAmount = (d.annualIncome ?? 0) * 25;
+      goalAmount = (d.annualIncome ?? 0) * 10;
     } else if (d.primaryGoal === 'capital_preservation') {
       goalAmount = Math.round((d.startingCapital ?? 0) * Math.pow(1.025, d.yearsUntilWithdrawal ?? 10));
     }

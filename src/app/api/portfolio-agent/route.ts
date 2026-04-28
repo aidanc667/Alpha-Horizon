@@ -255,85 +255,79 @@ export async function POST(req: NextRequest) {
         log(`Score: ${criticScore.scores.overall}/100 — ${criticScore.passesThreshold ? 'APPROVED' : 'review suggested'}`);
         agentDone('critic', agent6Summary);
 
-        // ── Agent 6 retry (one pass, failure-mode-aware) ──────────────────────
-        // Only retries for alignment/riskManagement failures — those can be improved
-        // by tightening the equity ceiling. taxEfficiency and costEfficiency failures
-        // are structural and not fixable by equity reduction.
+        // ── Agent 6 iterative improvement loop ────────────────────────────────
+        // Runs up to 3 revision passes. Each pass targets the lowest-scoring
+        // dimension with a concrete construction change, then re-scores.
+        // The best plan seen across all iterations is kept.
         let finalPortfolio   = portfolio;
         let finalRisk        = riskAnalysis;
         let finalTax         = taxOptimization;
         let finalScore       = criticScore;
 
-        if (criticScore.requiresRevision) {
-          const s = criticScore.scores;
-          const equityTriggered =
-            (s.alignment < 60 || s.riskManagement < 60) &&
-            s.alignment <= s.taxEfficiency &&
-            s.alignment <= s.costEfficiency;
-          const riskTriggered =
-            !equityTriggered &&
-            s.riskManagement < 60 &&
-            s.riskManagement <= s.taxEfficiency &&
-            s.riskManagement <= s.costEfficiency;
-          // Concentration failures (e.g. AVUV/AVDV each >25%) drop the diversification
-          // score but don't touch alignment or riskManagement — the old retry never fired.
-          // Fix: tighten the per-position cap to 0.15 so the optimizer spreads weight.
-          const diversificationTriggered =
-            !equityTriggered && !riskTriggered &&
-            s.diversification < 65 &&
-            s.diversification <= s.alignment &&
-            s.diversification <= s.taxEfficiency;
+        const MAX_CRITIC_PASSES = 3;
+        let equityCeiling = clientProfile.riskProfile.maxEquityAllowed;
+        let positionCap   = 0.25; // equity sleeve per-position cap
 
-          if (equityTriggered || riskTriggered || diversificationTriggered) {
-            const trigger = equityTriggered ? 'alignment'
-              : riskTriggered ? 'riskManagement'
-              : 'diversification';
-            log(`Retry: ${trigger} failure — rebuilding with tighter constraints...`);
+        for (let pass = 1; pass <= MAX_CRITIC_PASSES && finalScore.scores.overall < 85; pass++) {
+          const s = finalScore.scores;
+          // Find the weakest dimension to target this pass
+          const lowestDim = (
+            [
+              ['alignment',       s.alignment],
+              ['diversification', s.diversification],
+              ['riskManagement',  s.riskManagement],
+            ] as [string, number][]
+          ).sort((a, b) => a[1] - b[1])[0][0];
 
-            let retryPortfolio;
-            let retryClientProfile = clientProfile;
+          log(`Critic pass ${pass}: score ${finalScore.scores.overall}/100 — targeting ${lowestDim}...`);
 
-            if (diversificationTriggered) {
-              // Tighten per-position cap to force broader spread across the ETF universe
-              retryPortfolio = agent3_portfolioConstruction({
-                clientProfile,
-                economicIntel,
-                constructionOverrides: { maxEquityWeightPerPosition: 0.15 },
-              });
-            } else {
-              // Alignment / risk failure: reduce equity ceiling by 5%
-              retryClientProfile = {
-                ...clientProfile,
-                riskProfile: {
-                  ...clientProfile.riskProfile,
-                  maxEquityAllowed: Math.max(0, clientProfile.riskProfile.maxEquityAllowed - 0.05),
-                },
-              };
-              retryPortfolio = agent3_portfolioConstruction({ clientProfile: retryClientProfile, economicIntel });
-            }
+          let passPortfolio;
+          let passClientProfile = { ...clientProfile };
 
-            const [retryRisk, retryTax] = await Promise.all([
-              Promise.resolve(agent4_riskAnalysis({ portfolio: retryPortfolio, clientProfile: retryClientProfile, marketContext })),
-              Promise.resolve(agent5_taxOptimization({ portfolio: retryPortfolio, clientProfile: retryClientProfile })),
-            ]);
-            const retryScore = agent6_critic({
-              portfolio: retryPortfolio,
-              clientProfile: retryClientProfile,
-              riskAnalysis: retryRisk,
-              taxOptimization: retryTax,
-              marketContext,
+          if (lowestDim === 'diversification') {
+            // Tighten per-position cap to force broader weight spread
+            positionCap = Math.max(0.15, positionCap - 0.05);
+            passPortfolio = agent3_portfolioConstruction({
+              clientProfile: passClientProfile,
+              economicIntel,
+              constructionOverrides: { maxEquityWeightPerPosition: positionCap },
             });
-            if (retryScore.scores.overall > finalScore.scores.overall) {
-              finalPortfolio = retryPortfolio;
-              finalRisk      = retryRisk;
-              finalTax       = retryTax;
-              finalScore     = retryScore;
-              log(`Retry: score improved to ${retryScore.scores.overall}/100`);
-            } else {
-              log(`Retry: no improvement (${retryScore.scores.overall}/100) — keeping original`);
-            }
+          } else {
+            // alignment or riskManagement: reduce equity ceiling by 5% per pass
+            equityCeiling = Math.max(0.20, equityCeiling - 0.05);
+            passClientProfile = {
+              ...clientProfile,
+              riskProfile: {
+                ...clientProfile.riskProfile,
+                maxEquityAllowed: equityCeiling,
+              },
+            };
+            passPortfolio = agent3_portfolioConstruction({ clientProfile: passClientProfile, economicIntel });
+          }
+
+          const [passRisk, passTax] = await Promise.all([
+            Promise.resolve(agent4_riskAnalysis({ portfolio: passPortfolio, clientProfile: passClientProfile, marketContext })),
+            Promise.resolve(agent5_taxOptimization({ portfolio: passPortfolio, clientProfile: passClientProfile })),
+          ]);
+          const passScore = agent6_critic({
+            portfolio: passPortfolio,
+            clientProfile: passClientProfile,
+            riskAnalysis: passRisk,
+            taxOptimization: passTax,
+            marketContext,
+          });
+
+          if (passScore.scores.overall > finalScore.scores.overall) {
+            finalPortfolio = passPortfolio;
+            finalRisk      = passRisk;
+            finalTax       = passTax;
+            finalScore     = passScore;
+            log(`Critic pass ${pass}: improved to ${passScore.scores.overall}/100`);
+          } else {
+            log(`Critic pass ${pass}: no improvement (${passScore.scores.overall}/100) — keeping best`);
           }
         }
+        log(`Critic final: ${finalScore.scores.overall}/100 ${finalScore.passesThreshold ? '✓ approved' : '— best achievable'}`);
 
         // ── Monte Carlo ───────────────────────────────────────────────────────
         await pace(600);
