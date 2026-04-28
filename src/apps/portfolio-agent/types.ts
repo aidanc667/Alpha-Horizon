@@ -8,7 +8,8 @@ export type AgentName =
   | 'portfolioConstruction'
   | 'riskAgent'
   | 'taxImplementation'
-  | 'criticEvaluator';
+  | 'criticEvaluator'
+  | 'ipsGenerator';
 
 export interface AgentResult<T = unknown> {
   agent: AgentName;

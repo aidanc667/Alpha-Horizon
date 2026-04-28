@@ -4,7 +4,8 @@
 // Extracted from runPortfolioConstructionAgent() — zero behavior changes.
 
 import { buildFilteredETFGuide } from '@/lib/assets';
-import type { IntakeAnswers, InvestorProfile, MacroContext } from '@/apps/portfolio-agent/types';
+import type { IntakeAnswers } from '@/lib/agents/types';
+import type { InvestorProfile, MacroContext } from '@/apps/portfolio-agent/types';
 import { BASELINES } from '@/apps/portfolio-agent/constants';
 import type { BaselineSlice } from '@/apps/portfolio-agent/constants';
 
@@ -53,7 +54,7 @@ export function derivePortfolioPolicy(
   // ── Beginner complexity cap ────────────────────────────────────────────────
   // Beginner investors get a simplified portfolio: max 4 ETFs, no factor tilts.
   // Strip AVUV/AVDV/VWO from the baseline and renormalize remaining weights.
-  const isBeginnerExperience = answers.investmentExperience === 'beginner';
+  const isBeginnerExperience = answers.investmentPreferences?.experienceLevel === 'beginner';
   let baseline = rawBaseline;
   if (isBeginnerExperience) {
     const simplified = rawBaseline.filter(s => !FACTOR_TICKERS.has(s.ticker));
@@ -81,12 +82,12 @@ export function derivePortfolioPolicy(
     profile.derivedRiskTolerance === 'moderate'     ? 0.15 :
     0.00; // aggressive / very_aggressive: equity-only by default
 
-  if      (answers.yearsUntilWithdrawal < 5)  targetBondPct += 0.10;
-  else if (answers.yearsUntilWithdrawal < 10) targetBondPct += 0.05;
-  else if (answers.yearsUntilWithdrawal > 20) targetBondPct  = Math.max(0, targetBondPct - 0.05);
+  if      (answers.timeHorizon < 5)  targetBondPct += 0.10;
+  else if (answers.timeHorizon < 10) targetBondPct += 0.05;
+  else if (answers.timeHorizon > 20) targetBondPct  = Math.max(0, targetBondPct - 0.05);
   if (macro.bondOpportunity === 'attractive') targetBondPct += 0.05;
   if (macro.regime === 'risk_off')            targetBondPct += 0.05;
-  if (answers.primaryGoal === 'capital_preservation') targetBondPct = Math.max(targetBondPct, 0.30);
+  if (answers.goal === 'capital_preservation') targetBondPct = Math.max(targetBondPct, 0.30);
   targetBondPct = Math.min(0.60, targetBondPct);
   const bondPct = Math.round(targetBondPct * 100); // e.g. 40
 
@@ -100,7 +101,7 @@ export function derivePortfolioPolicy(
 
   // Equity-side macro signals
   if (macro.equityValuation === 'expensive') adjustments.push('equity expensive: trim US large cap 5%, tilt more toward international (better valuations)');
-  if (answers.yearsUntilWithdrawal > 15 && !isBeginnerExperience) adjustments.push('very long horizon: maximize factor tilts (AVUV/AVDV) — short-term volatility is irrelevant');
+  if (answers.timeHorizon > 15 && !isBeginnerExperience) adjustments.push('very long horizon: maximize factor tilts (AVUV/AVDV) — short-term volatility is irrelevant');
 
   // ── Bond sleeve (exactly ONE directive with explicit % target) ────────────
   // Vehicle chosen by tax situation; size set by targetBondPct above.
@@ -130,16 +131,16 @@ export function derivePortfolioPolicy(
   // ── Safety/cash sleeve (SGOV — only when structurally required) ─────────────
   // SGOV is emergency/liquidity capital, NOT part of the bond sleeve.
   // If investor has emergency fund and no large expense: zero SGOV.
-  const needsSafety = !answers.hasEmergencyFund ||
-    (answers.hasLargeExpense && answers.largeExpenseAmount != null && answers.largeExpenseAmount > 0);
+  const { hasEmergencyFund, plannedExpense } = answers.financialSnapshot;
+  const needsSafety = !hasEmergencyFund || (plannedExpense != null && plannedExpense > 0);
 
   let safetyPct = 0;
-  if (!answers.hasEmergencyFund) {
+  if (!hasEmergencyFund) {
     safetyPct = 10;
     adjustments.push('SAFETY SLEEVE: Allocate exactly 10% to SGOV — emergency fund not established. This is separate from the bond sleeve.');
-  } else if (answers.hasLargeExpense && answers.largeExpenseAmount != null && answers.largeExpenseAmount > 0) {
-    safetyPct = Math.min(30, Math.round((answers.largeExpenseAmount / Math.max(answers.startingCapital, 1)) * 100));
-    adjustments.push(`SAFETY SLEEVE: Allocate exactly ${safetyPct}% to SGOV to cover $${answers.largeExpenseAmount.toLocaleString()} planned expense — liquid, do NOT invest in equities.`);
+  } else if (plannedExpense != null && plannedExpense > 0) {
+    safetyPct = Math.min(30, Math.round((plannedExpense / Math.max(answers.startingCapital, 1)) * 100));
+    adjustments.push(`SAFETY SLEEVE: Allocate exactly ${safetyPct}% to SGOV to cover $${plannedExpense.toLocaleString()} planned expense — liquid, do NOT invest in equities.`);
   }
   if (!needsSafety) {
     adjustments.push('NO safety sleeve: investor has an established emergency fund and no near-term large expense. Do NOT include SGOV anywhere in this portfolio.');
@@ -162,9 +163,9 @@ export function derivePortfolioPolicy(
     ...(!isBeginnerExperience ? ['AVUV', 'AVDV', 'VWO'] : ['VEA']),             // factor/intl alternatives (excluded for beginners)
     ...(profile.derivedRiskTolerance !== 'aggressive' ? ['SPLV', 'SCHD'] : []), // defensive options
     'VT',                                                                        // benchmark reference
-    ...(answers.hasSectorPreferences && answers.favoredSectors
+    ...(answers.investmentPreferences?.favoredSectors
         ? (() => {
-            const fav = answers.favoredSectors!.toLowerCase();
+            const fav = answers.investmentPreferences!.favoredSectors!.toLowerCase();
             const extra: string[] = [];
             if (fav.includes('tech') || fav.includes('growth')) extra.push('QQQM', 'MTUM');
             if (fav.includes('real estate')) extra.push('VNQ');
@@ -181,8 +182,8 @@ export function derivePortfolioPolicy(
   if (hasTaxDeferred && bondPct > 0) adjustments.push('Traditional/401k: bond sleeve goes here per BOND SLEEVE directive above.');
 
   // ── Sector preferences ─────────────────────────────────────────────────────
-  if (answers.hasSectorPreferences && answers.avoidedSectors) adjustments.push(`avoid sectors: ${answers.avoidedSectors}`);
-  if (answers.hasSectorPreferences && answers.favoredSectors)  adjustments.push(`favor sectors: ${answers.favoredSectors}`);
+  if (answers.investmentPreferences?.avoidedSectors) adjustments.push(`avoid sectors: ${answers.investmentPreferences.avoidedSectors}`);
+  if (answers.investmentPreferences?.favoredSectors)  adjustments.push(`favor sectors: ${answers.investmentPreferences.favoredSectors}`);
 
   return { baseline, bondPct, bondVehicle, safetyPct, needsSafety, adjustments, filteredGuide };
 }

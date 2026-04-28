@@ -8,7 +8,8 @@
  * Latency savings: ~1.5–3 seconds (one fewer sequential LLM call in the pipeline).
  */
 
-import type { IntakeAnswers, InvestorProfile } from '@/apps/portfolio-agent/types';
+import type { IntakeAnswers } from '@/lib/agents/types';
+import type { InvestorProfile } from '@/apps/portfolio-agent/types';
 
 // ─── 2026 State income tax rates (top marginal %, keyed by 2-letter code) ────
 const STATE_TAX: Record<string, number> = {
@@ -27,12 +28,12 @@ const STATE_TAX: Record<string, number> = {
   'WI': 0.0765, 'WY': 0,      'DC': 0.1075,
 };
 
-type FilingStatus = 'single' | 'mfj' | 'mfs' | 'hoh';
+import type { FilingStatus } from '@/lib/agents/types';
 
 // ─── 2026 Federal income tax brackets (per filing status) ────────────────────
 // MFS uses single-filer tables; MFJ thresholds roughly double single.
 function federalMarginalRate(income: number, filing: FilingStatus = 'single'): number {
-  if (filing === 'mfj') {
+  if (filing === 'married_filing_jointly') {
     if (income > 751600) return 0.37;
     if (income > 501050) return 0.35;
     if (income > 394600) return 0.32;
@@ -41,7 +42,7 @@ function federalMarginalRate(income: number, filing: FilingStatus = 'single'): n
     if (income > 23850)  return 0.12;
     return 0.10;
   }
-  if (filing === 'hoh') {
+  if (filing === 'head_of_household') {
     if (income > 609350) return 0.37;
     if (income > 243700) return 0.35;
     if (income > 191950) return 0.32;
@@ -50,7 +51,7 @@ function federalMarginalRate(income: number, filing: FilingStatus = 'single'): n
     if (income > 16550)  return 0.12;
     return 0.10;
   }
-  // single / mfs share the same brackets
+  // single / married_filing_separately share the same brackets
   if (income > 626350) return 0.37;
   if (income > 250525) return 0.35;
   if (income > 197300) return 0.32;
@@ -62,12 +63,12 @@ function federalMarginalRate(income: number, filing: FilingStatus = 'single'): n
 
 // ─── 2026 Long-term capital gains rates (per filing status) ──────────────────
 function ltcgRate(income: number, filing: FilingStatus = 'single'): number {
-  if (filing === 'mfj') {
+  if (filing === 'married_filing_jointly') {
     if (income > 600050) return 0.20;
     if (income > 96700)  return 0.15;
     return 0;
   }
-  if (filing === 'hoh') {
+  if (filing === 'head_of_household') {
     if (income > 566700) return 0.20;
     if (income > 64750)  return 0.15;
     return 0;
@@ -81,14 +82,14 @@ function ltcgRate(income: number, filing: FilingStatus = 'single'): number {
 // ─── Main export ──────────────────────────────────────────────────────────────
 export function deriveInvestorProfile(a: IntakeAnswers): InvestorProfile {
   // 1. Risk Score 1–10 from three orthogonal inputs
-  const horizonPts = a.yearsUntilWithdrawal >= 15 ? 3 : a.yearsUntilWithdrawal >= 7 ? 2 : 1;
-  const behaviorPts = a.marketDropReaction === 'aggressive' ? 3 : a.marketDropReaction === 'passive' ? 2 : 1;
+  const horizonPts = a.timeHorizon >= 15 ? 3 : a.timeHorizon >= 7 ? 2 : 1;
+  const behaviorPts = a.riskWillingness === 'high' ? 3 : a.riskWillingness === 'medium' ? 2 : 1;
   const stabilityPts = a.incomeStability; // 1–5
   // Normalize to 1–10: sum ranges 3–11, map to 1–10
   const rawSum = horizonPts + behaviorPts + stabilityPts; // 3–11
   const baseRiskScore = Math.min(10, Math.max(1, Math.round(((rawSum - 3) / 8) * 9 + 1)));
-  // Debt burden reduces risk capacity: high debt -2, medium debt -1
-  const debtPenalty = a.debtLevel === 'high' ? 2 : a.debtLevel === 'medium' ? 1 : 0;
+  // Debt burden reduces risk capacity: high interest debt -1
+  const debtPenalty = a.financialSnapshot.hasHighInterestDebt ? 1 : 0;
   const riskScore = Math.min(10, Math.max(1, baseRiskScore - debtPenalty));
 
   // 2. Tolerance label
@@ -100,13 +101,13 @@ export function deriveInvestorProfile(a: IntakeAnswers): InvestorProfile {
 
   // 3. Time horizon bucket
   const timeHorizonBucket: InvestorProfile['timeHorizonBucket'] =
-    a.yearsUntilWithdrawal < 3 ? 'short'
-    : a.yearsUntilWithdrawal < 7 ? 'medium'
-    : a.yearsUntilWithdrawal < 15 ? 'long'
+    a.timeHorizon < 3 ? 'short'
+    : a.timeHorizon < 7 ? 'medium'
+    : a.timeHorizon < 15 ? 'long'
     : 'very_long';
 
   // 4. Tax rates (filing-status-aware)
-  const filing = a.taxFilingStatus ?? 'single';
+  const filing = a.filingStatus;
   const fedRate = federalMarginalRate(a.annualIncome, filing);
   const stateRate = STATE_TAX[a.state] ?? 0.05;
   const effectiveMarginalRate = Math.min(0.503, fedRate + stateRate);
@@ -114,8 +115,10 @@ export function deriveInvestorProfile(a: IntakeAnswers): InvestorProfile {
 
   // 5. Liquidity need (months of expenses to keep liquid)
   const baseLiquidity = a.incomeStability <= 2 ? 6 : a.incomeStability <= 3 ? 4 : 3;
-  const noFundPenalty = a.hasEmergencyFund ? 0 : 2;
-  const expensePenalty = a.hasLargeExpense ? 2 : 0;
+  const hasEmergencyFund = a.financialSnapshot.hasEmergencyFund;
+  const plannedExpense = a.financialSnapshot.plannedExpense;
+  const noFundPenalty = hasEmergencyFund ? 0 : 2;
+  const expensePenalty = plannedExpense ? 2 : 0;
   const liquidityNeedMonths = baseLiquidity + noFundPenalty + expensePenalty;
 
   // 6. Goal feasibility (rough forward projection)
@@ -123,9 +126,9 @@ export function deriveInvestorProfile(a: IntakeAnswers): InvestorProfile {
     : derivedRiskTolerance === 'aggressive' ? 0.085
     : derivedRiskTolerance === 'moderate' ? 0.07
     : 0.05;
-  const months = a.yearsUntilWithdrawal * 12;
+  const months = a.timeHorizon * 12;
   const mr = annualReturn / 12;
-  const fv = (a.startingCapital * Math.pow(1 + annualReturn, a.yearsUntilWithdrawal))
+  const fv = (a.startingCapital * Math.pow(1 + annualReturn, a.timeHorizon))
     + (a.monthlyContribution * ((Math.pow(1 + mr, months) - 1) / mr));
   // "Achievable" = projected value at least 2× starting capital or > $500k
   const goalFeasibility: InvestorProfile['goalFeasibility'] =
@@ -135,25 +138,24 @@ export function deriveInvestorProfile(a: IntakeAnswers): InvestorProfile {
 
   // 7. Dominant behavioral bias
   const behavioralBias =
-    a.marketDropReaction === 'panic'
+    a.riskWillingness === 'low'
       ? 'Loss aversion — heightened risk of panic-selling in drawdowns; needs guardrails'
-    : a.marketDropReaction === 'aggressive'
+    : a.riskWillingness === 'high'
       ? 'Overconfidence / contrarianism — may underestimate tail risk and over-leverage on dips'
       : 'Status quo / inertia bias — risk of holding through prolonged drawdowns without rebalancing';
 
   // 8. Hard constraints derived from intake
   const constraints: string[] = [];
-  if (!a.hasEmergencyFund) {
+  if (!hasEmergencyFund) {
     constraints.push('Must build emergency fund first — mandate SGOV/VUSXX ≥ 10%');
   }
-  if (a.hasLargeExpense && a.largeExpenseAmount && a.largeExpenseAmount > 0) {
-    constraints.push(`Liquidity sleeve required for planned expense: $${a.largeExpenseAmount.toLocaleString()}`);
+  if (plannedExpense && plannedExpense > 0) {
+    constraints.push(`Liquidity sleeve required for planned expense: $${plannedExpense.toLocaleString()}`);
   }
-  if (a.hasSectorPreferences) {
-    if (a.favoredSectors) constraints.push(`Favor: ${a.favoredSectors}`);
-    if (a.avoidedSectors) constraints.push(`Avoid: ${a.avoidedSectors}`);
-  }
-  const hasRetirementAccounts = a.accounts.some(acc =>
+  const prefs = a.investmentPreferences;
+  if (prefs?.favoredSectors) constraints.push(`Favor: ${prefs.favoredSectors}`);
+  if (prefs?.avoidedSectors) constraints.push(`Avoid: ${prefs.avoidedSectors}`);
+  const hasRetirementAccounts = a.availableAccounts.some(acc =>
     acc.toLowerCase().includes('401') || acc.toLowerCase().includes('roth') || acc.toLowerCase().includes('ira')
   );
   if (!hasRetirementAccounts) {
@@ -162,12 +164,12 @@ export function deriveInvestorProfile(a: IntakeAnswers): InvestorProfile {
 
   // 9. Two-sentence narrative
   const incomeLabel = a.incomeStability >= 4 ? 'stable' : a.incomeStability >= 3 ? 'moderate' : 'variable';
-  const behaviorLabel = a.marketDropReaction === 'aggressive' ? 'contrarian buyer' : a.marketDropReaction === 'passive' ? 'passive holder' : 'defensive seller';
+  const behaviorLabel = a.riskWillingness === 'high' ? 'contrarian buyer' : a.riskWillingness === 'medium' ? 'passive holder' : 'defensive seller';
   const narrative =
-    `${derivedRiskTolerance.replace('_', '-')} investor with ${a.yearsUntilWithdrawal}-year horizon targeting ${a.primaryGoal.replace(/_/g, ' ')} ` +
+    `${derivedRiskTolerance.replace('_', '-')} investor with ${a.timeHorizon}-year horizon targeting ${a.goal.replace(/_/g, ' ')} ` +
     `(risk score ${riskScore}/10 from ${incomeLabel} income + ${behaviorLabel} behavior). ` +
     `Effective marginal rate ${(effectiveMarginalRate * 100).toFixed(0)}%; ` +
-    `${a.hasEmergencyFund ? 'emergency fund established — can prioritize growth' : 'no emergency fund — liquidity mandate applies'}.`;
+    `${hasEmergencyFund ? 'emergency fund established — can prioritize growth' : 'no emergency fund — liquidity mandate applies'}.`;
 
   return {
     riskScore,
