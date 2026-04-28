@@ -508,8 +508,10 @@ export function selectETFsForAllocation(
     throw new Error(`portfolioRules: weights sum to ${sum.toFixed(4)}, expected 1.0 ±0.01`);
   }
 
-  // ── Consolidate to 3–5 holdings with ≥ 20% each ──────────────────────────
-  result = consolidatePortfolio(result, 5, 0.20);
+  // ── Consolidate to 3–6 holdings with ≥ 10% each ──────────────────────────
+  // 10% minimum matches baseline seed minimums so factor tilts (AVUV, AVDV)
+  // and diversifiers (VXUS, SCHP) are not absorbed into dominant positions.
+  result = consolidatePortfolio(result, 6, 0.10);
 
   // ── Re-normalize after consolidation ─────────────────────────────────────
   const finalTotal = result.reduce((s, x) => s + x.weight, 0);
