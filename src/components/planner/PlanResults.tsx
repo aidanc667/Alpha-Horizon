@@ -22,6 +22,17 @@ const fmtPct = (v: number) => `${(v * 100).toFixed(1)}%`;
 const fmtY = (v: number) =>
   v >= 1_000_000 ? `$${(v / 1_000_000).toFixed(1)}M` : `$${(v / 1_000).toFixed(0)}k`;
 
+// ─── Math helpers (Abramowitz & Stegun 7.1.26, max error 1.5e-7) ──────────────
+
+function erfApprox(x: number): number {
+  const t = 1 / (1 + 0.3275911 * Math.abs(x));
+  const p = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
+  const r = 1 - p * Math.exp(-x * x);
+  return x >= 0 ? r : -r;
+}
+const normalCDF = (z: number) => 0.5 * (1 + erfApprox(z / Math.SQRT2));
+const normalPDF = (z: number) => Math.exp(-z * z / 2) / Math.sqrt(2 * Math.PI);
+
 // ─── Sub-components ────────────────────────────────────────────────────────────
 
 function StatCell({
@@ -125,12 +136,23 @@ function PortfolioTab({
   const p50final = projData.at(-1)?.p50 ?? 0;
   const p10final = projData.at(-1)?.p10 ?? 0;
   const bt = backtest.result;
-  const btMaxDD = bt ? bt.metrics.maxDrawdown : null;
-  const btBeta = bt ? bt.metrics.beta.toFixed(2) : null;
-  const btAlphaPct = bt ? `${(bt.metrics.alpha * 100).toFixed(2)}%/yr` : null;
   const btVtFinal = bt ? bt.dailyData.at(-1)?.benchmarkValue ?? 0 : 0;
   const btAlphaDlr = bt ? fmt$(bt.metrics.endingValue - btVtFinal) : null;
   const btReturn = bt ? `+${bt.metrics.totalReturnPct.toFixed(0)}%` : null;
+
+  // ── Strategy Analytics: forward-looking, analytically computed ────────────
+  const T = answers.timeHorizon;
+  const mu = stats.expectedReturn;
+  const sig = stats.expectedVolatility;
+  const rf = macro.macroData.treasury10Y;
+  const maxDD = stats.maxDrawdownEstimate;
+  const d = rf - mu;
+  const zS = sig > 0 ? d / sig : 0;
+  const semiDevSq = (d * d + sig * sig) * normalCDF(zS) + d * sig * normalPDF(zS);
+  const semiDev = Math.sqrt(Math.max(semiDevSq, 0));
+  const sortinoRatio = semiDev > 0 ? (mu - rf) / semiDev : 0;
+  const cumulativeReturn = Math.pow(1 + mu, T) - 1;
+  const calmarRatio = maxDD > 0 ? cumulativeReturn / maxDD : 0;
 
   const macroDate = macro.macroFetchedAt
     ? new Date(macro.macroFetchedAt).toLocaleDateString('en-US', {
@@ -264,35 +286,41 @@ function PortfolioTab({
           </div>
         </div>
 
-        {/* Risk metrics */}
+        {/* Strategy Analytics */}
         <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
           <h3 className="text-xs font-bold text-gray-900 uppercase tracking-widest mb-4">
-            Risk Metrics
+            Strategy Analytics
           </h3>
           <div className="grid grid-cols-2 gap-3">
-            <MetricCard label="Exp. Annual Return" value={fmtPct(stats.expectedReturn)} />
-            <MetricCard label="Annual Volatility" value={fmtPct(stats.expectedVolatility)} />
-            <MetricCard label="Sharpe Ratio" value={stats.sharpeRatio.toFixed(2)} />
             <MetricCard
-              label="Beta vs VT"
-              value={btBeta ?? '—'}
-              sub={backtest.loading ? 'calculating…' : undefined}
+              label={`Expected Return (${T}yr)`}
+              value={`+${(cumulativeReturn * 100).toFixed(0)}%`}
+              sub="cumulative, forward-looking"
             />
             <MetricCard
-              label="Historical Max DD"
-              value={btMaxDD != null ? `-${btMaxDD.toFixed(1)}%` : '—'}
-              sub={
-                backtest.loading
-                  ? 'running backtest…'
-                  : backtest.worstCalendarYear
-                  ? `Worst yr ${backtest.worstCalendarYear.year}: ${backtest.worstCalendarYear.return.toFixed(1)}%`
-                  : undefined
-              }
+              label="Annual Volatility"
+              value={`${(sig * 100).toFixed(1)}%/yr`}
+              sub="expected return variation"
             />
             <MetricCard
-              label="Alpha vs VT"
-              value={btAlphaPct ?? '—'}
-              sub={backtest.loading ? 'calculating…' : undefined}
+              label="Sortino Ratio"
+              value={sortinoRatio.toFixed(2)}
+              sub="downside-only risk-adjusted"
+            />
+            <MetricCard
+              label="Stress Drawdown"
+              value={`-${(maxDD * 100).toFixed(1)}%`}
+              sub="GFC-style stress scenario"
+            />
+            <MetricCard
+              label={`Calmar Ratio (${T}yr)`}
+              value={calmarRatio.toFixed(2)}
+              sub="cumulative return ÷ max pain"
+            />
+            <MetricCard
+              label="95% 1-Yr VaR"
+              value={`-${(Math.max(0, -(mu - 1.645 * sig)) * 100).toFixed(1)}%`}
+              sub="1-in-20 year worst-case loss"
             />
           </div>
         </div>
