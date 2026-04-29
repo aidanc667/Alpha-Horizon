@@ -284,7 +284,7 @@ export async function POST(req: NextRequest) {
 
         const dimLog = (s: typeof criticScore.scores) =>
           `align=${s.alignment} div=${s.diversification} tax=${s.taxEfficiency} cost=${s.costEfficiency} risk=${s.riskManagement}`;
-        log(`Critic initial: ${criticScore.scores.overall}/100 — ${dimLog(criticScore.scores)}`);
+        log(`Critic explore [primary]: ${criticScore.scores.overall}/100 — ${dimLog(criticScore.scores)}`);
 
         // ── Phase 1: Multi-seed exploration ───────────────────────────────────
         const candidateSeeds = getCandidateSeeds(
@@ -354,7 +354,6 @@ export async function POST(req: NextRequest) {
             break;
           }
 
-          log(`Critic refinement pass ${pass + 1}: ${finalScore.scores.overall}/100 → strategy: ${strategy}`);
           const passPortfolio = agent3_portfolioConstruction({
             clientProfile: passClientProfile, economicIntel,
             constructionOverrides: { maxEquityWeightPerPosition: positionCap, seedAllocation: baselineSeed },
@@ -367,7 +366,7 @@ export async function POST(req: NextRequest) {
             portfolio: passPortfolio, clientProfile: passClientProfile,
             riskAnalysis: passRisk, taxOptimization: passTax, marketContext,
           });
-          log(`Critic refinement pass ${pass + 1} result: ${passScore.scores.overall}/100 — ${dimLog(passScore.scores)}`);
+          log(`Critic refinement pass ${pass + 1} [${strategy}]: ${passScore.scores.overall}/100 — ${dimLog(passScore.scores)}`);
           if (passScore.scores.overall > finalScore.scores.overall) {
             finalPortfolio = passPortfolio;
             finalRisk      = passRisk;
