@@ -283,41 +283,32 @@ export async function POST(req: NextRequest) {
         log(`Critic initial: ${criticScore.scores.overall}/100 — ${dimLog(criticScore.scores)}`);
 
         for (let pass = 0; pass < MAX_CRITIC_PASSES && finalScore.scores.overall < 80; pass++) {
-          // Always target the actual weakest actionable dimension this pass.
-          // taxEfficiency and costEfficiency can't be fixed by portfolio reweighting,
-          // so when they're weakest, fall back to the worst reweightable dimension.
+          // Determine which dimensions reweighting can actually improve.
+          // - taxEfficiency / costEfficiency: fixed by ETF selection, not reweighting → skip
+          // - alignment when driven by fundedStatus gap: fundedStatus = projectedValue/goalAmount.
+          //   Reducing equity lowers projected return → lowers fundedStatus → hurts score further.
+          //   Only target alignment when time-horizon or drawdown guards are the likely cause
+          //   (i.e. short horizon with high equity, or drawdown phase with high equity).
           const s = finalScore.scores;
-          const allRanked = (['alignment', 'diversification', 'riskManagement', 'taxEfficiency', 'costEfficiency'] as const)
-            .map(d => ({ d, v: s[d] }))
-            .sort((a, b) => a.v - b.v);
-          const weakestDim = allRanked[0].d;
-          const strategy = (weakestDim === 'taxEfficiency' || weakestDim === 'costEfficiency')
-            ? (['alignment', 'diversification', 'riskManagement'] as const)
-                .map(d => ({ d, v: s[d] }))
-                .sort((a, b) => a.v - b.v)[0].d
-            : weakestDim;
+          const equityPct = finalPortfolio.allocation
+            .filter(sl => sl.category === 'growth')
+            .reduce((sum, sl) => sum + sl.weight, 0);
+          const alignmentFixableByEquityReduction =
+            (clientProfile.timeHorizon.yearsToGoal < 10 && equityPct > 0.60) ||
+            (clientProfile.timeHorizon.isInDrawdownPhase && equityPct > 0.40);
 
-          // Combo strategy: when both alignment and riskManagement are weak,
-          // hard-cap equity at 0.50 to address both at once.
-          const useComboCap = s.alignment < 70 && s.riskManagement < 70;
+          const fixable = (['alignment', 'diversification', 'riskManagement'] as const).filter(d => {
+            if (d === 'alignment') return alignmentFixableByEquityReduction;
+            return true;
+          });
+          const strategy = fixable.sort((a, b) => s[a] - s[b])[0] ?? 'diversification';
 
-          log(`Critic pass ${pass + 1}: ${finalScore.scores.overall}/100 → strategy: ${useComboCap ? 'combo-equity-cap' : strategy}`);
+          log(`Critic pass ${pass + 1}: ${finalScore.scores.overall}/100 → strategy: ${strategy}`);
 
           let passPortfolio;
           let passClientProfile = { ...clientProfile };
 
-          if (useComboCap) {
-            equityCeiling = Math.min(equityCeiling, 0.50);
-            passClientProfile = {
-              ...clientProfile,
-              riskProfile: { ...clientProfile.riskProfile, maxEquityAllowed: equityCeiling },
-            };
-            passPortfolio = agent3_portfolioConstruction({
-              clientProfile: passClientProfile,
-              economicIntel,
-              constructionOverrides: { seedAllocation: baselineSeed },
-            });
-          } else if (strategy === 'diversification') {
+          if (strategy === 'diversification') {
             positionCap = Math.max(0.12, positionCap - 0.08);
             passPortfolio = agent3_portfolioConstruction({
               clientProfile: passClientProfile,
@@ -359,6 +350,9 @@ export async function POST(req: NextRequest) {
             finalScore     = passScore;
           }
         }
+
+        const scoreDelta = finalScore.scores.overall - criticScore.scores.overall;
+        log(`Critic loop complete · initial ${criticScore.scores.overall}/100 → final ${finalScore.scores.overall}/100 (${scoreDelta >= 0 ? '+' : ''}${scoreDelta} pts)`);
 
         if (!finalScore.passesThreshold) {
           const weakest = (['alignment', 'diversification', 'riskManagement', 'taxEfficiency', 'costEfficiency'] as const)

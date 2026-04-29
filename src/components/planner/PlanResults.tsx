@@ -1464,7 +1464,7 @@ interface Props {
 
 export default function PlanResults({ plan, backtest, answers, ips }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>('portfolio');
-  const belowThreshold = plan.criticScore.scores.overall < 85;
+  const belowThreshold = plan.criticScore.scores.overall < 80;
 
   return (
     <div className="space-y-4">
@@ -1474,7 +1474,7 @@ export default function PlanResults({ plan, backtest, answers, ips }: Props) {
           <span className="text-amber-500 text-base leading-none mt-0.5">⚠</span>
           <div>
             <p className="text-xs font-bold text-amber-800">
-              Portfolio scored {plan.criticScore.scores.overall}/100 — below the 85/100 quality threshold
+              Portfolio scored {plan.criticScore.scores.overall}/100 — below the 80/100 quality threshold
             </p>
             <p className="text-[11px] text-amber-700 mt-0.5">
               {plan.criticScore.improvementSuggestions[0] ?? 'Consider adjusting your risk tolerance or time horizon inputs and re-running the planner.'}
