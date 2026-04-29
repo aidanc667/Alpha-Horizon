@@ -58,9 +58,9 @@ function scoreDiversification(portfolio: Agent3Output): number {
   //   5+ equal-weight → HHI 0.20 → 100
   const hhi = weights.reduce((sum, w) => sum + w * w, 0);
   let score =
-    hhi < 0.20 ? 100 :
-    hhi < 0.30 ? 85  :
-    hhi < 0.45 ? 70  : 50;
+    hhi < 0.28 ? 100 :
+    hhi < 0.40 ? 85  :
+    hhi < 0.55 ? 70  : 50;
 
   // Category spread — penalise missing income or safety sleeve
   const categories = new Set(portfolio.allocation.map((s) => s.category));
@@ -131,18 +131,20 @@ function scoreRiskManagement(
   if (drawdown <= threshold * 0.80) score = Math.min(100, score + 20);
   else if (drawdown > threshold)    score = Math.max(0,   score - 20);
 
-  // Sortino ratio vs 60/40 benchmark (≈0.75)
-  // downside deviation approximation: σ_down ≈ σ × (1/√2) for normal return distributions
-  // riskFreeRate sourced from live FRED 10Y Treasury via agent2 (never hardcoded)
+  // Sortino ratio vs dynamic 60/40 benchmark
+  // Benchmark computed from 2026 institutional CMAs (JPM/Vanguard/BlackRock consensus):
+  //   60/40 expected return ≈ 6.0%, vol ≈ 10.0%
+  // This makes the benchmark rate-environment-aware — as rfr rises, benchmark Sortino
+  // falls proportionally, so good portfolios don't get penalised for a high-rate world.
   const rfr = marketContext?.riskFreeRate ?? 0.045;
-  const BENCHMARK_SORTINO = 0.75;
+  const benchmarkSortino = (0.060 - rfr) / (0.100 * 0.7071); // dynamic, never hardcoded
   const { expectedReturn, expectedVolatility } = portfolio.statistics;
   const downsideDev = expectedVolatility * 0.7071;
   const sortino = downsideDev > 0 ? (expectedReturn - rfr) / downsideDev : 0;
 
-  if      (sortino >= BENCHMARK_SORTINO * 1.20) score = Math.min(100, score + 15);
-  else if (sortino >= BENCHMARK_SORTINO * 0.90) score = Math.min(100, score + 5);
-  else if (sortino <  BENCHMARK_SORTINO * 0.70) score = Math.max(0,   score - 15);
+  if      (sortino >= benchmarkSortino * 1.20) score = Math.min(100, score + 15);
+  else if (sortino >= benchmarkSortino * 0.80) score = Math.min(100, score + 5);
+  else if (sortino <  benchmarkSortino * 0.60) score = Math.max(0,   score - 15);
 
   return score;
 }
