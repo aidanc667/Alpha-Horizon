@@ -281,6 +281,7 @@ export async function POST(req: NextRequest) {
         let finalRisk      = riskAnalysis;
         let finalTax       = taxOptimization;
         let finalScore     = criticScore;
+        let finalSeed      = baselineSeed;
 
         const dimLog = (s: typeof criticScore.scores) =>
           `align=${s.alignment} div=${s.diversification} tax=${s.taxEfficiency} cost=${s.costEfficiency} risk=${s.riskManagement}`;
@@ -312,16 +313,17 @@ export async function POST(req: NextRequest) {
             finalRisk      = candidateRisk;
             finalTax       = candidateTax;
             finalScore     = candidateScore;
+            finalSeed      = seed;
             log(`Critic: [${label}] is new best — ${candidateScore.scores.overall}/100`);
           }
         }
 
         // ── Phase 2: Targeted refinement ──────────────────────────────────────
-        const MAX_REFINEMENT_PASSES = 2;
+        const MAX_REFINEMENT_PASSES = 3;
         let equityCeiling    = clientProfile.riskProfile.maxEquityAllowed;
         let positionCap      = 0.25;
 
-        for (let pass = 0; pass < MAX_REFINEMENT_PASSES && finalScore.scores.overall < 80; pass++) {
+        for (let pass = 0; pass < MAX_REFINEMENT_PASSES && finalScore.scores.overall < 85; pass++) {
           const s = finalScore.scores;
           const equityPct = finalPortfolio.allocation
             .filter(sl => sl.category === 'growth')
@@ -356,7 +358,7 @@ export async function POST(req: NextRequest) {
 
           const passPortfolio = agent3_portfolioConstruction({
             clientProfile: passClientProfile, economicIntel,
-            constructionOverrides: { maxEquityWeightPerPosition: positionCap, seedAllocation: baselineSeed },
+            constructionOverrides: { maxEquityWeightPerPosition: positionCap, seedAllocation: finalSeed },
           });
           const [passRisk, passTax] = await Promise.all([
             Promise.resolve(agent4_riskAnalysis({ portfolio: passPortfolio, clientProfile: passClientProfile, marketContext })),

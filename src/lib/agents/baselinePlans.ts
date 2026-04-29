@@ -166,5 +166,10 @@ export function getCandidateSeeds(
   add('conservative-adjacent', conservative);
   add('aggressive-adjacent', aggressive);
 
+  // Unconditional extremes — ensures full spectrum coverage even when adjacent
+  // seeds deduplicate (e.g. risk score 10 has no "more aggressive" tier).
+  add('extreme-conservative', getBaselineSeed(1, yearsToGoal));
+  add('extreme-aggressive',   getBaselineSeed(10, yearsToGoal));
+
   return candidates;
 }
