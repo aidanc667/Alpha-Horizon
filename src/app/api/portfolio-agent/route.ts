@@ -238,8 +238,9 @@ export async function POST(req: NextRequest) {
         agentStart('taxOptimization');
         log('Agent 5/7: Optimising tax placement across accounts...');
         const marketContext = {
-          regime: economicIntel.regime.current,
-          cape:   economicIntel.macroData.shillerCAPE,
+          regime:       economicIntel.regime.current,
+          cape:         economicIntel.macroData.shillerCAPE,
+          riskFreeRate: economicIntel.assetClassOutlook.riskFreeRate,
         };
 
         const [riskAnalysis, taxOptimization] = await Promise.all([
@@ -281,7 +282,7 @@ export async function POST(req: NextRequest) {
           `align=${s.alignment} div=${s.diversification} tax=${s.taxEfficiency} cost=${s.costEfficiency} risk=${s.riskManagement}`;
         log(`Critic initial: ${criticScore.scores.overall}/100 — ${dimLog(criticScore.scores)}`);
 
-        for (let pass = 0; pass < MAX_CRITIC_PASSES && finalScore.scores.overall < 85; pass++) {
+        for (let pass = 0; pass < MAX_CRITIC_PASSES && finalScore.scores.overall < 80; pass++) {
           // Always target the actual weakest actionable dimension this pass.
           // taxEfficiency and costEfficiency can't be fixed by portfolio reweighting,
           // so when they're weakest, fall back to the worst reweightable dimension.
@@ -362,8 +363,8 @@ export async function POST(req: NextRequest) {
         if (!finalScore.passesThreshold) {
           const weakest = (['alignment', 'diversification', 'riskManagement', 'taxEfficiency', 'costEfficiency'] as const)
             .reduce((a, b) => finalScore.scores[a] <= finalScore.scores[b] ? a : b);
-          log(`Warning: best achievable score is ${finalScore.scores.overall}/100 — below 85/100 quality threshold. Weakest: ${weakest}.`);
-          push({ type: 'quality_warning', score: finalScore.scores.overall, threshold: 85, weakestDim: weakest });
+          log(`Warning: best achievable score is ${finalScore.scores.overall}/100 — below 80/100 quality threshold. Weakest: ${weakest}.`);
+          push({ type: 'quality_warning', score: finalScore.scores.overall, threshold: 80, weakestDim: weakest });
         }
         log(`Critic final: ${finalScore.scores.overall}/100 ${finalScore.passesThreshold ? '✓ approved' : '↑ best achievable'}`);
 

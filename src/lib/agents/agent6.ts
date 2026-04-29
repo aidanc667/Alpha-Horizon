@@ -11,11 +11,11 @@ import type {
 // ─── Scoring weights ──────────────────────────────────────────────────────────
 
 const WEIGHTS = {
-  alignment:      0.25,
+  alignment:       0.25,
+  riskManagement:  0.30,
   diversification: 0.20,
-  taxEfficiency:  0.20,
-  costEfficiency: 0.15,
-  riskManagement: 0.20,
+  taxEfficiency:   0.15,
+  costEfficiency:  0.10,
 } as const;
 
 // ─── Dimension scorers ────────────────────────────────────────────────────────
@@ -23,57 +23,47 @@ const WEIGHTS = {
 function scoreAlignment(portfolio: Agent3Output, client: Agent1Output): number {
   let score = 100;
 
-  // Risk score vs actual portfolio volatility
-  const vol = portfolio.statistics.expectedVolatility;
-  const riskScore = client.riskProfile.riskScore;
-  const volOk =
-    (riskScore <= 3 && vol <= 0.12) ||
-    (riskScore <= 6 && vol <= 0.18) ||
-    riskScore >= 7;
-  if (!volOk) score -= 10;
+  // Proportional goal gap penalty anchored to fundedStatus
+  // fundedStatus = totalProjectedValue / goalAmount (>1.0 = on track / overfunded)
+  if (client.goalAnalysis.goalAmount > 0) {
+    const fs = client.goalAnalysis.fundedStatus;
+    if      (fs < 0.65) score -= 20; // >35% gap — significant restructuring needed
+    else if (fs < 0.85) score -= 12; // 15–35% gap — meaningful shortfall
+    else if (fs < 1.00) score -= 5;  // <15% gap — minor, achievable with adjustments
+    // fs >= 1.0: on track or overfunded — no penalty
+  }
 
   // Time horizon vs equity allocation
   const equityPct = portfolio.allocation
     .filter((s) => s.category === 'growth')
     .reduce((sum, s) => sum + s.weight, 0);
   const years = client.timeHorizon.yearsToGoal;
-  if (years < 5 && equityPct > 0.50) score -= 10;
+  if (years < 5  && equityPct > 0.50) score -= 15;
   if (years < 10 && equityPct > 0.70) score -= 10;
 
-  // Goal feasibility
-  const { feasibility } = client.goalAnalysis;
-  if (feasibility === 'requires_adjustment') score -= 10;
-  else if (feasibility === 'stretch') score -= 5;
-
   // Drawdown phase guard
-  if (client.timeHorizon.isInDrawdownPhase && equityPct > 0.40) score -= 10;
+  if (client.timeHorizon.isInDrawdownPhase && equityPct > 0.40) score -= 15;
 
   return Math.max(0, score);
 }
 
 function scoreDiversification(portfolio: Agent3Output): number {
-  let score = 100;
-  const { allocation } = portfolio;
+  const weights = portfolio.allocation.map((s) => s.weight);
 
-  // Holding count — 3-5 is the target range
-  const n = allocation.length;
-  if (n < 2) score -= 30;
-  else if (n < 3) score -= 15;
-  else if (n > 7) score -= 10;
+  // Herfindahl-Hirschman Index — objective concentration measure
+  // Thresholds calibrated for a 3–6 ETF multi-asset portfolio:
+  //   2 equal-weight → HHI 0.50 → 50
+  //   3 equal-weight → HHI 0.33 → 70
+  //   4 equal-weight → HHI 0.25 → 85
+  //   5+ equal-weight → HHI 0.20 → 100
+  const hhi = weights.reduce((sum, w) => sum + w * w, 0);
+  let score =
+    hhi < 0.20 ? 100 :
+    hhi < 0.30 ? 85  :
+    hhi < 0.45 ? 70  : 50;
 
-  // Single-position concentration — penalise beyond 65% (expected with 2 holdings)
-  const maxWeight = Math.max(...allocation.map((s) => s.weight));
-  if (maxWeight > 0.75) score -= 20;
-  else if (maxWeight > 0.65) score -= 10;
-
-  // Top-2 concentration (adjusted for 3-5 ETF portfolios)
-  const sorted = [...allocation].sort((a, b) => b.weight - a.weight);
-  const top2 = sorted.slice(0, 2).reduce((sum, s) => sum + s.weight, 0);
-  if (top2 > 0.95) score -= 15;
-  else if (top2 > 0.85) score -= 5;
-
-  // Category spread — penalise missing income or safety sleeves
-  const categories = new Set(allocation.map((s) => s.category));
+  // Category spread — penalise missing income or safety sleeve
+  const categories = new Set(portfolio.allocation.map((s) => s.category));
   if (!categories.has('income') && !categories.has('safety')) score -= 10;
 
   return Math.max(0, score);
@@ -125,9 +115,9 @@ function scoreRiskManagement(
   portfolio: Agent3Output,
   client: Agent1Output,
   risk: Agent4Output,
-  marketContext?: { regime: string; cape: number },
+  marketContext?: { regime: string; cape: number; riskFreeRate?: number },
 ): number {
-  // Start from warning count (0 warnings = 100, each -10, floor 60)
+  // Warning floor (0 warnings = 100, each -10, floor 60)
   let score = Math.max(60, 100 - Math.min(risk.warnings.length, 4) * 10);
 
   // Drawdown acceptability (±20) — uses same regime-adjusted thresholds as agent4
@@ -138,8 +128,21 @@ function scoreRiskManagement(
     marketContext?.cape   ?? 25,
   );
   const threshold = thresholds[client.riskProfile.riskCapacity] ?? 0.30;
-  if (drawdown <= threshold * 0.80) score = Math.min(100, score + 20); // comfortably within
-  else if (drawdown > threshold)    score = Math.max(0,   score - 20); // over limit
+  if (drawdown <= threshold * 0.80) score = Math.min(100, score + 20);
+  else if (drawdown > threshold)    score = Math.max(0,   score - 20);
+
+  // Sortino ratio vs 60/40 benchmark (≈0.75)
+  // downside deviation approximation: σ_down ≈ σ × (1/√2) for normal return distributions
+  // riskFreeRate sourced from live FRED 10Y Treasury via agent2 (never hardcoded)
+  const rfr = marketContext?.riskFreeRate ?? 0.045;
+  const BENCHMARK_SORTINO = 0.75;
+  const { expectedReturn, expectedVolatility } = portfolio.statistics;
+  const downsideDev = expectedVolatility * 0.7071;
+  const sortino = downsideDev > 0 ? (expectedReturn - rfr) / downsideDev : 0;
+
+  if      (sortino >= BENCHMARK_SORTINO * 1.20) score = Math.min(100, score + 15);
+  else if (sortino >= BENCHMARK_SORTINO * 0.90) score = Math.min(100, score + 5);
+  else if (sortino <  BENCHMARK_SORTINO * 0.70) score = Math.max(0,   score - 15);
 
   return score;
 }
@@ -200,7 +203,7 @@ export function agent6_critic(input: {
   clientProfile: Agent1Output;
   riskAnalysis: Agent4Output;
   taxOptimization: Agent5Output;
-  marketContext?: { regime: string; cape: number };
+  marketContext?: { regime: string; cape: number; riskFreeRate?: number };
 }): Agent6Output {
   const startTime = Date.now();
 
@@ -224,7 +227,7 @@ export function agent6_critic(input: {
     alignment, diversification, taxEfficiency, costEfficiency, riskManagement, overall,
   };
 
-  const passesThreshold  = overall >= 85;
+  const passesThreshold  = overall >= 80;
   const requiresRevision = !passesThreshold;
 
   const improvementSuggestions = passesThreshold
