@@ -293,9 +293,9 @@ function PortfolioTab({
           </h3>
           <div className="grid grid-cols-2 gap-3">
             <MetricCard
-              label={`Expected Return (${T}yr)`}
-              value={`+${(cumulativeReturn * 100).toFixed(0)}%`}
-              sub="cumulative, forward-looking"
+              label="Expected CAGR"
+              value={`+${(mu * 100).toFixed(1)}%/yr`}
+              sub="annualized, without contributions"
             />
             <MetricCard
               label="Annual Volatility"

@@ -13,6 +13,13 @@ import { AGENT_PIPELINE, AGENT_LABELS, AGENT_DESCRIPTIONS, AGENT_ICONS } from '@
 type AgentStatus = 'idle' | 'running' | 'complete';
 type Phase = 'streaming' | 'done';
 
+interface CriticIteration {
+  label: string;
+  score: number;
+  isBest: boolean;
+  description: string;
+}
+
 interface AgentEntry {
   status: AgentStatus;
   summary?: string;
@@ -283,9 +290,11 @@ function StreamingOverlay({
 function CompletedAccordion({
   agents,
   criticScore,
+  criticIterations,
 }: {
   agents: Record<AgentName, AgentEntry>;
   criticScore?: number;
+  criticIterations?: CriticIteration[];
 }) {
   const [open, setOpen] = useState(false);
 
@@ -336,6 +345,29 @@ function CompletedAccordion({
               />
             ))}
           </div>
+
+          {criticIterations && criticIterations.length > 0 && (
+            <div className="mt-5 border-t border-white/5 pt-4">
+              <div className="text-xs font-mono uppercase tracking-widest text-slate-600 mb-3">
+                Critic Loop — {criticIterations.length} iteration{criticIterations.length !== 1 ? 's' : ''}
+              </div>
+              <div className="space-y-2">
+                {criticIterations.map((it, i) => (
+                  <div key={i} className="flex items-start gap-3 text-xs">
+                    <span className="font-mono text-slate-600 w-4 flex-shrink-0">{i + 1}.</span>
+                    <span className={`font-mono flex-shrink-0 ${it.isBest ? 'text-emerald-400 font-bold' : 'text-slate-400'}`}>
+                      {it.label}
+                    </span>
+                    {it.score > 0 && (
+                      <span className="font-mono text-slate-500 flex-shrink-0">{it.score}/100</span>
+                    )}
+                    <span className="text-slate-600">{it.description}</span>
+                    {it.isBest && <span className="text-emerald-500 text-[10px] font-bold flex-shrink-0">✓ BEST</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -355,6 +387,7 @@ export default function AgentStreamPanel({ answers, onComplete, onReset }: Agent
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const [criticScore, setCriticScore] = useState<number | undefined>(undefined);
+  const [criticIterations, setCriticIterations] = useState<CriticIteration[]>([]);
 
   const abortRef       = useRef<AbortController | null>(null);
   const startTimeRef   = useRef<number>(Date.now());
@@ -450,6 +483,47 @@ export default function AgentStreamPanel({ answers, onComplete, onReset }: Agent
 
             } else if (chunk.type === 'log') {
               addLog(chunk.message);
+              const msg = chunk.message;
+
+              const exploreMatch = msg.match(/^Critic explore \[([^\]]+)\]: (\d+)\/100/);
+              if (exploreMatch) {
+                const [, seedLabel, scoreStr] = exploreMatch;
+                setCriticIterations(prev => [...prev, {
+                  label: `Explore: ${seedLabel}`,
+                  score: Number(scoreStr),
+                  isBest: false,
+                  description: `Tested ${seedLabel} seed portfolio`,
+                }]);
+              }
+
+              const newBestMatch = msg.match(/^Critic: \[([^\]]+)\] is new best/);
+              if (newBestMatch) {
+                setCriticIterations(prev =>
+                  prev.map((it, i) => i === prev.length - 1
+                    ? { ...it, isBest: true, description: it.description + ' — selected as best' }
+                    : it)
+                );
+              }
+
+              const refineMatch = msg.match(/^Critic refinement pass (\d+) \[([^\]]+)\]: (\d+)\/100/);
+              if (refineMatch) {
+                const [, passNum, strategy, scoreStr] = refineMatch;
+                setCriticIterations(prev => [...prev, {
+                  label: `Refine pass ${passNum}`,
+                  score: Number(scoreStr),
+                  isBest: false,
+                  description: `Targeted ${strategy} improvement`,
+                }]);
+              }
+
+              if (msg.includes('floor hit')) {
+                setCriticIterations(prev => [...prev, {
+                  label: 'Early exit',
+                  score: 0,
+                  isBest: false,
+                  description: 'Parameter floor reached — no further optimization possible',
+                }]);
+              }
 
             } else if (chunk.type === 'ips') {
               ipsRef.current = chunk.ips;
@@ -508,6 +582,7 @@ export default function AgentStreamPanel({ answers, onComplete, onReset }: Agent
     setFetchError(null);
     setPhase('streaming');
     setCriticScore(undefined);
+    setCriticIterations([]);
     setAgents(Object.fromEntries(ALL_AGENTS.map(n => [n, { status: 'idle' as AgentStatus }])) as Record<AgentName, AgentEntry>);
     setLogs(['Retrying pipeline...']);
     setRetryCount(c => c + 1);
@@ -531,6 +606,7 @@ export default function AgentStreamPanel({ answers, onComplete, onReset }: Agent
     <CompletedAccordion
       agents={agents}
       criticScore={criticScore}
+      criticIterations={criticIterations}
     />
   );
 }
