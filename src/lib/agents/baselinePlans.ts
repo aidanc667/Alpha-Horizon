@@ -137,3 +137,34 @@ export function getBaselineSeed(
   }
   return isShort ? AGGRESSIVE_SHORT : AGGRESSIVE_LONG;
 }
+
+/**
+ * Returns up to 3 candidate seeds for multi-hypothesis exploration:
+ * the primary seed for this profile plus adjacent risk-tier seeds.
+ *
+ * Used by the critic loop to explore genuinely different regions of the
+ * solution space rather than repeatedly squeezing the same local optimum.
+ * Deduplicates seeds that map to the same allocation (e.g. at the risk extremes).
+ */
+export function getCandidateSeeds(
+  riskScore: number,
+  yearsToGoal: number,
+): Array<{ label: string; seed: Record<string, number> }> {
+  const primary      = getBaselineSeed(riskScore, yearsToGoal);
+  const conservative = getBaselineSeed(Math.max(1, riskScore - 2), yearsToGoal);
+  const aggressive   = getBaselineSeed(Math.min(10, riskScore + 2), yearsToGoal);
+
+  const seen = new Set<string>();
+  const candidates: Array<{ label: string; seed: Record<string, number> }> = [];
+
+  const add = (label: string, seed: Record<string, number>) => {
+    const key = JSON.stringify(Object.entries(seed).sort());
+    if (!seen.has(key)) { seen.add(key); candidates.push({ label, seed }); }
+  };
+
+  add('primary', primary);
+  add('conservative-adjacent', conservative);
+  add('aggressive-adjacent', aggressive);
+
+  return candidates;
+}

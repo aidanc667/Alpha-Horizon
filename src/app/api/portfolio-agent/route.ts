@@ -10,7 +10,7 @@ import { agent5_taxOptimization }       from '@/lib/agents/agent5';
 import { agent6_critic }                from '@/lib/agents/agent6';
 import { agent7_synthesis }             from '@/lib/agents/agent7_synthesis';
 import { agentIPS }                      from '@/lib/agents/agentIPS';
-import { getBaselineSeed }               from '@/lib/agents/baselinePlans';
+import { getBaselineSeed, getCandidateSeeds } from '@/lib/agents/baselinePlans';
 import { runMonteCarlo }                from '@/lib/monteCarlo/analyticalMonteCarlo';
 import type { IPSDocument } from '@/types/index';
 import type {
@@ -265,84 +265,109 @@ export async function POST(req: NextRequest) {
         log(`Score: ${criticScore.scores.overall}/100 — ${criticScore.passesThreshold ? 'APPROVED' : 'review suggested'}`);
         agentDone('critic', agent6Summary);
 
-        // ── Agent 6 iterative improvement loop ────────────────────────────────
-        // Runs up to 5 revision passes. Each pass always targets the actual
-        // weakest scoring dimension with a concrete construction change.
-        // The best plan seen across all iterations is kept.
-        let finalPortfolio   = portfolio;
-        let finalRisk        = riskAnalysis;
-        let finalTax         = taxOptimization;
-        let finalScore       = criticScore;
-
-        const MAX_CRITIC_PASSES = 5;
-        let equityCeiling  = clientProfile.riskProfile.maxEquityAllowed;
-        let positionCap    = 0.25;
+        // ── Agent 6 improvement loop — two phases ─────────────────────────────
+        //
+        // Phase 1 — Multi-seed exploration
+        //   The Sharpe optimizer is fully deterministic: same seed + same constraints
+        //   = identical output every time. Running 5 passes with the same seed only
+        //   squeezes constraints on the same local optimum. Instead, we run agent3
+        //   from up to 3 genuinely different seed portfolios (primary + adjacent risk
+        //   tiers) and let the critic pick the best. Each call is <10ms (pure math).
+        //
+        // Phase 2 — Targeted refinement (max 2 passes, only if Phase 1 best < 80)
+        //   After picking the best candidate, 1–2 targeted constraint passes.
+        //   Early exit when the parameter floor is hit (no further change possible).
+        let finalPortfolio = portfolio;
+        let finalRisk      = riskAnalysis;
+        let finalTax       = taxOptimization;
+        let finalScore     = criticScore;
 
         const dimLog = (s: typeof criticScore.scores) =>
           `align=${s.alignment} div=${s.diversification} tax=${s.taxEfficiency} cost=${s.costEfficiency} risk=${s.riskManagement}`;
         log(`Critic initial: ${criticScore.scores.overall}/100 — ${dimLog(criticScore.scores)}`);
 
-        for (let pass = 0; pass < MAX_CRITIC_PASSES && finalScore.scores.overall < 80; pass++) {
-          // Determine which dimensions reweighting can actually improve.
-          // - taxEfficiency / costEfficiency: fixed by ETF selection, not reweighting → skip
-          // - alignment when driven by fundedStatus gap: fundedStatus = projectedValue/goalAmount.
-          //   Reducing equity lowers projected return → lowers fundedStatus → hurts score further.
-          //   Only target alignment when time-horizon or drawdown guards are the likely cause
-          //   (i.e. short horizon with high equity, or drawdown phase with high equity).
+        // ── Phase 1: Multi-seed exploration ───────────────────────────────────
+        const candidateSeeds = getCandidateSeeds(
+          clientProfile.riskProfile.riskScore,
+          clientProfile.timeHorizon.yearsToGoal,
+        );
+        for (const { label, seed } of candidateSeeds) {
+          if (label === 'primary') continue; // already scored as first-pass portfolio
+          const candidatePortfolio = agent3_portfolioConstruction({
+            clientProfile,
+            economicIntel,
+            constructionOverrides: { seedAllocation: seed },
+          });
+          const [candidateRisk, candidateTax] = await Promise.all([
+            Promise.resolve(agent4_riskAnalysis({ portfolio: candidatePortfolio, clientProfile, marketContext })),
+            Promise.resolve(agent5_taxOptimization({ portfolio: candidatePortfolio, clientProfile })),
+          ]);
+          const candidateScore = agent6_critic({
+            portfolio: candidatePortfolio, clientProfile,
+            riskAnalysis: candidateRisk, taxOptimization: candidateTax, marketContext,
+          });
+          log(`Critic explore [${label}]: ${candidateScore.scores.overall}/100 — ${dimLog(candidateScore.scores)}`);
+          if (candidateScore.scores.overall > finalScore.scores.overall) {
+            finalPortfolio = candidatePortfolio;
+            finalRisk      = candidateRisk;
+            finalTax       = candidateTax;
+            finalScore     = candidateScore;
+            log(`Critic: [${label}] is new best — ${candidateScore.scores.overall}/100`);
+          }
+        }
+
+        // ── Phase 2: Targeted refinement ──────────────────────────────────────
+        const MAX_REFINEMENT_PASSES = 2;
+        let equityCeiling    = clientProfile.riskProfile.maxEquityAllowed;
+        let positionCap      = 0.25;
+
+        for (let pass = 0; pass < MAX_REFINEMENT_PASSES && finalScore.scores.overall < 80; pass++) {
           const s = finalScore.scores;
           const equityPct = finalPortfolio.allocation
             .filter(sl => sl.category === 'growth')
             .reduce((sum, sl) => sum + sl.weight, 0);
-          const alignmentFixableByEquityReduction =
+          const alignmentFixable =
             (clientProfile.timeHorizon.yearsToGoal < 10 && equityPct > 0.60) ||
             (clientProfile.timeHorizon.isInDrawdownPhase && equityPct > 0.40);
 
-          const fixable = (['alignment', 'diversification', 'riskManagement'] as const).filter(d => {
-            if (d === 'alignment') return alignmentFixableByEquityReduction;
-            return true;
-          });
+          const fixable = (['alignment', 'diversification', 'riskManagement'] as const)
+            .filter(d => d !== 'alignment' || alignmentFixable);
           const strategy = fixable.sort((a, b) => s[a] - s[b])[0] ?? 'diversification';
 
-          log(`Critic pass ${pass + 1}: ${finalScore.scores.overall}/100 → strategy: ${strategy}`);
-
-          let passPortfolio;
-          let passClientProfile = { ...clientProfile };
+          const prevEquityCeiling = equityCeiling;
+          const prevPositionCap   = positionCap;
+          let passClientProfile   = { ...clientProfile };
 
           if (strategy === 'diversification') {
             positionCap = Math.max(0.12, positionCap - 0.08);
-            passPortfolio = agent3_portfolioConstruction({
-              clientProfile: passClientProfile,
-              economicIntel,
-              constructionOverrides: { maxEquityWeightPerPosition: positionCap, seedAllocation: baselineSeed },
-            });
           } else {
-            // alignment or riskManagement: step down equity ceiling more aggressively
             equityCeiling = Math.max(0.20, equityCeiling - 0.10);
             passClientProfile = {
               ...clientProfile,
               riskProfile: { ...clientProfile.riskProfile, maxEquityAllowed: equityCeiling },
             };
-            passPortfolio = agent3_portfolioConstruction({
-              clientProfile: passClientProfile,
-              economicIntel,
-              constructionOverrides: { seedAllocation: baselineSeed },
-            });
           }
 
+          // Early exit: params unchanged means floor was hit — further passes are identical
+          if (equityCeiling === prevEquityCeiling && positionCap === prevPositionCap) {
+            log(`Critic refinement pass ${pass + 1}: floor hit — stopping early`);
+            break;
+          }
+
+          log(`Critic refinement pass ${pass + 1}: ${finalScore.scores.overall}/100 → strategy: ${strategy}`);
+          const passPortfolio = agent3_portfolioConstruction({
+            clientProfile: passClientProfile, economicIntel,
+            constructionOverrides: { maxEquityWeightPerPosition: positionCap, seedAllocation: baselineSeed },
+          });
           const [passRisk, passTax] = await Promise.all([
             Promise.resolve(agent4_riskAnalysis({ portfolio: passPortfolio, clientProfile: passClientProfile, marketContext })),
             Promise.resolve(agent5_taxOptimization({ portfolio: passPortfolio, clientProfile: passClientProfile })),
           ]);
           const passScore = agent6_critic({
-            portfolio: passPortfolio,
-            clientProfile: passClientProfile,
-            riskAnalysis: passRisk,
-            taxOptimization: passTax,
-            marketContext,
+            portfolio: passPortfolio, clientProfile: passClientProfile,
+            riskAnalysis: passRisk, taxOptimization: passTax, marketContext,
           });
-
-          log(`Critic pass ${pass + 1} result: ${passScore.scores.overall}/100 — ${dimLog(passScore.scores)}`);
-
+          log(`Critic refinement pass ${pass + 1} result: ${passScore.scores.overall}/100 — ${dimLog(passScore.scores)}`);
           if (passScore.scores.overall > finalScore.scores.overall) {
             finalPortfolio = passPortfolio;
             finalRisk      = passRisk;

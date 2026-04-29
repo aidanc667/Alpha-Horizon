@@ -209,6 +209,15 @@ export interface SharpeOptimizerOpts {
   minWeight?: number;
   /** Warm-start weights (ticker → weight, need not sum to 1). Filtered to candidate tickers. */
   seedWeights?: Record<string, number>;
+  /**
+   * L2 regularization strength — penalises deviation from the initial seed weights.
+   * Adds -2λ(wᵢ − w0ᵢ) to the Sharpe gradient each step, pulling weights toward
+   * the seed rather than chasing the noisiest CMA estimate.
+   *
+   * Effect: reduces concentration (lower HHI) without sacrificing Sharpe materially.
+   * Recommended: 0.10–0.20 when seedWeights is provided. Default 0 (no regularization).
+   */
+  regularization?: number;
 }
 
 /**
@@ -236,6 +245,7 @@ export function optimizeSharpeWeights(
   const iters     = opts.iterations           ?? 400;
   const lr0       = opts.learningRate         ?? 0.025;
   const minW      = opts.minWeight            ?? 0.01;
+  const λ         = opts.regularization       ?? 0;
 
   const μ = tickers.map(t => returns[t] ?? 0);
   const σ = tickers.map(t => getVol(t));
@@ -247,15 +257,21 @@ export function optimizeSharpeWeights(
     : Array(n).fill(1 / n);
   let w = projectToSimplex(rawSeed, maxW);
 
+  // Capture projected seed as regularization anchor — pulls weights back toward
+  // the prior rather than letting the optimizer over-fit to noisy CMA estimates.
+  const w0 = [...w];
+
   for (let iter = 0; iter < iters; iter++) {
     const { vol: pVol } = portfolioVarAndVol(w, Σ);
     const pRet   = w.reduce((s, wi, i) => s + wi * μ[i], 0);
     const sharpe = (pRet - riskFreeRate) / pVol;
     const Σw     = matVec(Σ, w);
 
-    // ∂S/∂wᵢ = [(μᵢ − rf) − S·(Σw)ᵢ/σ_p] / σ_p
+    // ∂S/∂wᵢ = [(μᵢ − rf) − S·(Σw)ᵢ/σ_p] / σ_p  −  2λ(wᵢ − w0ᵢ)
+    // The regularization term penalises deviation from the seed, preventing
+    // the optimizer from concentrating into whichever ETF has the luckiest CMA.
     const grad = μ.map((mi, i) =>
-      ((mi - riskFreeRate) - sharpe * Σw[i] / pVol) / pVol,
+      ((mi - riskFreeRate) - sharpe * Σw[i] / pVol) / pVol - 2 * λ * (w[i] - w0[i]),
     );
 
     // Decaying learning rate — aggressive early exploration, fine tuning later

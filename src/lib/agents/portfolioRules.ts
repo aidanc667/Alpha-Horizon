@@ -430,6 +430,7 @@ export function selectETFsForAllocation(
       maxWeightPerPosition,
       iterations: 500,
       minWeight: 0.02,
+      regularization: equitySeed ? 0.15 : 0,
       ...(equitySeed && Object.keys(equitySeed).length > 0 ? { seedWeights: equitySeed } : {}),
     });
 
@@ -461,6 +462,7 @@ export function selectETFsForAllocation(
       maxWeightPerPosition,
       iterations: 400,
       minWeight: 0.03,
+      regularization: bondSeed ? 0.15 : 0,
       ...(bondSeed && Object.keys(bondSeed).length > 0 ? { seedWeights: bondSeed } : {}),
     });
 
