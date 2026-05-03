@@ -35,9 +35,22 @@ from deepeval.metrics import (
     GEval,
 )
 from deepeval.models import AnthropicModel
+import deepeval.models.llms.anthropic_model as _anthropic_pricing
 from deepeval.test_case import LLMTestCase, LLMTestCaseParams
 
 FIXTURES_DIR = pathlib.Path(__file__).parent / "fixtures"
+
+# ── Patch deepeval pricing table for Claude 4.x models ───────────────────────
+# deepeval's calculate_cost falls back to the entire pricing dict when the model
+# is missing, causing KeyError: 'input'. Add Claude 4.x entries to fix this.
+_anthropic_pricing.model_pricing.update({
+    "claude-haiku-4-5-20251001":   {"input": 0.80 / 1e6, "output": 4.00 / 1e6},
+    "claude-sonnet-4-5-20250929":  {"input": 3.00 / 1e6, "output": 15.00 / 1e6},
+    "claude-opus-4-20250514":      {"input": 15.00 / 1e6, "output": 75.00 / 1e6},
+    "claude-sonnet-4-20250514":    {"input": 3.00 / 1e6, "output": 15.00 / 1e6},
+    "claude-sonnet-4-6":           {"input": 3.00 / 1e6, "output": 15.00 / 1e6},
+    "claude-opus-4-7":             {"input": 15.00 / 1e6, "output": 75.00 / 1e6},
+})
 
 # ── Judge model — Claude via Anthropic (requires ANTHROPIC_API_KEY) ───────────
 JUDGE_MODEL = AnthropicModel(
