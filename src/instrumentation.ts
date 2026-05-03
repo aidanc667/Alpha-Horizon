@@ -15,10 +15,13 @@ export async function register() {
   // OTEL SDK — initialise before any route handlers so spans are captured from cold start.
   // No-ops silently when OTEL_EXPORTER_OTLP_ENDPOINT is not set.
   try {
-    const { NodeSDK }                     = await import('@opentelemetry/sdk-node');
-    const { OTLPTraceExporter }           = await import('@opentelemetry/exporter-trace-otlp-http');
-    const { resourceFromAttributes }      = await import('@opentelemetry/resources');
-    const { getNodeAutoInstrumentations } = await import('@opentelemetry/auto-instrumentations-node');
+    // webpackIgnore: true — prevents Edge Function bundler from including these
+    // Node.js-only packages. The NEXT_RUNTIME guard above ensures they never
+    // execute in Edge, but without this comment the bundler still analyses them.
+    const { NodeSDK }                     = await import(/* webpackIgnore: true */ '@opentelemetry/sdk-node');
+    const { OTLPTraceExporter }           = await import(/* webpackIgnore: true */ '@opentelemetry/exporter-trace-otlp-http');
+    const { resourceFromAttributes }      = await import(/* webpackIgnore: true */ '@opentelemetry/resources');
+    const { getNodeAutoInstrumentations } = await import(/* webpackIgnore: true */ '@opentelemetry/auto-instrumentations-node');
 
     const sdk = new NodeSDK({
       resource: resourceFromAttributes({
