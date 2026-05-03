@@ -22,7 +22,7 @@ SCENARIOS: list[dict] = [
     {
         "name": "conservative_near_retirement",
         "answers": {
-            "goal": "retirement",
+            "goal": "financial_independence",
             "goalAmount": 1_000_000,
             "timeHorizon": 4,
             "startingCapital": 400_000,
@@ -81,7 +81,7 @@ SCENARIOS: list[dict] = [
     {
         "name": "no_emergency_fund_medium_risk",
         "answers": {
-            "goal": "house",
+            "goal": "major_purchase",
             "goalAmount": 200_000,
             "timeHorizon": 7,
             "startingCapital": 30_000,
@@ -101,7 +101,7 @@ SCENARIOS: list[dict] = [
     {
         "name": "drawdown_phase",
         "answers": {
-            "goal": "retirement",
+            "goal": "financial_independence",
             "timeHorizon": 0,  # already in drawdown
             "startingCapital": 1_200_000,
             "monthlyContribution": 0,

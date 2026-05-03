@@ -3,7 +3,6 @@ DeepEval test suite for Agent 7b (synthesis) and agentIPS outputs.
 
 Setup:
   pip install -r eval/requirements.txt
-  export DEEPEVAL_API_KEY=...      # deepeval cloud (optional — local models work too)
   export ANTHROPIC_API_KEY=...     # used as the evaluation LLM judge
 
 Collect fixtures first:
@@ -19,28 +18,32 @@ Metrics used:
   AnswerRelevancyMetric — are keyInsights relevant to the specific client profile?
   HallucinationMetric   — does primaryRisk invent warnings not present in riskAnalysis?
   GEval (custom)        — does the narrative reference actual ticker symbols from the allocation?
+  GEval (custom)        — are actionableNextSteps specific and actionable?
+  FaithfulnessMetric    — IPS executive summary faithfulness
+  AnswerRelevancyMetric — IPS rebalancing policy consistency with time horizon
 """
 
 import json
-import os
 import pathlib
 import pytest
 
-from deepeval import evaluate
+from deepeval import assert_test
 from deepeval.metrics import (
     FaithfulnessMetric,
     AnswerRelevancyMetric,
     HallucinationMetric,
     GEval,
 )
-from deepeval.metrics.g_eval import GEvalCriteria
+from deepeval.models import AnthropicModel
 from deepeval.test_case import LLMTestCase, LLMTestCaseParams
 
 FIXTURES_DIR = pathlib.Path(__file__).parent / "fixtures"
 
-# ── Configure DeepEval to use Claude as the evaluation LLM ───────────────────
-# deepeval auto-detects ANTHROPIC_API_KEY. Override model via:
-#   DEEPEVAL_MODEL=claude-opus-4-7  (default for Anthropic backend)
+# ── Judge model — Claude via Anthropic (requires ANTHROPIC_API_KEY) ───────────
+JUDGE_MODEL = AnthropicModel(
+    model="claude-3-5-sonnet-latest",
+    temperature=0,
+)
 
 FAITHFULNESS_THRESHOLD   = 0.80
 RELEVANCY_THRESHOLD      = 0.70
@@ -108,13 +111,9 @@ def test_synthesis_faithfulness(scenario: str, plan: dict) -> None:
         actual_output=synthesis["portfolioNarrative"],
         retrieval_context=build_retrieval_context(plan),
     )
-
-    metric = FaithfulnessMetric(threshold=FAITHFULNESS_THRESHOLD, verbose_mode=True)
-    metric.measure(test_case)
-    assert metric.score >= FAITHFULNESS_THRESHOLD, (
-        f"[{scenario}] Faithfulness {metric.score:.2f} < {FAITHFULNESS_THRESHOLD}: "
-        f"{metric.reason}"
-    )
+    assert_test(test_case, [
+        FaithfulnessMetric(threshold=FAITHFULNESS_THRESHOLD, model=JUDGE_MODEL, verbose_mode=True),
+    ])
 
 
 @pytest.mark.parametrize("scenario,plan", load_fixtures())
@@ -137,11 +136,9 @@ def test_synthesis_relevancy(scenario: str, plan: dict) -> None:
     actual = "\n".join(synthesis.get("keyInsights", []))
 
     test_case = LLMTestCase(input=query, actual_output=actual)
-    metric = AnswerRelevancyMetric(threshold=RELEVANCY_THRESHOLD, verbose_mode=True)
-    metric.measure(test_case)
-    assert metric.score >= RELEVANCY_THRESHOLD, (
-        f"[{scenario}] Relevancy {metric.score:.2f} < {RELEVANCY_THRESHOLD}: {metric.reason}"
-    )
+    assert_test(test_case, [
+        AnswerRelevancyMetric(threshold=RELEVANCY_THRESHOLD, model=JUDGE_MODEL, verbose_mode=True),
+    ])
 
 
 @pytest.mark.parametrize("scenario,plan", load_fixtures())
@@ -156,24 +153,24 @@ def test_synthesis_hallucination(scenario: str, plan: dict) -> None:
         actual_output=synthesis["primaryRisk"],
         context=build_retrieval_context(plan),
     )
-    metric = HallucinationMetric(threshold=HALLUCINATION_THRESHOLD, verbose_mode=True)
-    metric.measure(test_case)
-    assert metric.score <= HALLUCINATION_THRESHOLD, (
-        f"[{scenario}] Hallucination {metric.score:.2f} > {HALLUCINATION_THRESHOLD}: "
-        f"{metric.reason}"
-    )
+    assert_test(test_case, [
+        HallucinationMetric(threshold=HALLUCINATION_THRESHOLD, model=JUDGE_MODEL, verbose_mode=True),
+    ])
 
 
 @pytest.mark.parametrize("scenario,plan", load_fixtures())
 def test_synthesis_ticker_grounding(scenario: str, plan: dict) -> None:
-    """narratives must reference real tickers from the allocation (not generic placeholders)."""
+    """Narratives must reference real tickers from the allocation (not generic placeholders).
+
+    This test is deterministic — no LLM judge needed.
+    """
     synthesis = plan.get("synthesis")
     if synthesis is None:
         pytest.skip(f"{scenario}: synthesis absent")
 
     alloc = plan.get("portfolio", {}).get("allocation", [])
     tickers = [s["ticker"] for s in alloc]
-    narrative = synthesis["portfolioNarrative"] + " ".join(synthesis.get("keyInsights", []))
+    narrative = synthesis["portfolioNarrative"] + " " + " ".join(synthesis.get("keyInsights", []))
 
     mentioned = sum(1 for t in tickers if t in narrative)
     ratio = mentioned / max(len(tickers), 1)
@@ -184,7 +181,7 @@ def test_synthesis_ticker_grounding(scenario: str, plan: dict) -> None:
 
 
 @pytest.mark.parametrize("scenario,plan", load_fixtures())
-def test_synthesis_next_steps_actionable(scenario: str, plan: dict) -> None:
+def test_synthesis_actionability(scenario: str, plan: dict) -> None:
     """actionableNextSteps must start with a verb and contain specific details."""
     synthesis = plan.get("synthesis")
     if synthesis is None:
@@ -193,27 +190,25 @@ def test_synthesis_next_steps_actionable(scenario: str, plan: dict) -> None:
     steps = synthesis.get("actionableNextSteps", [])
     assert len(steps) == 3, f"[{scenario}] Expected 3 actionableNextSteps, got {len(steps)}"
 
-    # GEval: are steps specific and actionable?
     test_case = LLMTestCase(
         input="Provide 3 actionable next steps to implement the portfolio",
         actual_output="\n".join(f"{i+1}. {s}" for i, s in enumerate(steps)),
         retrieval_context=build_retrieval_context(plan),
     )
-    metric = GEval(
-        name="Actionability",
-        criteria=(
-            "Each step should start with an action verb and reference a specific "
-            "ticker symbol, account type, or concrete financial action. Generic advice "
-            "like 'consult a financial advisor' or 'do your research' should score low."
+    assert_test(test_case, [
+        GEval(
+            name="Actionability",
+            criteria=(
+                "Each step should start with an action verb and reference a specific "
+                "ticker symbol, account type, or concrete financial action. Generic advice "
+                "like 'consult a financial advisor' or 'do your research' should score low."
+            ),
+            evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
+            threshold=0.7,
+            model=JUDGE_MODEL,
+            verbose_mode=True,
         ),
-        evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
-        threshold=0.7,
-        verbose_mode=True,
-    )
-    metric.measure(test_case)
-    assert metric.score >= 0.7, (
-        f"[{scenario}] Actionability {metric.score:.2f} < 0.7: {metric.reason}"
-    )
+    ])
 
 
 # ── IPS tests ─────────────────────────────────────────────────────────────────
@@ -230,12 +225,9 @@ def test_ips_faithfulness(scenario: str, plan: dict) -> None:
         actual_output=ips.get("executiveSummary", ""),
         retrieval_context=build_retrieval_context(plan),
     )
-    metric = FaithfulnessMetric(threshold=FAITHFULNESS_THRESHOLD, verbose_mode=True)
-    metric.measure(test_case)
-    assert metric.score >= FAITHFULNESS_THRESHOLD, (
-        f"[{scenario}] IPS faithfulness {metric.score:.2f} < {FAITHFULNESS_THRESHOLD}: "
-        f"{metric.reason}"
-    )
+    assert_test(test_case, [
+        FaithfulnessMetric(threshold=FAITHFULNESS_THRESHOLD, model=JUDGE_MODEL, verbose_mode=True),
+    ])
 
 
 @pytest.mark.parametrize("scenario,plan", load_fixtures())
@@ -253,9 +245,6 @@ def test_ips_rebalancing_consistency(scenario: str, plan: dict) -> None:
         actual_output=rebalancing,
         retrieval_context=[f"Time horizon: {horizon} years"],
     )
-    metric = AnswerRelevancyMetric(threshold=RELEVANCY_THRESHOLD, verbose_mode=True)
-    metric.measure(test_case)
-    assert metric.score >= RELEVANCY_THRESHOLD, (
-        f"[{scenario}] IPS rebalancing relevancy {metric.score:.2f} < {RELEVANCY_THRESHOLD}: "
-        f"{metric.reason}"
-    )
+    assert_test(test_case, [
+        AnswerRelevancyMetric(threshold=RELEVANCY_THRESHOLD, model=JUDGE_MODEL, verbose_mode=True),
+    ])
