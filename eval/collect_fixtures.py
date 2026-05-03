@@ -4,8 +4,11 @@ Collect V3Plan fixtures by calling the running dev server.
 
 Usage:
   1. Start the dev server: npm run dev
-  2. Set env vars: export CLERK_SESSION_TOKEN=<your_token>
-  3. Run: python eval/collect_fixtures.py
+  2. Get a session token from the browser Console on localhost:3000:
+       const token = await window.Clerk.session.getToken(); console.log(token);
+  3. Export immediately (token expires in 5 minutes):
+       export CLERK_SESSION_TOKEN=<paste token here>
+  4. Run right away: python3 eval/collect_fixtures.py
 
 Saves one JSON file per scenario to eval/fixtures/.
 """
@@ -130,7 +133,7 @@ def collect(scenario: dict) -> None:
 
     headers = {"Content-Type": "application/json"}
     if SESSION_TOKEN:
-        headers["Cookie"] = f"__session={SESSION_TOKEN}"
+        headers["Authorization"] = f"Bearer {SESSION_TOKEN}"
 
     print(f"  [fetch] {name}...")
     resp = requests.post(API_URL, json={"answers": scenario["answers"]}, headers=headers, stream=True)
