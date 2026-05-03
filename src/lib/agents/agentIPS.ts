@@ -293,8 +293,8 @@ function buildDeterministicNarrative(input: {
 
   return {
     investmentObjective: goal.goalAmount
-      ? `Accumulate $${goal.goalAmount.toLocaleString()} over ${th.yearsToGoal} years (${(goal.fundedStatus * 100).toFixed(0)}% currently funded, rated ${goal.feasibility}) through a ${rf.effectiveRiskTolerance} portfolio targeting ${(stats.expectedReturn * 100).toFixed(1)}% expected annual return.`
-      : `Maximize portfolio growth over a ${th.yearsToGoal}-year horizon through a ${rf.effectiveRiskTolerance} allocation targeting ${(stats.expectedReturn * 100).toFixed(1)}% expected annual return and a Sharpe ratio of ${stats.sharpeRatio.toFixed(2)}.`,
+      ? `Accumulate $${goal.goalAmount.toLocaleString()} over ${th.yearsToGoal} years (${(goal.fundedStatus * 100).toFixed(0)}% currently funded, rated ${goal.feasibility}) through a ${rf.effectiveRiskTolerance} portfolio targeting ${(stats.expectedReturn * 100).toFixed(2)}% expected annual return.`
+      : `Maximize portfolio growth over a ${th.yearsToGoal}-year horizon through a ${rf.effectiveRiskTolerance} allocation targeting ${(stats.expectedReturn * 100).toFixed(2)}% expected annual return and a Sharpe ratio of ${stats.sharpeRatio.toFixed(2)}.`,
 
     liquidityRequirement: intakeAnswers.financialSnapshot?.hasEmergencyFund
       ? `Client maintains an adequate emergency fund outside this portfolio; no additional liquidity sleeve is required.`
@@ -320,7 +320,7 @@ function buildDeterministicNarrative(input: {
       ? `Asset location optimized for after-tax returns: ${locationParts.join('; ')}. This placement targets the estimated ${taxOptimization.estimatedAnnualSavings} bps annual tax alpha.`
       : `All positions placed in taxable accounts; introducing tax-advantaged accounts in future years would improve after-tax compounding.`,
 
-    executiveSummary: `This ${rf.riskScore}/10 risk-score portfolio achieves a ${scoreLabel} Critic score of ${criticScore.scores.overall}/100, with ${(stats.expectedReturn * 100).toFixed(1)}% expected return and a ${stats.sharpeRatio.toFixed(2)} Sharpe ratio. ${goal.goalAmount ? `The $${goal.goalAmount.toLocaleString()} goal is rated ${goal.feasibility} at ${(goal.fundedStatus * 100).toFixed(0)}% funded status.` : ''} Tax optimization targets ${taxOptimization.estimatedAnnualSavings} bps in annual savings through systematic asset location.`,
+    executiveSummary: `This ${rf.riskScore}/10 risk-score portfolio achieves a ${scoreLabel} Critic score of ${criticScore.scores.overall}/100, with ${(stats.expectedReturn * 100).toFixed(2)}% expected return and a ${stats.sharpeRatio.toFixed(2)} Sharpe ratio. ${goal.goalAmount ? `The $${goal.goalAmount.toLocaleString()} goal is rated ${goal.feasibility} at ${(goal.fundedStatus * 100).toFixed(0)}% funded status.` : ''} Tax optimization targets ${taxOptimization.estimatedAnnualSavings} bps in annual savings through systematic asset location.`,
   };
 }
 

@@ -161,10 +161,19 @@ def test_synthesis_hallucination(scenario: str, plan: dict) -> None:
     if synthesis is None:
         pytest.skip(f"{scenario}: synthesis absent")
 
+    # Use only risk-analysis context — primaryRisk is a focused description of
+    # riskAnalysis.warnings, not a summary of the whole plan. Using the full
+    # context causes the metric to penalise omission of irrelevant fields
+    # (expected return, CAPE, etc.) rather than checking for invented risks.
+    risk = plan.get("riskAnalysis", {})
+    risk_context = [
+        f"Risk level: {risk.get('riskLevel', 'unknown')}",
+        f"Warnings: {'; '.join(risk.get('warnings', []))}",
+    ]
     test_case = LLMTestCase(
         input="Describe the primary risk",
         actual_output=synthesis["primaryRisk"],
-        context=build_retrieval_context(plan),
+        context=risk_context,
     )
     assert_test(test_case, [
         HallucinationMetric(threshold=HALLUCINATION_THRESHOLD, model=JUDGE_MODEL, verbose_mode=True),

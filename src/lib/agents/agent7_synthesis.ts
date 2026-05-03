@@ -327,10 +327,14 @@ function buildDeterministicSynthesis(input: SynthesisInput): Agent7Output {
 
   const topTwo = portfolio.allocation.slice(0, 2).map(a => a.ticker);
   const accounts = clientProfile.accountStructure.availableAccounts.slice(0, 2);
+  const topWeight    = Math.round(topHolding.weight * 100);
+  const w0           = Math.round(portfolio.allocation[0].weight * 100);
+  const w1           = Math.round(portfolio.allocation[1]?.weight * 100 ?? 0);
+  const capitalFmt   = clientProfile.startingCapital.toLocaleString();
   const actionableNextSteps = [
-    `Open ${accounts.join(' and ')} account${accounts.length > 1 ? 's' : ''} and deploy your starting capital according to the allocation table.`,
-    `Purchase ${topTwo.join(' and ')} as your core positions — these represent the largest weights in the optimised portfolio.`,
-    `Review this plan annually or after any major life change (income shift, new goal, or market regime change).`,
+    `Open ${accounts.join(' and ')} account${accounts.length > 1 ? 's' : ''} and deploy $${capitalFmt} according to the allocation table — ${topTwo[0]} at ${w0}%${topTwo[1] ? `, ${topTwo[1]} at ${w1}%` : ''}.`,
+    `Purchase ${topTwo.join(' and ')} first as your core positions. Set limit orders within 0.5% of current market price to control entry cost.`,
+    `Set a rebalancing trigger: rebalance when ${topHolding.ticker} drifts outside ${topWeight - 5}%–${topWeight + 5}% of portfolio value (target: ${topWeight}%). Schedule a full portfolio review every 12 months.`,
   ];
 
   const executionTimeMs = 0;
