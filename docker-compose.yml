@@ -1,0 +1,37 @@
+version: '3.8'
+
+# Local observability stack — Tempo (traces) + Grafana (UI)
+# Usage:
+#   docker compose up -d
+#   Open Grafana at http://localhost:3100
+#   Set OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 in .env.local
+#   Run `npm run dev`, submit an intake form, then explore traces in Grafana → Explore → Tempo
+
+services:
+  tempo:
+    image: grafana/tempo:2.6.1
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml
+      - tempo-data:/var/tempo
+    ports:
+      - "3200:3200"   # Tempo HTTP query API
+      - "4318:4318"   # OTLP HTTP receiver (traces from Next.js)
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    ports:
+      - "3100:3000"   # 3100 to avoid conflict with Next.js on 3000
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+    volumes:
+      - ./grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - tempo
+
+volumes:
+  tempo-data:
+  grafana-data:

@@ -14,6 +14,7 @@
  */
 
 import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
+import { trace, SpanStatusCode } from '@opentelemetry/api';
 import type {
   Agent1Output,
   Agent2Output,
@@ -23,6 +24,8 @@ import type {
   Agent6Output,
   Agent7Output,
 } from './types';
+
+const tracer = trace.getTracer('agent7-synthesis', '1.0.0');
 
 // ─── Response schema ──────────────────────────────────────────────────────────
 
@@ -198,24 +201,41 @@ export async function agent7_synthesis(input: {
   }
 
   const startTime = Date.now();
+  const span = tracer.startSpan('llm.synthesis', {
+    attributes: {
+      'llm.model':       'gemini-2.5-flash',
+      'llm.temperature': 0.4,
+      'llm.thinking':    'LOW',
+    },
+  });
 
   try {
     const ai = new GoogleGenAI({ apiKey });
     const prompt = buildPrompt(input);
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        temperature: 0.4,        // slightly creative for narrative quality
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW }, // speed over depth
-        responseMimeType: 'application/json',
-        responseSchema: SYNTHESIS_SCHEMA,
-      },
-    });
+    const response = await Promise.race([
+      ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+          temperature: 0.4,
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          responseMimeType: 'application/json',
+          responseSchema: SYNTHESIS_SCHEMA,
+        },
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Synthesis Gemini timeout after 4500ms')), 4500)
+      ),
+    ]);
 
     const jsonText = (response.text ?? '').trim();
-    if (!jsonText) return null;
+    if (!jsonText) {
+      span.setAttribute('llm.empty_response', true);
+      span.setAttribute('llm.used_fallback', true);
+      span.end();
+      return buildDeterministicSynthesis(input);
+    }
 
     const parsed = JSON.parse(jsonText) as {
       portfolioNarrative: string;
@@ -225,6 +245,15 @@ export async function agent7_synthesis(input: {
     };
 
     const executionTimeMs = Date.now() - startTime;
+    span.setAttributes({
+      'llm.execution_ms':        executionTimeMs,
+      'llm.within_sla':          executionTimeMs <= 5000,
+      'llm.response_bytes':      jsonText.length,
+      'llm.narrative_chars':     parsed.portfolioNarrative.length,
+      'llm.key_insights_count':  parsed.keyInsights.length,
+    });
+    span.setStatus({ code: SpanStatusCode.OK });
+    span.end();
     console.log(`Agent 7: ${executionTimeMs}ms`);
 
     return {
@@ -242,7 +271,82 @@ export async function agent7_synthesis(input: {
       },
     };
   } catch (e) {
-    console.error('[agent7] synthesis failed:', e);
-    return null;
+    span.recordException(e as Error);
+    span.setStatus({ code: SpanStatusCode.ERROR, message: e instanceof Error ? e.message : 'synthesis failed' });
+    span.setAttribute('llm.used_fallback', true);
+    span.end();
+    console.error('[agent7] synthesis failed — using deterministic fallback:', e);
+    return buildDeterministicSynthesis(input);
   }
+}
+
+// ─── Deterministic fallback ───────────────────────────────────────────────────
+
+type SynthesisInput = Parameters<typeof agent7_synthesis>[0];
+
+function buildDeterministicSynthesis(input: SynthesisInput): Agent7Output {
+  const { clientProfile, portfolio, riskAnalysis, taxOptimization, criticScore } = input;
+  const rf = clientProfile.riskProfile;
+  const th = clientProfile.timeHorizon;
+  const goal = clientProfile.goalAnalysis;
+  const stats = portfolio.statistics;
+
+  const tickers = portfolio.allocation.map(a => a.ticker).join(', ');
+  const topHolding = portfolio.allocation.reduce((a, b) => a.weight > b.weight ? a : b);
+
+  const portfolioNarrative = [
+    `This portfolio was constructed for a ${rf.effectiveRiskTolerance} investor with a ${th.yearsToGoal}-year time horizon. ` +
+    `The ${portfolio.allocation.length}-ETF allocation (${tickers}) was Sharpe-optimised to a ratio of ${stats.sharpeRatio.toFixed(2)}, ` +
+    `with an expected annualised return of ${(stats.expectedReturn * 100).toFixed(1)}% and volatility of ${(stats.expectedVolatility * 100).toFixed(1)}%. ` +
+    `Goal feasibility is rated ${goal.feasibility} at ${(goal.fundedStatus * 100).toFixed(0)}% funded.`,
+
+    `The largest position is ${topHolding.ticker} at ${(topHolding.weight * 100).toFixed(0)}%, serving as the portfolio's ${topHolding.category} anchor. ` +
+    `Risk analysis rates this portfolio ${riskAnalysis.riskLevel}` +
+    (riskAnalysis.warnings.length > 0
+      ? ` with ${riskAnalysis.warnings.length} active warning${riskAnalysis.warnings.length > 1 ? 's' : ''}: ${riskAnalysis.warnings[0]}`
+      : ' with no active warnings') + '.',
+
+    `The portfolio earned a critic score of ${criticScore.scores.overall}/100. ` +
+    `Tax optimisation identified ${taxOptimization.estimatedAnnualSavings} basis points of annual savings potential. ` +
+    `Weighted expense ratio is ${(stats.weightedExpenseRatio * 100).toFixed(3)}%.`,
+  ].join('\n\n');
+
+  const keyInsights: string[] = [
+    `${rf.effectiveRiskTolerance.charAt(0).toUpperCase() + rf.effectiveRiskTolerance.slice(1)} risk profile — ${(stats.expectedReturn * 100).toFixed(1)}% expected return, ${(stats.expectedVolatility * 100).toFixed(1)}% volatility.`,
+    `${portfolio.allocation.length} ETFs selected via Sharpe optimisation (Sharpe: ${stats.sharpeRatio.toFixed(2)}).`,
+    `Critic score: ${criticScore.scores.overall}/100 (alignment ${criticScore.scores.alignment}, diversification ${criticScore.scores.diversification}, cost ${criticScore.scores.costEfficiency}).`,
+  ];
+  if (taxOptimization.estimatedAnnualSavings > 0) {
+    keyInsights.push(`Tax optimisation: ${taxOptimization.estimatedAnnualSavings} bps/year in savings identified.`);
+  }
+
+  const primaryRisk = riskAnalysis.warnings.length > 0
+    ? riskAnalysis.warnings[0]
+    : `As a ${rf.effectiveRiskTolerance} investor with a ${th.yearsToGoal}-year horizon, the primary risk is a potential ` +
+      `${(stats.maxDrawdownEstimate * 100).toFixed(0)}% drawdown in a severe bear market — stay the course and avoid panic-selling.`;
+
+  const topTwo = portfolio.allocation.slice(0, 2).map(a => a.ticker);
+  const accounts = clientProfile.accountStructure.availableAccounts.slice(0, 2);
+  const actionableNextSteps = [
+    `Open ${accounts.join(' and ')} account${accounts.length > 1 ? 's' : ''} and deploy your starting capital according to the allocation table.`,
+    `Purchase ${topTwo.join(' and ')} as your core positions — these represent the largest weights in the optimised portfolio.`,
+    `Review this plan annually or after any major life change (income shift, new goal, or market regime change).`,
+  ];
+
+  const executionTimeMs = 0;
+  return {
+    agentName: 'synthesis',
+    timestamp: new Date().toISOString(),
+    executionTimeMs,
+    portfolioNarrative,
+    keyInsights,
+    primaryRisk,
+    actionableNextSteps,
+    usedFallback: true,
+    performance: {
+      targetLatencyMs: 5000,
+      actualLatencyMs: executionTimeMs,
+      withinSLA: true,
+    },
+  };
 }

@@ -17,7 +17,10 @@
  */
 
 import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
+import { trace, SpanStatusCode } from '@opentelemetry/api';
 import { ETF_BY_TICKER } from '@/lib/data/etfUniverse';
+
+const tracer = trace.getTracer('agent-ips', '1.0.0');
 import type { IPSDocument, IPSTargetAllocation } from '@/types/index';
 import type {
   Agent1Output,
@@ -431,26 +434,56 @@ export async function agentIPS(input: {
     return buildIPSFromNarrative(buildDeterministicNarrative(input), input);
   }
 
+  const span = tracer.startSpan('llm.ips', {
+    attributes: {
+      'llm.model':       'gemini-2.5-flash',
+      'llm.temperature': 0.2,
+      'llm.thinking':    'LOW',
+    },
+  });
+
+  const startTime = Date.now();
   try {
     const ai = new GoogleGenAI({ apiKey });
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: buildPrompt(input),
-      config: {
-        temperature: 0.2,
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-        responseMimeType: 'application/json',
-        responseSchema: NARRATIVE_SCHEMA,
-      },
-    });
+    const response = await Promise.race([
+      ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: buildPrompt(input),
+        config: {
+          temperature: 0.2,
+          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+          responseMimeType: 'application/json',
+          responseSchema: NARRATIVE_SCHEMA,
+        },
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('IPS Gemini timeout after 3500ms')), 3500)
+      ),
+    ]);
 
     const jsonText = (response.text ?? '').trim();
-    if (!jsonText) return buildIPSFromNarrative(buildDeterministicNarrative(input), input);
+    if (!jsonText) {
+      span.setAttribute('llm.empty_response', true);
+      span.end();
+      return buildIPSFromNarrative(buildDeterministicNarrative(input), input);
+    }
+
+    const executionTimeMs = Date.now() - startTime;
+    span.setAttributes({
+      'llm.execution_ms':   executionTimeMs,
+      'llm.within_sla':     executionTimeMs <= 4000,
+      'llm.response_bytes': jsonText.length,
+    });
+    span.setStatus({ code: SpanStatusCode.OK });
+    span.end();
 
     const narrative = JSON.parse(jsonText) as IPSNarrative;
     return buildIPSFromNarrative(narrative, input);
   } catch (e) {
+    span.recordException(e as Error);
+    span.setStatus({ code: SpanStatusCode.ERROR, message: e instanceof Error ? e.message : 'IPS generation failed' });
+    span.end();
     console.error('[agentIPS] IPS generation failed — falling back to deterministic:', e);
     return buildIPSFromNarrative(buildDeterministicNarrative(input), input);
   }

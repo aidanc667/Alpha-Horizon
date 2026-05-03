@@ -19,6 +19,9 @@
 
 import type { PortfolioPlan } from '@/apps/portfolio-agent/types';
 import { db } from '@/lib/db';
+import { trace } from '@opentelemetry/api';
+
+const tracer = trace.getTracer('plan-cache', '1.0.0');
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -92,11 +95,15 @@ export async function getCachedPlan(
 ): Promise<{ plan: PortfolioPlan; logs: string[] } | null> {
   const key = await hashIntake(answers);
 
+  const span = tracer.startSpan('cache.plan.get');
+
   // L1: in-memory
   const entry = store.get(key);
   if (entry) {
     if (Date.now() - entry.createdAt <= CACHE_TTL_MS) {
       console.log(JSON.stringify({ stage: 'plan_cache', hit: true, level: 'memory' }));
+      span.setAttributes({ 'cache.hit': true, 'cache.source': 'L1' });
+      span.end();
       return { plan: entry.plan, logs: [...entry.logs, '[cache] Served from memory cache.'] };
     }
     store.delete(key);
@@ -106,10 +113,14 @@ export async function getCachedPlan(
   const neon = await getNeonCachedPlan(key);
   if (neon) {
     store.set(key, { plan: neon.plan, logs: neon.logs, createdAt: Date.now() }); // warm L1
+    span.setAttributes({ 'cache.hit': true, 'cache.source': 'L2' });
+    span.end();
     return { plan: neon.plan, logs: [...neon.logs, '[cache] Served from persistent cache.'] };
   }
 
   console.log(JSON.stringify({ stage: 'plan_cache', hit: false }));
+  span.setAttributes({ 'cache.hit': false });
+  span.end();
   return null;
 }
 

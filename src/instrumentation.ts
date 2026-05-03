@@ -12,6 +12,36 @@ export async function register() {
   // Only run on the Node.js server runtime — not in the Edge runtime or client.
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
 
+  // OTEL SDK — initialise before any route handlers so spans are captured from cold start.
+  // No-ops silently when OTEL_EXPORTER_OTLP_ENDPOINT is not set.
+  try {
+    const { NodeSDK }                     = await import('@opentelemetry/sdk-node');
+    const { OTLPTraceExporter }           = await import('@opentelemetry/exporter-trace-otlp-http');
+    const { resourceFromAttributes }      = await import('@opentelemetry/resources');
+    const { getNodeAutoInstrumentations } = await import('@opentelemetry/auto-instrumentations-node');
+
+    const sdk = new NodeSDK({
+      resource: resourceFromAttributes({
+        'service.name':    process.env.OTEL_SERVICE_NAME ?? 'alpha-horizon',
+        'service.version': '1.0.0',
+      }),
+      // OTLPTraceExporter auto-reads OTEL_EXPORTER_OTLP_ENDPOINT from env,
+      // appending /v1/traces. Defaults to http://localhost:4318/v1/traces.
+      traceExporter: new OTLPTraceExporter(),
+      instrumentations: [
+        getNodeAutoInstrumentations({
+          '@opentelemetry/instrumentation-fs': { enabled: false }, // too noisy
+        }),
+      ],
+    });
+
+    sdk.start();
+    console.log('[instrumentation] OTEL SDK started →', process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? 'http://localhost:4318');
+  } catch (e) {
+    console.warn('[instrumentation] OTEL SDK failed to start (traces disabled):', e);
+  }
+
+  // DB migrations — must succeed before any request that touches Neon.
   try {
     const { runMigrations } = await import('@/lib/db');
     await runMigrations();

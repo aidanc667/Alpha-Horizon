@@ -1,5 +1,8 @@
 import { db } from '@/lib/db';
+import { trace } from '@opentelemetry/api';
 import type { Agent2Output } from './types';
+
+const tracer = trace.getTracer('agent2-macro', '1.0.0');
 
 // ─── Static fallback baseline ─────────────────────────────────────────────────
 // Used when FRED_API_KEY is not set or FRED is unreachable.
@@ -291,15 +294,20 @@ export async function agent2_economicIntelligence(input: {
   requestDate: string;
 }): Promise<Agent2Output> {
   const startTime = Date.now();
+  const span = tracer.startSpan('agent2.macro', { attributes: { 'agent.sla_ms': 500 } });
 
   // L1: in-process memory
   if (_l1 && Date.now() - _l1.fetchedAt < MACRO_TTL_MS) {
+    span.setAttributes({ 'cache.source': 'L1', 'cache.hit': true });
+    span.end();
     return withDataAge(_l1.data);
   }
 
   // L2: Neon Postgres
   const neon = await readNeonMacro();
   if (neon) {
+    span.setAttributes({ 'cache.source': 'L2', 'cache.hit': true });
+    span.end();
     _l1 = { data: neon, fetchedAt: Date.now() };
     return withDataAge(neon);
   }
@@ -322,6 +330,18 @@ export async function agent2_economicIntelligence(input: {
   const executionTimeMs = Date.now() - startTime;
   const source = liveData ?? FALLBACK;
   const macroFetchedAt = new Date().toISOString();
+
+  // L3 live or L4 fallback
+  span.setAttributes({
+    'cache.source':      liveData ? 'L3' : 'L4',
+    'cache.hit':         false,
+    'agent.execution_ms': executionTimeMs,
+    'agent.within_sla':  executionTimeMs <= 500,
+    'macro.regime':      source.regime.current,
+    'macro.cape':        source.macroData.shillerCAPE,
+    'macro.data_source': source.dataSource,
+  });
+  span.end();
 
   const output: Agent2Output = {
     agentName: 'capitalMarkets',

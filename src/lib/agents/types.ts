@@ -993,6 +993,12 @@ export interface Agent7Output {
    */
   actionableNextSteps: string[];
 
+  /**
+   * True when Gemini failed or timed out and the narrative was generated
+   * deterministically from portfolio data. False when Gemini responded normally.
+   */
+  usedFallback?: boolean;
+
   performance: AgentPerformance;
 }
 
