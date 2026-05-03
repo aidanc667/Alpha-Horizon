@@ -41,7 +41,7 @@ FIXTURES_DIR = pathlib.Path(__file__).parent / "fixtures"
 
 # ── Judge model — Claude via Anthropic (requires ANTHROPIC_API_KEY) ───────────
 JUDGE_MODEL = AnthropicModel(
-    model="claude-3-5-sonnet-latest",
+    model="claude-3-5-haiku-20241022",
     temperature=0,
 )
 
