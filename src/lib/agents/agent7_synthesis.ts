@@ -321,9 +321,10 @@ function buildDeterministicSynthesis(input: SynthesisInput): Agent7Output {
   }
 
   const primaryRisk = riskAnalysis.warnings.length > 0
-    ? riskAnalysis.warnings[0]
-    : `As a ${rf.effectiveRiskTolerance} investor with a ${th.yearsToGoal}-year horizon, the primary risk is a potential ` +
-      `${(stats.maxDrawdownEstimate * 100).toFixed(0)}% drawdown in a severe bear market — stay the course and avoid panic-selling.`;
+    ? `Risk level: ${riskAnalysis.riskLevel}. Primary concern: ${riskAnalysis.warnings[0]}`
+    : `Risk level: ${riskAnalysis.riskLevel}. As a ${rf.effectiveRiskTolerance} investor with a ${th.yearsToGoal}-year horizon, ` +
+      `monitor for potential drawdowns up to ${(stats.maxDrawdownEstimate * 100).toFixed(0)}% in severe market downturns — ` +
+      `appropriate given your ${rf.riskCapacity} risk capacity.`;
 
   const topTwo = portfolio.allocation.slice(0, 2).map(a => a.ticker);
   const accounts = clientProfile.accountStructure.availableAccounts.slice(0, 2);
