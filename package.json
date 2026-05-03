@@ -14,7 +14,7 @@
     "@neondatabase/serverless": "^1.0.2",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/auto-instrumentations-node": "^0.74.0",
-    "@opentelemetry/exporter-otlp-http": "^0.26.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.216.0",
     "@opentelemetry/resources": "^2.7.1",
     "@opentelemetry/sdk-node": "^0.216.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
