@@ -73,7 +73,7 @@ export default function IPSDocumentTab({ ips }: Props) {
     criticScore >= 90 ? '#10b981' : criticScore >= 80 ? '#f59e0b' : '#ef4444';
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div id="ah-print-view" className="max-w-4xl mx-auto">
       {/* Document header */}
       <div className="rounded-xl bg-slate-900 text-white px-8 py-6 mb-6 shadow-sm">
         <div className="flex items-start justify-between">
@@ -105,12 +105,12 @@ export default function IPSDocumentTab({ ips }: Props) {
           </p>
         )}
 
-        {/* Download placeholder */}
+        {/* Download PDF */}
         <div className="mt-4 flex justify-end">
           <button
-            disabled
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 text-slate-400 text-xs font-semibold cursor-not-allowed opacity-60"
-            title="PDF export coming soon"
+            onClick={() => window.print()}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors"
+            title="Download as PDF"
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />

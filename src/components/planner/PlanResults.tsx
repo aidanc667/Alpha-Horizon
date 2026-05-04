@@ -206,11 +206,7 @@ function PortfolioTab({
             color="#10b981"
           />
         </div>
-        {plan.synthesis?.portfolioNarrative && (
-          <p className="text-slate-300 text-xs leading-relaxed border-t border-white/10 pt-3">
-            {plan.synthesis.portfolioNarrative.slice(0, 280)}…
-          </p>
-        )}
+
       </div>
 
       {/* ── Allocation + risk metrics */}
