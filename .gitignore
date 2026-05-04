@@ -29,3 +29,9 @@ Thumbs.db
 next-env.d.ts
 .vercel
 .claude/
+
+# Eval
+eval/.venv/
+eval/__pycache__/
+.deepeval/
+.claire/

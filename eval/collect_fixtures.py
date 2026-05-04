@@ -28,7 +28,7 @@ SCENARIOS: list[dict] = [
             "goal": "financial_independence",
             "goalAmount": 1_000_000,
             "timeHorizon": 4,
-            "startingCapital": 400_000,
+            "startingCapital": 400_001,  # +1 to bust Neon plan cache
             "monthlyContribution": 2_000,
             "financialSnapshot": {"hasEmergencyFund": True, "hasHighInterestDebt": False},
             "filingStatus": "married_filing_jointly",
@@ -47,7 +47,7 @@ SCENARIOS: list[dict] = [
         "answers": {
             "goal": "max_growth",
             "timeHorizon": 30,
-            "startingCapital": 50_000,
+            "startingCapital": 50_001,  # +1 to bust Neon plan cache
             "monthlyContribution": 1_500,
             "financialSnapshot": {"hasEmergencyFund": True, "hasHighInterestDebt": False},
             "filingStatus": "single",
@@ -67,7 +67,7 @@ SCENARIOS: list[dict] = [
             "goal": "financial_independence",
             "goalAmount": 5_000_000,
             "timeHorizon": 18,
-            "startingCapital": 800_000,
+            "startingCapital": 800_001,  # +1 to bust Neon plan cache
             "monthlyContribution": 8_000,
             "financialSnapshot": {"hasEmergencyFund": True, "hasHighInterestDebt": False},
             "filingStatus": "married_filing_jointly",
@@ -87,7 +87,7 @@ SCENARIOS: list[dict] = [
             "goal": "major_purchase",
             "goalAmount": 200_000,
             "timeHorizon": 7,
-            "startingCapital": 30_000,
+            "startingCapital": 30_001,  # +1 to bust Neon plan cache
             "monthlyContribution": 1_000,
             "financialSnapshot": {"hasEmergencyFund": False, "hasHighInterestDebt": False},
             "filingStatus": "single",
@@ -101,25 +101,9 @@ SCENARIOS: list[dict] = [
             "availableAccounts": ["Taxable Brokerage", "Roth IRA"],
         },
     },
-    {
-        "name": "drawdown_phase",
-        "answers": {
-            "goal": "financial_independence",
-            "timeHorizon": 0,  # already in drawdown
-            "startingCapital": 1_200_000,
-            "monthlyContribution": 0,
-            "financialSnapshot": {"hasEmergencyFund": True, "hasHighInterestDebt": False},
-            "filingStatus": "married_filing_jointly",
-            "annualIncome": 60_000,
-            "state": "FL",
-            "age": 68,
-            "existingAccounts": {"traditional": 900_000, "roth": 200_000, "hsa": 0},
-            "riskCapacity": "low",
-            "riskWillingness": "low",
-            "incomeStability": 5,
-            "availableAccounts": ["Taxable Brokerage", "Traditional 401(k)", "Roth IRA"],
-        },
-    },
+    # drawdown_phase (timeHorizon: 0) intentionally hits a hardStop in agent1
+    # ("Client is in drawdown phase") and never produces a plan. Excluded from
+    # fixture collection; covered separately via unit tests if needed.
 ]
 
 
@@ -143,6 +127,7 @@ def collect(scenario: dict) -> None:
         return
 
     plan = None
+    pipeline_error = None
     for line in resp.iter_lines():
         if not line:
             continue
@@ -150,11 +135,20 @@ def collect(scenario: dict) -> None:
             event = json.loads(line)
             if event.get("type") == "plan":
                 plan = event["plan"]
+            elif event.get("type") == "error":
+                pipeline_error = event.get("error", "unknown pipeline error")
         except json.JSONDecodeError:
+            # Non-JSON line means the response is probably HTML (expired auth token)
+            if b"<!DOCTYPE" in line or b"<html" in line:
+                print(f"  [error] {name}: auth token expired — got HTML redirect to sign-in")
+                return
             continue
 
     if plan is None:
-        print(f"  [error] {name}: no plan in response")
+        if pipeline_error:
+            print(f"  [skip] {name}: pipeline blocked — {pipeline_error}")
+        else:
+            print(f"  [error] {name}: no plan in response (check token expiry)")
         return
 
     # Add scenario metadata for traceability

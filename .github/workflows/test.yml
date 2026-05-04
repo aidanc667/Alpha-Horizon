@@ -1,0 +1,39 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Type check ────────────────────────────────────────────────────────────────
+  typecheck:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+
+  # ── Red team tests (no server, no auth needed) ────────────────────────────────
+  red-team:
+    name: Red Team
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Adversarial intake
+        run: npx tsx --tsconfig eval/red_team/tsconfig.json eval/red_team/adversarial_intake.ts
+      - name: Critic gaming
+        run: npx tsx --tsconfig eval/red_team/tsconfig.json eval/red_team/critic_gaming.ts
+      - name: Cache poisoning
+        run: npx tsx --tsconfig eval/red_team/tsconfig.json eval/red_team/cache_poisoning.ts

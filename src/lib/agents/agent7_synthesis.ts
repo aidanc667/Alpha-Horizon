@@ -49,12 +49,6 @@ const SYNTHESIS_SCHEMA = {
         '"High tax bracket — VTEB municipal bonds selected over BND for taxable account." ' +
         '"Aggressive risk profile — 80% equity allocation with small-cap value tilt (AVUV, AVDV)."',
     },
-    primaryRisk: {
-      type: Type.STRING,
-      description:
-        'The single biggest risk to the plan. 1-2 sentences. Specific to this user\'s situation, ' +
-        'not a generic disclaimer. Could be sequence-of-returns risk, concentration, inflation, etc.',
-    },
     actionableNextSteps: {
       type: Type.ARRAY,
       items: { type: Type.STRING },
@@ -65,7 +59,7 @@ const SYNTHESIS_SCHEMA = {
         'compound best inside a tax-free wrapper."',
     },
   },
-  required: ['portfolioNarrative', 'keyInsights', 'primaryRisk', 'actionableNextSteps'],
+  required: ['portfolioNarrative', 'keyInsights', 'actionableNextSteps'],
 };
 
 // ─── Prompt builder ───────────────────────────────────────────────────────────
@@ -240,9 +234,12 @@ export async function agent7_synthesis(input: {
     const parsed = JSON.parse(jsonText) as {
       portfolioNarrative: string;
       keyInsights: string[];
-      primaryRisk: string;
       actionableNextSteps: string[];
     };
+
+    // primaryRisk is always generated deterministically — LLMs hallucinate
+    // specific risk levels and drawdown numbers when given creative latitude.
+    const primaryRisk = buildDeterministicPrimaryRisk(input);
 
     const executionTimeMs = Date.now() - startTime;
     span.setAttributes({
@@ -262,7 +259,7 @@ export async function agent7_synthesis(input: {
       executionTimeMs,
       portfolioNarrative:  parsed.portfolioNarrative,
       keyInsights:         parsed.keyInsights,
-      primaryRisk:         parsed.primaryRisk,
+      primaryRisk,
       actionableNextSteps: parsed.actionableNextSteps,
       performance: {
         targetLatencyMs: 5000,
@@ -280,9 +277,28 @@ export async function agent7_synthesis(input: {
   }
 }
 
-// ─── Deterministic fallback ───────────────────────────────────────────────────
+// ─── Deterministic helpers ────────────────────────────────────────────────────
 
 type SynthesisInput = Parameters<typeof agent7_synthesis>[0];
+
+/**
+ * Always generate primaryRisk deterministically.
+ * LLMs hallucinate specific risk levels, drawdown numbers, and warnings
+ * that contradict the actual portfolio data — so we never ask them.
+ */
+function buildDeterministicPrimaryRisk(input: SynthesisInput): string {
+  const { clientProfile, portfolio, riskAnalysis } = input;
+  const rf  = clientProfile.riskProfile;
+  const th  = clientProfile.timeHorizon;
+  const stats = portfolio.statistics;
+
+  return riskAnalysis.warnings.length > 0
+    ? `Risk level: ${riskAnalysis.riskLevel}. Primary concern: ${riskAnalysis.warnings[0]}`
+    : `Risk level: ${riskAnalysis.riskLevel}. As a ${rf.effectiveRiskTolerance} investor with a ` +
+      `${th.yearsToGoal}-year horizon, monitor for potential drawdowns up to ` +
+      `${(stats.maxDrawdownEstimate * 100).toFixed(0)}% in severe market downturns — ` +
+      `appropriate given your ${rf.riskCapacity} risk capacity.`;
+}
 
 function buildDeterministicSynthesis(input: SynthesisInput): Agent7Output {
   const { clientProfile, portfolio, riskAnalysis, taxOptimization, criticScore } = input;
@@ -320,11 +336,7 @@ function buildDeterministicSynthesis(input: SynthesisInput): Agent7Output {
     keyInsights.push(`Tax optimisation: ${taxOptimization.estimatedAnnualSavings} bps/year in savings identified.`);
   }
 
-  const primaryRisk = riskAnalysis.warnings.length > 0
-    ? `Risk level: ${riskAnalysis.riskLevel}. Primary concern: ${riskAnalysis.warnings[0]}`
-    : `Risk level: ${riskAnalysis.riskLevel}. As a ${rf.effectiveRiskTolerance} investor with a ${th.yearsToGoal}-year horizon, ` +
-      `monitor for potential drawdowns up to ${(stats.maxDrawdownEstimate * 100).toFixed(0)}% in severe market downturns — ` +
-      `appropriate given your ${rf.riskCapacity} risk capacity.`;
+  const primaryRisk = buildDeterministicPrimaryRisk(input);
 
   const topTwo = portfolio.allocation.slice(0, 2).map(a => a.ticker);
   const accounts = clientProfile.accountStructure.availableAccounts.slice(0, 2);

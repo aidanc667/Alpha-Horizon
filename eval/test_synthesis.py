@@ -80,6 +80,7 @@ def build_retrieval_context(plan: dict) -> list[str]:
     m = plan.get("economicIntel", {})
     c = plan.get("criticScore", {})
     cp = plan.get("clientProfile", {})
+    tax_opt = plan.get("taxOptimization", {})
 
     alloc = p.get("allocation", [])
     holdings = ", ".join(
@@ -90,6 +91,7 @@ def build_retrieval_context(plan: dict) -> list[str]:
     profile = cp.get("riskProfile", {})
     horizon = cp.get("timeHorizon", {})
     tax = cp.get("taxProfile", {})
+    goal = cp.get("goalAnalysis", {})
 
     return [
         f"Portfolio holdings: {holdings}",
@@ -107,6 +109,10 @@ def build_retrieval_context(plan: dict) -> list[str]:
         f"Client risk score: {profile.get('riskScore', 0)}/10, "
         f"horizon: {horizon.get('yearsToGoal', 0)} years, "
         f"combined tax rate: {tax.get('combinedMarginalRate', 0) * 100:.0f}%",
+        f"Goal amount: ${goal.get('goalAmount', 0):,.0f}, "
+        f"funded status: {goal.get('fundedStatus', 0) * 100:.0f}%, "
+        f"feasibility: {goal.get('feasibility', 'unknown')}",
+        f"Tax optimization savings: {tax_opt.get('estimatedAnnualSavings', 0)} bps/year",
     ]
 
 
@@ -161,14 +167,20 @@ def test_synthesis_hallucination(scenario: str, plan: dict) -> None:
     if synthesis is None:
         pytest.skip(f"{scenario}: synthesis absent")
 
-    # Use only risk-analysis context — primaryRisk is a focused description of
-    # riskAnalysis.warnings, not a summary of the whole plan. Using the full
-    # context causes the metric to penalise omission of irrelevant fields
-    # (expected return, CAPE, etc.) rather than checking for invented risks.
+    # One combined context string so HallucinationMetric scores the whole output
+    # against all facts as a unit — multiple items cause per-item omission scoring
+    # which penalises a primaryRisk for not repeating every available data point.
     risk = plan.get("riskAnalysis", {})
+    stats = plan.get("portfolio", {}).get("statistics", {})
+    profile = plan.get("clientProfile", {}).get("riskProfile", {})
+    warnings_str = "; ".join(risk.get("warnings", [])) or "None"
     risk_context = [
-        f"Risk level: {risk.get('riskLevel', 'unknown')}",
-        f"Warnings: {'; '.join(risk.get('warnings', []))}",
+        f"Risk level: {risk.get('riskLevel', 'unknown')}. "
+        f"Warnings: {warnings_str}. "
+        f"Max drawdown estimate: {stats.get('maxDrawdownEstimate', 0) * 100:.0f}%. "
+        f"Client effective risk tolerance: {profile.get('effectiveRiskTolerance', 'unknown')} "
+        f"(risk score {profile.get('riskScore', 0)}/10, "
+        f"capacity {profile.get('riskCapacity', 'unknown')})."
     ]
     test_case = LLMTestCase(
         input="Describe the primary risk",
