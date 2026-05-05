@@ -16,7 +16,7 @@
  * omits the ips field from the V3Plan and emits no 'ips' stream event.
  */
 
-import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import { ETF_BY_TICKER } from '@/lib/data/etfUniverse';
 
@@ -452,7 +452,6 @@ export async function agentIPS(input: {
         contents: buildPrompt(input),
         config: {
           temperature: 0.2,
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           responseMimeType: 'application/json',
           responseSchema: NARRATIVE_SCHEMA,
         },

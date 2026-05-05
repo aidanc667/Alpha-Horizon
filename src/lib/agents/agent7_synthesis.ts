@@ -13,7 +13,7 @@
  * a synthesis field — all other sections still work normally.
  */
 
-import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 import { trace, SpanStatusCode } from '@opentelemetry/api';
 import type {
   Agent1Output,
@@ -213,7 +213,6 @@ export async function agent7_synthesis(input: {
         contents: prompt,
         config: {
           temperature: 0.4,
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           responseMimeType: 'application/json',
           responseSchema: SYNTHESIS_SCHEMA,
         },

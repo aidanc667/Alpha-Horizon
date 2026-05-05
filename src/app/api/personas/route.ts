@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
-import { GoogleGenAI, ThinkingLevel } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 import type { PersonaHolding, BenchmarkComponent } from '@/types';
 
 // Composite benchmark definitions (ticker → [{ ticker, weight }])
@@ -55,7 +55,7 @@ The thesis should explain why this allocation suits the risk profile and current
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash',
     contents: prompt,
-    config: { temperature: 0.4, thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } },
+    config: { temperature: 0.4 },
   });
   return response.text?.trim() || `${name} uses a ${riskScore}/10 risk-scored allocation benchmarked against ${benchmark}.`;
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 import { auth } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
 import { checkRateLimit } from '@/lib/rateLimit';
@@ -184,7 +184,6 @@ export async function POST(req: NextRequest) {
         model,
         contents: prompt,
         config: {
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           tools: [{ googleSearch: {} }],
           responseMimeType: 'application/json',
           responseSchema: {
@@ -369,7 +368,6 @@ export async function POST(req: NextRequest) {
         model,
         contents: prompt,
         config: {
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           tools: [{ googleSearch: {} }],
           responseMimeType: 'application/json',
           responseSchema: {
@@ -568,7 +566,6 @@ export async function POST(req: NextRequest) {
         model,
         contents: prompt,
         config: {
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           tools: [{ googleSearch: {} }],
           responseMimeType: 'application/json',
           responseSchema: {
@@ -748,7 +745,6 @@ export async function POST(req: NextRequest) {
       const chat = ai.chats.create({
         model,
         config: {
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           tools: [{ googleSearch: {} }],
           systemInstruction: `
         You are a Senior Investment Analyst and Portfolio Manager at a top-tier institutional asset management firm.
@@ -845,7 +841,6 @@ Summary: ${liveContext.summary}
       const chat = ai.chats.create({
         model,
         config: {
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           tools: [{ googleSearch: {} }],
           systemInstruction: `
 You are an elite investment advisor — the best in the world. You combine Goldman Sachs macro strategy depth with quantitative portfolio precision and the clarity of the world's best communicator.
@@ -925,7 +920,6 @@ IMPORTANT: suggestedWeights MUST sum to exactly 100.
         model,
         contents: prompt,
         config: {
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           tools: [{ googleSearch: {} }],
           responseMimeType: 'application/json',
           responseSchema: {
@@ -1012,7 +1006,6 @@ CRITICAL: allocation weights MUST sum to exactly 100.
         model,
         contents: prompt,
         config: {
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           tools: [{ googleSearch: {} }],
           responseMimeType: 'application/json',
           responseSchema: {
@@ -1132,7 +1125,6 @@ Return a strategic allocation with a 2-sentence rationale per holding explaining
         contents: prompt,
         config: {
           temperature: 0,  // Deterministic — same inputs → same allocation today/tomorrow/yesterday
-          thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL }, // Minimal thinking — faster + prevents JSON parse errors
           responseMimeType: 'application/json',
           responseSchema: {
             type: Type.OBJECT,
@@ -1227,7 +1219,6 @@ Scoring rules:
             model,
             contents: accuracyPrompt,
             config: {
-              thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
               temperature: 0.3,
             },
           });
@@ -1281,7 +1272,6 @@ Rules:
             model,
             contents: predPrompt,
             config: {
-              thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
               tools: [{ googleSearch: {} }],
               temperature: 0.3,
             },
@@ -1404,7 +1394,6 @@ Rules:
             model,
             contents: livePrompt,
             config: {
-              thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
               tools: [{ googleSearch: {} }],
               temperature: 0.3,
             },

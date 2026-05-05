@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
-import { GoogleGenAI, ThinkingLevel } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 import type { PersonaHolding, PersonaSnapshotHolding } from '@/types';
 
 function getApiKey() {
@@ -105,7 +105,6 @@ Signal rules:
       contents: prompt,
       config: {
         temperature: 0.5,
-        thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
         tools: [{ googleSearch: {} }],
       },
     });

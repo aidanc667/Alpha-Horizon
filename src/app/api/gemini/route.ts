@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 import { auth } from '@clerk/nextjs/server';
 import { CURATED_ASSETS } from '@/lib/assets';
 import { BUCKET_RATES } from '@/lib/constants';
@@ -52,7 +52,6 @@ export async function POST(req: NextRequest) {
         contents: dataPrompt,
         config: {
           temperature: 0,
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           responseMimeType: 'application/json',
           responseSchema: getPlanSchema(),
         },
@@ -77,7 +76,6 @@ export async function POST(req: NextRequest) {
         contents: prompt,
         config: {
           temperature: 0,
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           responseMimeType: 'application/json',
           responseSchema: getTaxEnrichmentSchema(),
         },
@@ -122,7 +120,6 @@ export async function POST(req: NextRequest) {
               contents: prompt,
               config: {
                 temperature: 0.4,
-                thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
                 tools: [{ googleSearch: {} }],
               },
             });
