@@ -3,7 +3,9 @@ import { GoogleGenAI, Type } from '@google/genai';
 import { auth } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
 import { checkRateLimit } from '@/lib/rateLimit';
-import yahooFinance from 'yahoo-finance2';
+import YahooFinanceCls from 'yahoo-finance2';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const yahooFinance = new (YahooFinanceCls as any)();
 
 // ─── Server-side response cache ───────────────────────────────────────────────
 interface CacheEntry { data: unknown; ts: number }

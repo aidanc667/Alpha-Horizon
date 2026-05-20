@@ -27,7 +27,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const activeTab = view === 'home' ? null : view;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50">
+    <div className="flex h-screen overflow-hidden bg-[#eef0f3]">
       {/* Sidebar */}
       <Sidebar
         activeTab={activeTab as ActiveTab}
@@ -36,7 +36,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       />
 
       {/* Main content area */}
-      <main className="flex-1 overflow-y-auto bg-slate-50">
+      <main className="flex-1 overflow-y-auto bg-[#eef0f3]">
         {view === 'home' ? (
           <HomeLanding onNavigate={(tab) => setView(tab)} />
         ) : view === 'market-home' ? (

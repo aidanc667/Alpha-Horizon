@@ -17,7 +17,7 @@ export default function MarketTab({ initialView = 'home', onBack, onNavigate }: 
   return (
     <div
       className="h-full overflow-y-auto"
-      style={{ background: 'linear-gradient(135deg, #050a14 0%, #0a0f1e 50%, #0d1117 100%)' }}
+      style={{ background: 'linear-gradient(135deg, #0a0d12 0%, #0f1419 40%, #141d27 100%)' }}
     >
       <div className="max-w-4xl mx-auto px-6 py-16 space-y-12">
 
@@ -25,12 +25,12 @@ export default function MarketTab({ initialView = 'home', onBack, onNavigate }: 
         <div className="text-center space-y-4">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-500/15 border border-purple-500/30 rounded-full mb-2">
             <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
-            <span className="text-purple-300 text-xs font-semibold tracking-wide uppercase">Live Intelligence</span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-purple-300">Live Intelligence</span>
           </div>
-          <h1 className="text-4xl font-bold text-white tracking-tight">
-            Current Market Analysis
+          <h1 className="font-brand font-extrabold text-white tracking-[-0.02em] leading-none" style={{ fontSize: '2.75rem' }}>
+            MARKET ANALYSIS
           </h1>
-          <p className="text-slate-400 text-lg max-w-xl mx-auto leading-relaxed">
+          <p className="text-slate-400 text-[14px] leading-[1.65] max-w-xl mx-auto" style={{ color: 'rgba(241,244,248,0.5)' }}>
             A daily intelligence loop — live briefings, noon-locked predictions, and an AI accuracy ledger that learns from every miss.
           </p>
         </div>
@@ -94,7 +94,7 @@ export default function MarketTab({ initialView = 'home', onBack, onNavigate }: 
 
         {/* How it works strip */}
         <div className="bg-white/3 border border-white/8 rounded-2xl p-6">
-          <p className="text-slate-500 text-xs font-semibold uppercase tracking-widest mb-5">How It Works</p>
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] mb-5" style={{ color: 'rgba(241,244,248,0.3)' }}>How It Works</p>
           <div className="flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-0">
             {[
               { step: '① Today', desc: 'Live brief: 5 What/Why/Impact bullets, Elite 6, Edge Board, weather gauge', color: 'text-amber-400' },

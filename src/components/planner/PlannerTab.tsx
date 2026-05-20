@@ -353,7 +353,7 @@ export default function PlannerTab() {
         {view === 'welcome' && (
           <div
             className="flex flex-col animate-fade-in -mx-6 -mt-6 min-h-full"
-            style={{ background: 'linear-gradient(160deg, #060b16 0%, #0a0f1e 60%, #0d1117 100%)' }}
+            style={{ background: 'linear-gradient(135deg, #0a0d12 0%, #0f1419 40%, #141d27 100%)' }}
           >
             {/* Depth orbs */}
             <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ background: 'radial-gradient(ellipse 60% 40% at 15% 20%, rgba(6,182,212,0.05) 0%, transparent 70%)' }} />
@@ -362,24 +362,21 @@ export default function PlannerTab() {
             {/* Hero */}
             <div className="relative px-8 pt-12 pb-10 text-center">
               <div className="relative z-10 max-w-2xl mx-auto space-y-4">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-semibold uppercase tracking-widest mb-2"
-                  style={{ background: 'rgba(6,182,212,0.1)', borderColor: 'rgba(6,182,212,0.25)', color: '#06b6d4' }}>
-                  <Sparkles className="w-3 h-3" />
-                  6 AI Agents · Tax-Optimized · Institutional Grade
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border mb-2"
+                  style={{ background: 'rgba(6,182,212,0.1)', borderColor: 'rgba(6,182,212,0.25)' }}>
+                  <Sparkles className="w-3 h-3" style={{ color: '#06b6d4' }} />
+                  <span className="font-mono text-[10px] uppercase tracking-[0.18em]" style={{ color: '#06b6d4' }}>6 AI Agents · Tax-Optimized · Institutional Grade</span>
                 </div>
-                <h1 style={{
+                <h1 className="font-brand font-extrabold text-white tracking-[-0.02em] leading-none" style={{
                   fontSize: '3.25rem',
-                  fontWeight: 900,
-                  letterSpacing: '-0.03em',
-                  lineHeight: 1.1,
                   background: 'linear-gradient(135deg, #ffffff 30%, #67e8f9 100%)',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent',
                   backgroundClip: 'text',
                 }}>
-                  AI Financial Planner
+                  AI FINANCIAL PLANNER
                 </h1>
-                <p className="text-slate-400 text-sm leading-relaxed max-w-lg mx-auto">
+                <p className="text-[14px] leading-[1.65] max-w-lg mx-auto" style={{ color: 'rgba(241,244,248,0.5)' }}>
                   Six specialized agents. One institutional-grade portfolio — built, stress-tested, and refined around your goals.
                 </p>
                 <div className="flex items-center justify-center gap-8 pt-2">
@@ -391,7 +388,7 @@ export default function PlannerTab() {
                   ].map((s) => (
                     <div key={s.label} className="text-center">
                       <p className="text-xl font-black font-mono" style={{ color: '#06b6d4' }}>{s.value}</p>
-                      <p className="text-xs text-slate-500 uppercase tracking-wider">{s.label}</p>
+                      <p className="font-mono text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(241,244,248,0.35)' }}>{s.label}</p>
                     </div>
                   ))}
                 </div>

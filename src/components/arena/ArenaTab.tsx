@@ -105,7 +105,7 @@ export default function ArenaTab() {
   ];
 
   return (
-    <div className="min-h-full" style={{ background: 'linear-gradient(135deg, #0a0f1e 0%, #0f172a 50%, #111827 100%)' }}>
+    <div className="min-h-full" style={{ background: 'linear-gradient(135deg, #0a0d12 0%, #0f1419 40%, #141d27 100%)' }}>
       <div className="max-w-7xl mx-auto px-6 py-6">
 
         {/* Header */}
@@ -115,8 +115,8 @@ export default function ArenaTab() {
               <Swords className="w-6 h-6 text-amber-400" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-white">Strategy Arena</h1>
-              <p className="text-slate-400 text-sm">Paper trade with real market prices · Compare strategies vs benchmarks</p>
+              <h1 className="font-brand font-extrabold text-white tracking-[-0.02em] leading-none" style={{ fontSize: '1.75rem' }}>STRATEGY ARENA</h1>
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] mt-1" style={{ color: 'rgba(241,244,248,0.4)' }}>Paper trade · Real prices · Benchmark comparison</p>
             </div>
           </div>
           <button

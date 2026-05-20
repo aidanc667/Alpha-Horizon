@@ -2,15 +2,13 @@
 
 import React from 'react';
 import Image from 'next/image';
-import clsx from 'clsx';
 import {
   ShieldCheck,
   FlaskConical,
-  ChevronRight,
   Globe,
-  LogOut,
   Brain,
   Swords,
+  LogOut,
 } from 'lucide-react';
 import { useClerk } from '@clerk/nextjs';
 import type { ActiveTab } from '@/types';
@@ -25,62 +23,37 @@ const NAV_ITEMS = [
   {
     id: 'planner' as ActiveTab,
     label: 'AI Financial Planner',
-    sublabel: 'AI Portfolio Architect',
     icon: ShieldCheck,
-    dotColor: 'bg-emerald-400',
-    activeBg: 'bg-emerald-500/20',
-    activeBorder: 'border-emerald-500/40',
-    activeText: 'text-emerald-300',
-    activeIcon: 'text-emerald-400',
-    hoverBg: 'hover:bg-white/8',
+    accentHex: '#0d9e60',
+    softHex: '#d8f3e6',
   },
   {
     id: 'lab' as ActiveTab,
     label: 'Portfolio Growth Lab',
-    sublabel: 'Advanced Backtesting',
     icon: FlaskConical,
-    dotColor: 'bg-blue-400',
-    activeBg: 'bg-blue-500/20',
-    activeBorder: 'border-blue-500/40',
-    activeText: 'text-blue-300',
-    activeIcon: 'text-blue-400',
-    hoverBg: 'hover:bg-white/8',
+    accentHex: '#2563eb',
+    softHex: '#dbe7fb',
   },
   {
     id: 'market-home' as ActiveTab,
-    label: 'Current Market Analysis',
-    sublabel: 'Daily Intelligence System',
+    label: 'Market Analysis',
     icon: Globe,
-    dotColor: 'bg-purple-400',
-    activeBg: 'bg-purple-500/20',
-    activeBorder: 'border-purple-500/40',
-    activeText: 'text-purple-300',
-    activeIcon: 'text-purple-400',
-    hoverBg: 'hover:bg-white/8',
+    accentHex: '#7c3aed',
+    softHex: '#e6dcfb',
   },
   {
     id: 'advisor' as ActiveTab,
     label: 'Silas',
-    sublabel: 'Expert Wealth Advisor',
     icon: Brain,
-    dotColor: 'bg-orange-400',
-    activeBg: 'bg-orange-500/20',
-    activeBorder: 'border-orange-500/40',
-    activeText: 'text-orange-300',
-    activeIcon: 'text-orange-400',
-    hoverBg: 'hover:bg-white/8',
+    accentHex: '#d97706',
+    softHex: '#fbe7c8',
   },
   {
     id: 'arena' as ActiveTab,
     label: 'Strategy Arena',
-    sublabel: 'Paper Trading Simulator',
     icon: Swords,
-    dotColor: 'bg-amber-400',
-    activeBg: 'bg-amber-500/20',
-    activeBorder: 'border-amber-500/40',
-    activeText: 'text-amber-300',
-    activeIcon: 'text-amber-400',
-    hoverBg: 'hover:bg-white/8',
+    accentHex: '#b45309',
+    softHex: '#f5e0c8',
   },
 ] as const;
 
@@ -92,93 +65,67 @@ export default function Sidebar({ activeTab, onTabChange, onHome }: SidebarProps
     await signOut();
     window.location.href = '/sign-in';
   };
+
   return (
-    <aside
-      className="w-64 flex-shrink-0 flex flex-col h-full"
-      style={{
-        background: 'linear-gradient(180deg, #0f172a 0%, #1a2744 60%, #1e293b 100%)',
-        borderRight: '1px solid rgba(255,255,255,0.06)',
-      }}
-    >
-      {/* Logo — click to go home */}
+    <aside className="w-56 flex-shrink-0 h-full bg-white flex flex-col border-r border-[rgba(15,20,25,0.06)]">
+      {/* Brand row */}
       <button
         onClick={onHome}
-        className="px-5 py-5 text-left w-full transition-all hover:bg-white/5"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.07)' }}
+        className="px-[18px] py-5 flex items-center gap-[11px] w-full text-left border-b border-[rgba(15,20,25,0.06)] hover:bg-[#f4f6f8] transition-colors"
       >
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 flex-shrink-0">
-            <Image src="/logo.png" alt="Alpha Horizon" width={40} height={40} className="w-full h-full object-contain" />
-          </div>
-          <div>
-            <p className="font-brand text-sm font-extrabold tracking-widest text-white uppercase">Alpha Horizon</p>
-            <p className="text-[11px] text-slate-400 tracking-wide uppercase">AI Finance App</p>
-          </div>
+        <Image src="/logo.png" alt="Alpha Horizon" width={34} height={34} className="object-contain flex-shrink-0" />
+        <div>
+          <div className="font-brand text-[11px] font-extrabold text-[#0f1419] tracking-[0.22em]">ALPHA HORIZON</div>
+          <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-[#6a7480] mt-0.5">AI Finance Terminal</div>
         </div>
       </button>
 
-      {/* Nav */}
-      <nav className="flex-1 p-3 space-y-1 overflow-y-auto min-h-0">
-        <p className="px-3 pt-3 pb-2 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-          Apps
-        </p>
-
+      {/* APPS section */}
+      <div className="px-[18px] pt-4 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#9aa3ad]">Apps</div>
+      <nav className="px-2.5 flex flex-col gap-0.5">
         {NAV_ITEMS.map((item) => {
           const isActive =
             activeTab !== null &&
             (activeTab === item.id ||
               (item.id === 'market-home' &&
-                (activeTab === 'market-long' || activeTab === 'market-near' || activeTab === 'market-home')));
+                (activeTab === 'market-long' || activeTab === 'market-near')));
           const Icon = item.icon;
 
           return (
             <button
               key={item.id}
               onClick={() => onTabChange(item.id)}
-              className={clsx(
-                'w-full flex items-center gap-3 px-3 py-3 rounded-xl border transition-all duration-200 text-left group',
-                isActive
-                  ? `${item.activeBg} ${item.activeBorder}`
-                  : `border-transparent ${item.hoverBg}`
-              )}
+              className="relative flex items-center gap-2.5 px-2.5 py-2 rounded-lg w-full text-left transition-colors hover:bg-[#f4f6f8]"
+              style={isActive ? { background: '#f4f6f8' } : undefined}
             >
-              {/* Icon */}
-              <div className={clsx(
-                'w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors',
-                isActive ? item.activeBg : 'bg-white/10'
-              )}>
-                <Icon className={clsx('w-4 h-4 transition-colors', isActive ? item.activeIcon : 'text-slate-400')} />
-              </div>
-
-              {/* Label */}
-              <div className="flex-1 min-w-0">
-                <p className={clsx('text-[11px] font-semibold truncate transition-colors leading-tight', isActive ? item.activeText : 'text-slate-300 group-hover:text-white')}>
-                  {item.label}
-                </p>
-                <p className="text-[10px] text-slate-500 truncate">{item.sublabel}</p>
-              </div>
-
-              {/* Chevron / Active dot */}
-              {isActive ? (
-                <div className={clsx('w-1.5 h-1.5 rounded-full flex-shrink-0', item.dotColor)} />
-              ) : (
-                <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 flex-shrink-0 transition-colors" />
+              {isActive && (
+                <span
+                  className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-full"
+                  style={{ background: item.accentHex }}
+                />
               )}
+              <div
+                className="w-[26px] h-[26px] rounded-[7px] flex items-center justify-center flex-shrink-0"
+                style={{ background: item.softHex, color: item.accentHex }}
+              >
+                <Icon className="w-[14px] h-[14px]" strokeWidth={1.6} />
+              </div>
+              <span className="text-[13px] font-medium text-[#1a2330] flex-1 truncate">{item.label}</span>
             </button>
           );
         })}
       </nav>
 
-      {/* Logout */}
-      <div className="p-3" style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+      <div className="flex-1" />
+
+      {/* Sign out */}
+      <div className="p-3 border-t border-[rgba(15,20,25,0.06)]">
         <button
           onClick={handleSignOut}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-transparent hover:bg-white/8 transition-all duration-200 group"
+          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left hover:bg-[#fee2e2] group transition-colors"
         >
-          <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center flex-shrink-0">
-            <LogOut className="w-4 h-4 text-slate-400 group-hover:text-red-400 transition-colors" />
-          </div>
-          <span className="text-xs font-semibold text-slate-400 group-hover:text-red-400 transition-colors">Sign Out</span>
+          <LogOut className="w-[14px] h-[14px] text-[#9aa3ad] group-hover:text-[#dc2626] flex-shrink-0 transition-colors" strokeWidth={1.6} />
+          <span className="text-[13px] text-[#6a7480] group-hover:text-[#dc2626] transition-colors">Sign out</span>
         </button>
       </div>
     </aside>
