@@ -72,11 +72,26 @@ export async function runSilasMigration() {
   await sql`CREATE INDEX IF NOT EXISTS silas_messages_created_at_idx ON silas_messages(user_id, created_at)`;
 }
 
+export async function runWatchlistMigration() {
+  const sql = getDb();
+  await sql`
+    CREATE TABLE IF NOT EXISTS silas_watchlist (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id TEXT NOT NULL,
+      ticker TEXT NOT NULL,
+      added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(user_id, ticker)
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS silas_watchlist_user_id_idx ON silas_watchlist(user_id)`;
+}
+
 /** Run once on first deploy to create tables. Called from instrumentation.ts on startup. */
 export async function runMigrations() {
   await runMacroCacheMigration();
   await runPlanCacheMigration();
   await runSilasMigration();
+  await runWatchlistMigration();
   // Feature-specific migrations — consolidated here so instrumentation.ts is the single entry point
   await runArenaMigrations();
   await runMarketMigrations();
