@@ -61,7 +61,7 @@ const NAV_ITEMS = [
   {
     id: 'advisor' as ActiveTab,
     label: 'Silas',
-    sublabel: 'AI Market Advisor',
+    sublabel: 'Expert Wealth Advisor',
     icon: Brain,
     dotColor: 'bg-orange-400',
     activeBg: 'bg-orange-500/20',

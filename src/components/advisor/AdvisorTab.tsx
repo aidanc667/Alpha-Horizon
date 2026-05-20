@@ -3,8 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Brain, MessageSquare, PieChart, Zap, GitCompare, Star,
-  Plus, Trash2, Send, Loader2, Activity, CheckCircle,
-  AlertTriangle,
+  Plus, Trash2, Send, Loader2, Activity, AlertTriangle,
 } from 'lucide-react';
 import clsx from 'clsx';
 import type { NearTermIntelligence, LiveBriefing } from '@/types/market';
@@ -344,27 +343,11 @@ export default function AdvisorTab() {
             </div>
             <div>
               <h1 className="text-lg font-bold text-zinc-900 leading-tight">Silas</h1>
-              <p className="text-xs text-zinc-500">Real-time market-grounded AI advisor</p>
+              <p className="text-xs text-zinc-500">Expert Wealth Advisor</p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Context status pill */}
-            <div className={clsx(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border',
-              contextStatus === 'ready'   ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-              contextStatus === 'partial' ? 'bg-amber-50  text-amber-700  border-amber-200'  :
-              contextStatus === 'loading' ? 'bg-blue-50   text-blue-700   border-blue-200'   :
-                                           'bg-zinc-100  text-zinc-500   border-zinc-200'
-            )}>
-              {contextStatus === 'loading' ? <Loader2 className="w-3 h-3 animate-spin" /> :
-               contextStatus === 'ready'   ? <CheckCircle className="w-3 h-3" /> :
-                                             <AlertTriangle className="w-3 h-3" />}
-              {contextStatus === 'loading' ? 'Loading market context...' :
-               contextStatus === 'ready'   ? 'Market context ready' :
-               contextStatus === 'partial' ? 'Partial context' : 'Context unavailable'}
-            </div>
-
             {/* Clear history */}
             {messages.length > 0 && (
               <button
