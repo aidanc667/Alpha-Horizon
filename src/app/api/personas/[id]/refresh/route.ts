@@ -24,11 +24,12 @@ async function fetchPrice(ticker: string): Promise<{ price: number; todayChangeP
   const result = json.chart?.result?.[0];
   const meta = result?.meta;
   const price: number = meta?.regularMarketPrice ?? 0;
-  // marketState 'REGULAR' = market is open and trading. Anything else = closed/pre/post.
   const isMarketOpen = meta?.marketState === 'REGULAR';
   const prevClose: number = meta?.chartPreviousClose ?? meta?.previousClose ?? price;
-  // Only show today's change when market is actively open — avoids showing yesterday's move
-  const todayChangePct = isMarketOpen && prevClose > 0 ? (price / prevClose) - 1 : 0;
+  // Zero out today's change only in pre-market (market hasn't moved yet for today's regular session).
+  // Post-market and closed states still reflect today's completed regular-session return.
+  const isPreMarket = meta?.marketState === 'PRE' || meta?.marketState === 'PREPRE';
+  const todayChangePct = !isPreMarket && prevClose > 0 ? (price / prevClose) - 1 : 0;
   return { price, todayChangePct, isMarketOpen };
 }
 

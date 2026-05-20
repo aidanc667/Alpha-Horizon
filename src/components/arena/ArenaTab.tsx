@@ -23,12 +23,25 @@ export default function ArenaTab() {
   const [sortBy, setSortBy] = useState<SortBy>('newest');
   const [migrated, setMigrated] = useState(false);
 
-  const loadPersonas = useCallback(async () => {
+  const loadPersonas = useCallback(async (silentRefresh = false) => {
     try {
       const res = await fetch('/api/personas');
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      setPersonas(data.personas || []);
+      const loaded: PersonaWithSnapshot[] = data.personas || [];
+      setPersonas(loaded);
+
+      if (silentRefresh && loaded.length > 0) {
+        // Refresh all personas in parallel for live today% — fire-and-forget, update cards when done
+        Promise.all(
+          loaded.map(p => fetch(`/api/personas/${p.id}/refresh`, { method: 'POST' }).catch(() => null))
+        ).then(() =>
+          fetch('/api/personas')
+            .then(r => r.json())
+            .then(d => { if (d.personas) setPersonas(d.personas); })
+            .catch(() => null)
+        );
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load personas');
     } finally {
@@ -41,8 +54,8 @@ export default function ArenaTab() {
     if (migrated) return;
     setMigrated(true);
     fetch('/api/arena/migrate', { method: 'POST' })
-      .then(() => loadPersonas())
-      .catch(() => loadPersonas());
+      .then(() => loadPersonas(true))
+      .catch(() => loadPersonas(true));
   }, [migrated, loadPersonas]);
 
   const handleDelete = async (id: string) => {
