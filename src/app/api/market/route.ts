@@ -782,7 +782,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, data: response.text || "I'm sorry, I couldn't generate a response." });
     }
 
-    // ── polygonTicker — single ticker lookup for Portfolio Analyzer ───────────
+    // ── polygonTicker — single ticker lookup (watchlist + portfolio analyzer) ───
     if (action === 'polygonTicker') {
       const { ticker } = body;
       if (!ticker || typeof ticker !== 'string') {
@@ -794,20 +794,18 @@ export async function POST(req: NextRequest) {
       const clean = ticker.toUpperCase().replace(/[^A-Z0-9.^=-]/g, '').slice(0, 10);
       const res = await fetch(
         `https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/${clean}?apiKey=${polygonKey}`,
-        { next: { revalidate: 60 } }
+        { cache: 'no-store' }
       );
       if (!res.ok) return NextResponse.json({ error: `Polygon error ${res.status}` }, { status: res.status });
       const data = await res.json();
       const t = data.ticker;
       if (!t) return NextResponse.json({ error: 'Ticker not found' }, { status: 404 });
+      // Use lastTrade for most current price, fall back through day close → prev day close
+      const price = t.lastTrade?.p || t.day?.c || t.prevDay?.c || null;
+      const changePct = t.todaysChangePerc ?? null;
       return NextResponse.json({
         success: true,
-        data: {
-          ticker: t.ticker,
-          price: t.day?.c ?? t.prevDay?.c ?? null,
-          changePct: t.todaysChangePerc ?? null,
-          name: t.ticker,
-        },
+        data: { ticker: t.ticker, price, changePct, name: t.ticker },
       });
     }
 
@@ -915,6 +913,42 @@ AUTHORITATIVE MARKET STANCE (all recommendations must align with this — no con
     if (action === 'advisorChat') {
       const { history, nearTermContext, liveContext, polygonCtx, sessionCtx } = body;
 
+      // On-demand live price fetch: extract tickers mentioned in the user message,
+      // fetch any not already in polygonCtx, inject fresh prices into the system prompt
+      const STOP_WORDS = new Set(['I','A','AM','PM','AI','BE','MY','WE','US','DO','GO','IF','VS','SO','NO','UP','EM',
+        'THE','AND','AND','FOR','NOT','ARE','WAS','HAS','HAD','CAN','DID','GET','GOT','LET','PUT',
+        'CPI','NFP','GDP','YOY','QOQ','YTD','ETF','IPO','FED','SEC','NOW','NEW','OLD','BIG','ALL','ANY','TOP','OUT','OFF']);
+      const lastUserMsg: string = (history as Array<{ role: string; text: string }>)[history.length - 1]?.text || '';
+      const mentionedTickers = [...new Set((lastUserMsg.match(/\b[A-Z]{2,5}\b/g) || [])
+        .filter(t => !STOP_WORDS.has(t) && !((polygonCtx?.prices || {})[t])))]
+        .slice(0, 6);
+
+      let liveTickerContext = '';
+      const polygonKey = process.env.POLYGON_API_KEY;
+      if (mentionedTickers.length > 0 && polygonKey) {
+        const results = await Promise.allSettled(
+          mentionedTickers.map(ticker =>
+            fetch(`https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/${ticker}?apiKey=${polygonKey}`, { cache: 'no-store' })
+              .then(r => r.json())
+          )
+        );
+        const fetched: string[] = [];
+        for (let i = 0; i < results.length; i++) {
+          const r = results[i];
+          if (r.status === 'fulfilled') {
+            const t = r.value?.ticker;
+            if (t) {
+              const price = t.lastTrade?.p || t.day?.c || t.prevDay?.c;
+              const chg = t.todaysChangePerc;
+              if (price) fetched.push(`${mentionedTickers[i]} $${Number(price).toFixed(2)} (${chg != null ? (chg >= 0 ? '+' : '') + Number(chg).toFixed(2) + '%' : 'n/a'} today)`);
+            }
+          }
+        }
+        if (fetched.length) {
+          liveTickerContext = `\nLIVE PRICES FETCHED NOW FOR THIS QUERY (Polygon.io, real-time — use these, not training data):\n${fetched.join(' | ')}\n`;
+        }
+      }
+
       const macroSummary = nearTermContext ? `
 LIVE MARKET CONTEXT (${getCurrentDate()}):
 - Regime: ${nearTermContext.marketSnapshot?.regime || 'Unknown'} | Sentiment: ${nearTermContext.marketSnapshot?.sentiment || 'Unknown'}
@@ -962,6 +996,7 @@ You have been loaded with real-time market intelligence below. Treat it as groun
 
 ${macroSummary}
 ${polygonSummary}
+${liveTickerContext}
 ${liveSummary}
 ${buildMarketStance(nearTermContext)}
 ${buildSessionBlock(sessionCtx)}

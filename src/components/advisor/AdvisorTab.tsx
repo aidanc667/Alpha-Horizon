@@ -609,19 +609,20 @@ function PortfolioBuilderPanel({
 
   return (
     <div className="flex-shrink-0 border-b border-zinc-200 px-6 py-4 bg-zinc-50">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <PieChart className="w-4 h-4 text-orange-500" />
-          <span className="text-sm font-bold text-zinc-900">Portfolio Holdings</span>
-          {totalValue > 0 && (
-            <span className="text-xs text-zinc-500 font-medium">
-              Total: ${totalValue.toLocaleString()}
-            </span>
-          )}
+      <div className="mb-3">
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2">
+            <PieChart className="w-4 h-4 text-orange-500" />
+            <span className="text-sm font-bold text-zinc-900">Portfolio Analyzer</span>
+            {totalValue > 0 && (
+              <span className="text-xs text-zinc-500 font-medium">Total: ${totalValue.toLocaleString()}</span>
+            )}
+          </div>
+          <button onClick={addRow} className="flex items-center gap-1 text-xs font-semibold text-orange-600 hover:text-orange-700 transition-colors">
+            <Plus className="w-3.5 h-3.5" /> Add Asset
+          </button>
         </div>
-        <button onClick={addRow} className="flex items-center gap-1 text-xs font-semibold text-orange-600 hover:text-orange-700 transition-colors">
-          <Plus className="w-3.5 h-3.5" /> Add Asset
-        </button>
+        <p className="text-xs text-zinc-500 leading-relaxed">Enter your holdings and get a macro alignment score, concentration risks, tax placement efficiency, and specific improvement suggestions.</p>
       </div>
 
       <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
@@ -691,9 +692,12 @@ function ThesisPanel({ thesis, setThesis, onStressTest, loading }: {
 }) {
   return (
     <div className="flex-shrink-0 border-b border-zinc-200 px-6 py-4 bg-zinc-50">
-      <div className="flex items-center gap-2 mb-2">
-        <Zap className="w-4 h-4 text-orange-500" />
-        <span className="text-sm font-bold text-zinc-900">Investment Thesis</span>
+      <div className="mb-2">
+        <div className="flex items-center gap-2 mb-1">
+          <Zap className="w-4 h-4 text-orange-500" />
+          <span className="text-sm font-bold text-zinc-900">Stress Test</span>
+        </div>
+        <p className="text-xs text-zinc-500 leading-relaxed">Describe an investment thesis and Silas will stress-test it against current macro conditions — what kills it, what confirms it, and a probability-weighted verdict.</p>
       </div>
       <textarea
         value={thesis}
@@ -729,16 +733,19 @@ function ComparePanel({ items, setItems, onCompare, loading }: {
 
   return (
     <div className="flex-shrink-0 border-b border-zinc-200 px-6 py-4 bg-zinc-50">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <GitCompare className="w-4 h-4 text-orange-500" />
-          <span className="text-sm font-bold text-zinc-900">Compare Assets</span>
+      <div className="mb-3">
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2">
+            <GitCompare className="w-4 h-4 text-orange-500" />
+            <span className="text-sm font-bold text-zinc-900">Compare Assets</span>
+          </div>
+          {items.length < 5 && (
+            <button onClick={addItem} className="flex items-center gap-1 text-xs font-semibold text-orange-600 hover:text-orange-700 transition-colors">
+              <Plus className="w-3.5 h-3.5" /> Add Asset
+            </button>
+          )}
         </div>
-        {items.length < 5 && (
-          <button onClick={addItem} className="flex items-center gap-1 text-xs font-semibold text-orange-600 hover:text-orange-700 transition-colors">
-            <Plus className="w-3.5 h-3.5" /> Add Asset
-          </button>
-        )}
+        <p className="text-xs text-zinc-500 leading-relaxed">Compare 2–5 assets side-by-side. Silas gives you the risk-adjusted winner for the current regime with a clear buy/hold/avoid on each.</p>
       </div>
       <div className="flex flex-wrap items-center gap-2 mb-3">
         {items.map((val, i) => (
@@ -1057,8 +1064,13 @@ function WatchlistPanel({
 }) {
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* Add ticker bar */}
+      {/* Header + add ticker bar */}
       <div className="flex-shrink-0 border-b border-zinc-200 px-6 py-4 bg-zinc-50">
+        <div className="flex items-center gap-2 mb-1">
+          <Eye className="w-4 h-4 text-orange-500" />
+          <span className="text-sm font-bold text-zinc-900">Watchlist</span>
+        </div>
+        <p className="text-xs text-zinc-500 leading-relaxed mb-3">Track your favorite tickers with live prices and daily change. Hit &quot;Ask Silas&quot; on any position to get a real-time read.</p>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 flex-1 bg-white border border-zinc-200 rounded-xl px-4 py-2.5 focus-within:border-orange-400 focus-within:ring-2 focus-within:ring-orange-100 transition-all">
             <Eye className="w-4 h-4 text-zinc-400 flex-shrink-0" />
