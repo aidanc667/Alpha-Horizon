@@ -62,22 +62,20 @@ const ACCOUNT_TYPES = [
 ];
 
 const SUGGESTED_PROMPTS = [
-  "What's the best hedge against rising rates right now?",
-  "Where is smart money tilting in this regime?",
-  "Should I extend or shorten duration today?",
-  "Which sectors are most exposed to current macro risks?",
-  "How should I position cash in this environment?",
-  "Is this a good time to increase EM exposure?",
-  "What does the yield curve say about the next 6 months?",
-  "Best defensive plays if volatility spikes from here?",
+  "Should I rebalance my portfolio right now?",
+  "What's the right asset allocation for someone in their 40s?",
+  "How much should I keep in cash vs. invested?",
+  "What's the biggest risk to my portfolio over the next 12 months?",
+  "How do I protect against a downturn without leaving the market?",
+  "What should I do with a $50,000 windfall right now?",
 ];
 
 const MODES: { id: AdvisorMode; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'chat',        label: 'Intelligence Chat',  Icon: MessageSquare },
   { id: 'portfolio',   label: 'Portfolio Analyzer', Icon: PieChart },
-  { id: 'thesis',      label: 'Stress Tester',      Icon: Zap },
-  { id: 'compare',     label: 'Asset Comparison',   Icon: GitCompare },
-  { id: 'best-assets',     label: 'Best Stocks Now',   Icon: Star },
+  { id: 'thesis',      label: 'Stress Test',        Icon: Zap },
+  { id: 'compare',     label: 'Compare Assets',     Icon: GitCompare },
+  { id: 'best-assets',     label: 'Best Stocks',       Icon: Star },
   { id: 'macro-calendar', label: 'Macro Calendar',    Icon: CalendarDays },
   { id: 'watchlist',      label: 'Watchlist',          Icon: Eye },
 ];
@@ -112,8 +110,7 @@ export default function AdvisorTab() {
   const [thesis, setThesis] = useState('');
 
   // Compare
-  const [compareA, setCompareA] = useState('');
-  const [compareB, setCompareB] = useState('');
+  const [compareItems, setCompareItems] = useState<string[]>(['', '']);
 
   // Generation (best-assets)
   const [riskProfile, setRiskProfile] = useState<RiskProfile>('Moderate');
@@ -300,9 +297,10 @@ export default function AdvisorTab() {
 
   // ── Compare assets ─────────────────────────────────────────────────────────
   const compareAssets = () => {
-    if (!compareA.trim() || !compareB.trim()) return;
+    const valid = compareItems.map(s => s.trim()).filter(Boolean);
+    if (valid.length < 2) return;
     setMode('chat');
-    sendChat(`Compare ${compareA.trim()} vs ${compareB.trim()} right now. Which do you own in this macro regime and why?`);
+    sendChat(`Compare ${valid.join(' vs ')} right now. Which do you own in this macro regime and why?`);
   };
 
   // ── Generate Best Stocks ───────────────────────────────────────────────────
@@ -522,7 +520,7 @@ export default function AdvisorTab() {
           </div>
         ) : mode === 'compare' ? (
           <div className="flex flex-col flex-1 min-h-0">
-            <ComparePanel compareA={compareA} compareB={compareB} setCompareA={setCompareA} setCompareB={setCompareB} onCompare={compareAssets} loading={chatLoading} />
+            <ComparePanel items={compareItems} setItems={setCompareItems} onCompare={compareAssets} loading={chatLoading} />
             <div className="flex-1 flex items-center justify-center px-6 py-8 text-center">
               <div>
                 <MessageSquare className="w-10 h-10 text-zinc-200 mx-auto mb-3" />
@@ -717,40 +715,59 @@ function ThesisPanel({ thesis, setThesis, onStressTest, loading }: {
 
 // ─── Compare Panel ────────────────────────────────────────────────────────────
 
-function ComparePanel({ compareA, compareB, setCompareA, setCompareB, onCompare, loading }: {
-  compareA: string; compareB: string;
-  setCompareA: (s: string) => void; setCompareB: (s: string) => void;
-  onCompare: () => void; loading: boolean;
+function ComparePanel({ items, setItems, onCompare, loading }: {
+  items: string[];
+  setItems: React.Dispatch<React.SetStateAction<string[]>>;
+  onCompare: () => void;
+  loading: boolean;
 }) {
+  const updateItem = (i: number, val: string) =>
+    setItems(prev => prev.map((v, idx) => idx === i ? val.toUpperCase() : v));
+  const addItem = () => setItems(prev => [...prev, '']);
+  const removeItem = (i: number) => setItems(prev => prev.filter((_, idx) => idx !== i));
+  const validCount = items.filter(s => s.trim()).length;
+
   return (
     <div className="flex-shrink-0 border-b border-zinc-200 px-6 py-4 bg-zinc-50">
-      <div className="flex items-center gap-2 mb-3">
-        <GitCompare className="w-4 h-4 text-orange-500" />
-        <span className="text-sm font-bold text-zinc-900">Asset Comparison</span>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <GitCompare className="w-4 h-4 text-orange-500" />
+          <span className="text-sm font-bold text-zinc-900">Compare Assets</span>
+        </div>
+        {items.length < 5 && (
+          <button onClick={addItem} className="flex items-center gap-1 text-xs font-semibold text-orange-600 hover:text-orange-700 transition-colors">
+            <Plus className="w-3.5 h-3.5" /> Add Asset
+          </button>
+        )}
       </div>
-      <div className="flex items-center gap-3">
-        <input
-          value={compareA}
-          onChange={e => setCompareA(e.target.value.toUpperCase())}
-          placeholder="Asset A (e.g., QQQ)"
-          className="flex-1 bg-white border border-zinc-200 rounded-xl px-4 py-2.5 text-xs text-zinc-900 placeholder-zinc-400 uppercase font-mono focus:outline-none focus:border-orange-400"
-        />
-        <span className="text-sm font-bold text-zinc-400">vs</span>
-        <input
-          value={compareB}
-          onChange={e => setCompareB(e.target.value.toUpperCase())}
-          placeholder="Asset B (e.g., SPY)"
-          className="flex-1 bg-white border border-zinc-200 rounded-xl px-4 py-2.5 text-xs text-zinc-900 placeholder-zinc-400 uppercase font-mono focus:outline-none focus:border-orange-400"
-        />
-        <button
-          onClick={onCompare}
-          disabled={loading || !compareA.trim() || !compareB.trim()}
-          className="bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-200 text-white disabled:text-zinc-400 text-xs font-bold px-5 py-2.5 rounded-xl transition-colors flex items-center gap-2 whitespace-nowrap"
-        >
-          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageSquare className="w-3.5 h-3.5" />}
-          {loading ? 'Comparing...' : 'Compare in Chat'}
-        </button>
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        {items.map((val, i) => (
+          <React.Fragment key={i}>
+            {i > 0 && <span className="text-xs font-bold text-zinc-400">vs</span>}
+            <div className="flex items-center gap-1">
+              <input
+                value={val}
+                onChange={e => updateItem(i, e.target.value)}
+                placeholder={`Asset ${String.fromCharCode(65 + i)}`}
+                className="w-28 bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 placeholder-zinc-400 uppercase font-mono focus:outline-none focus:border-orange-400"
+              />
+              {items.length > 2 && (
+                <button onClick={() => removeItem(i)} className="p-1 text-zinc-300 hover:text-red-500 transition-colors">
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          </React.Fragment>
+        ))}
       </div>
+      <button
+        onClick={onCompare}
+        disabled={loading || validCount < 2}
+        className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-200 text-white disabled:text-zinc-400 text-xs font-bold py-2 rounded-xl transition-colors flex items-center justify-center gap-2"
+      >
+        {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageSquare className="w-3.5 h-3.5" />}
+        {loading ? 'Comparing...' : 'Compare in Chat'}
+      </button>
     </div>
   );
 }
@@ -807,12 +824,10 @@ function GenerationPanel({
           </button>
         </div>
 
-        {contextStatus !== 'ready' && (
+        {contextStatus === 'loading' && (
           <p className="text-xs text-amber-600 mt-3 flex items-center gap-1.5">
             <AlertTriangle className="w-3 h-3" />
-            {contextStatus === 'loading'
-              ? 'Market context still loading — results will improve once ready.'
-              : 'Market context unavailable — results based on training data only.'}
+            Market context still loading — results will improve once ready.
           </p>
         )}
       </div>
@@ -828,9 +843,9 @@ function GenerationPanel({
           <div className="w-16 h-16 rounded-2xl bg-orange-50 flex items-center justify-center mx-auto mb-4">
             <Star className="w-8 h-8 text-orange-300" />
           </div>
-          <p className="font-semibold text-zinc-500 mb-2 text-base">Best Stocks Now</p>
+          <p className="font-semibold text-zinc-500 mb-2 text-base">Best Stocks</p>
           <p className="text-sm max-w-sm mx-auto leading-relaxed">
-            Select your risk profile and time horizon, then generate forward-looking top asset picks grounded in today&apos;s market conditions.
+            Select your risk profile and time horizon, then generate forward-looking top stock picks grounded in today&apos;s market conditions.
           </p>
         </div>
       )}
