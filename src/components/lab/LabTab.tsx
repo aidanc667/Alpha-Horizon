@@ -370,7 +370,7 @@ export default function LabTab() {
                     <Brain className="w-4 h-4 text-white" />
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-orange-900">Send to Portfolio Intelligence AI</p>
+                    <p className="text-sm font-bold text-orange-900">Send to Silas</p>
                     <p className="text-xs text-orange-700">Your backtest results will be pre-loaded into the AI advisor as context</p>
                   </div>
                 </div>

@@ -8,10 +8,11 @@ import { checkRateLimit } from '@/lib/rateLimit';
 interface CacheEntry { data: unknown; ts: number }
 const responseCache = new Map<string, CacheEntry>();
 const CACHE_TTL: Record<string, number> = {
-  nearTerm: 20 * 60 * 1000,      // 20 minutes
-  liveUpdate: 10 * 60 * 1000,    // 10 minutes
-  outlook: 2 * 60 * 60 * 1000,   // 2 hours
-  portfolioAdvice: 0,             // never cache (personalized)
+  nearTerm: 20 * 60 * 1000,       // 20 minutes
+  liveUpdate: 10 * 60 * 1000,     // 10 minutes
+  outlook: 2 * 60 * 60 * 1000,    // 2 hours
+  polygonContext: 5 * 60 * 1000,  // 5 minutes
+  portfolioAdvice: 0,              // never cache (personalized)
 };
 function getCached(key: string): unknown | null {
   const entry = responseCache.get(key);
@@ -781,6 +782,106 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, data: response.text || "I'm sorry, I couldn't generate a response." });
     }
 
+    // ── polygonTicker — single ticker lookup for Portfolio Analyzer ───────────
+    if (action === 'polygonTicker') {
+      const { ticker } = body;
+      if (!ticker || typeof ticker !== 'string') {
+        return NextResponse.json({ error: 'ticker required' }, { status: 400 });
+      }
+      const polygonKey = process.env.POLYGON_API_KEY;
+      if (!polygonKey) return NextResponse.json({ error: 'POLYGON_API_KEY not set' }, { status: 500 });
+
+      const clean = ticker.toUpperCase().replace(/[^A-Z0-9.^=-]/g, '').slice(0, 10);
+      const res = await fetch(
+        `https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/${clean}?apiKey=${polygonKey}`,
+        { next: { revalidate: 60 } }
+      );
+      if (!res.ok) return NextResponse.json({ error: `Polygon error ${res.status}` }, { status: res.status });
+      const data = await res.json();
+      const t = data.ticker;
+      if (!t) return NextResponse.json({ error: 'Ticker not found' }, { status: 404 });
+      return NextResponse.json({
+        success: true,
+        data: {
+          ticker: t.ticker,
+          price: t.day?.c ?? t.prevDay?.c ?? null,
+          changePct: t.todaysChangePerc ?? null,
+          name: t.ticker,
+        },
+      });
+    }
+
+    // ── polygonContext — real-time price snapshot from Polygon.io + FRED macro ──
+    if (action === 'polygonContext') {
+      const cached = getCached('polygonContext');
+      if (cached) return NextResponse.json({ success: true, data: cached });
+
+      const polygonKey = process.env.POLYGON_API_KEY;
+      const fredKey    = process.env.FRED_API_KEY;
+
+      const TICKERS = ['SPY', 'QQQ', 'IWM', 'TLT', 'GLD', 'HYG', 'UUP', 'XLK', 'XLF', 'XLE', 'XLV', 'VIXY'];
+
+      const [polygonRes, fredRates, fredCpi, fredUnrate, fredSpread] = await Promise.allSettled([
+        polygonKey
+          ? fetch(`https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers?tickers=${TICKERS.join(',')}&apiKey=${polygonKey}`)
+          : Promise.reject('No POLYGON_API_KEY'),
+        fredKey ? fetch(`https://api.stlouisfed.org/fred/series/observations?series_id=DFF&api_key=${fredKey}&limit=1&sort_order=desc&file_type=json`) : Promise.reject('no fred'),
+        fredKey ? fetch(`https://api.stlouisfed.org/fred/series/observations?series_id=CPIAUCSL&api_key=${fredKey}&limit=13&sort_order=desc&file_type=json`) : Promise.reject('no fred'),
+        fredKey ? fetch(`https://api.stlouisfed.org/fred/series/observations?series_id=UNRATE&api_key=${fredKey}&limit=1&sort_order=desc&file_type=json`) : Promise.reject('no fred'),
+        fredKey ? fetch(`https://api.stlouisfed.org/fred/series/observations?series_id=T10Y2Y&api_key=${fredKey}&limit=1&sort_order=desc&file_type=json`) : Promise.reject('no fred'),
+      ]);
+
+      const priceMap: Record<string, { price: number; change1d: number; changePct1d: number }> = {};
+      if (polygonRes.status === 'fulfilled' && polygonRes.value.ok) {
+        const pData = await polygonRes.value.json();
+        for (const t of (pData.tickers || [])) {
+          priceMap[t.ticker] = {
+            price: t.day?.c ?? t.prevDay?.c ?? 0,
+            change1d: (t.day?.c ?? 0) - (t.prevDay?.c ?? 0),
+            changePct1d: t.todaysChangePerc ?? 0,
+          };
+        }
+      }
+
+      const getFredLatest = async (res: PromiseSettledResult<Response>): Promise<number | null> => {
+        if (res.status !== 'fulfilled' || !res.value.ok) return null;
+        const j = await res.value.json();
+        const obs = j.observations?.filter((o: any) => o.value !== '.') ?? [];
+        return obs.length ? parseFloat(obs[0].value) : null;
+      };
+
+      const getFredYoY = async (res: PromiseSettledResult<Response>): Promise<number | null> => {
+        if (res.status !== 'fulfilled' || !res.value.ok) return null;
+        const j = await res.value.json();
+        const obs = (j.observations ?? []).filter((o: any) => o.value !== '.');
+        if (obs.length < 13) return null;
+        const latest = parseFloat(obs[0].value);
+        const yearAgo = parseFloat(obs[12].value);
+        return ((latest - yearAgo) / yearAgo) * 100;
+      };
+
+      const [fedFunds, cpiYoY, unrate, yieldSpread] = await Promise.all([
+        getFredLatest(fredRates),
+        getFredYoY(fredCpi),
+        getFredLatest(fredUnrate),
+        getFredLatest(fredSpread),
+      ]);
+
+      const snapshot = {
+        fetchedAt: new Date().toISOString(),
+        prices: priceMap,
+        macro: {
+          fedFundsRate: fedFunds,
+          cpiYoY: cpiYoY ? Math.round(cpiYoY * 100) / 100 : null,
+          unemployment: unrate,
+          yieldCurve10y2y: yieldSpread,
+        },
+      };
+
+      setCache('polygonContext', snapshot);
+      return NextResponse.json({ success: true, data: snapshot });
+    }
+
     // ── Shared context builders (used by advisorChat, bestAssets, bestStrategy) ─
     const buildSessionBlock = (ctx: any): string => {
       if (!ctx) return '';
@@ -812,25 +913,38 @@ AUTHORITATIVE MARKET STANCE (all recommendations must align with this — no con
 
     // ── advisorChat ────────────────────────────────────────────────────────────
     if (action === 'advisorChat') {
-      const { history, nearTermContext, liveContext, quickMode, sessionCtx } = body;
+      const { history, nearTermContext, liveContext, polygonCtx, sessionCtx } = body;
 
       const macroSummary = nearTermContext ? `
-CURRENT MACRO ENVIRONMENT (${getCurrentDate()}):
+LIVE MARKET CONTEXT (${getCurrentDate()}):
 - Regime: ${nearTermContext.marketSnapshot?.regime || 'Unknown'} | Sentiment: ${nearTermContext.marketSnapshot?.sentiment || 'Unknown'}
 - Macro Pillars: ${(nearTermContext.macroPillars || []).map((p: any) => `${p.name}: ${p.value} (${p.direction})`).join(' | ')}
 - Key Drivers: ${(nearTermContext.marketSnapshot?.bullets || []).slice(0, 3).join(' | ')}
 - Overweight: ${(nearTermContext.positioning?.overweight || []).map((p: any) => p.idea).join(', ')}
 - Underweight: ${(nearTermContext.positioning?.underweight || []).map((p: any) => p.idea).join(', ')}
 - Upcoming Catalysts: ${(nearTermContext.catalysts || []).slice(0, 3).map((c: any) => `${c.event} (${c.date})`).join(', ')}
-` : 'No macro context loaded.';
+` : 'No pre-loaded macro context — rely on Google Search for current data.';
 
       const liveSummary = liveContext ? `
-LIVE MARKET HEADLINES (last few hours):
+LIVE HEADLINES (${getCurrentDate()}):
 ${(liveContext.newsHeadlines || []).map((h: any) => `• [${h.source}] ${h.headline} — ${h.impact}`).join('\n')}
 Summary: ${liveContext.summary}
-` : 'No live headlines loaded.';
+` : '';
 
-      // Build Gemini-compatible history from all previous turns (exclude last message)
+      const polygonSummary = polygonCtx ? (() => {
+        const p = polygonCtx.prices || {};
+        const m = polygonCtx.macro || {};
+        const fmt = (t: string) => p[t] ? `${t} $${p[t].price.toFixed(2)} (${p[t].changePct1d >= 0 ? '+' : ''}${p[t].changePct1d.toFixed(2)}%)` : null;
+        const prices = ['SPY','QQQ','IWM','TLT','GLD','HYG','XLK','XLF','XLE','VIXY'].map(fmt).filter(Boolean).join(' | ');
+        const macro = [
+          m.fedFundsRate != null ? `Fed Funds: ${m.fedFundsRate}%` : null,
+          m.cpiYoY != null ? `CPI YoY: ${m.cpiYoY}%` : null,
+          m.unemployment != null ? `Unemployment: ${m.unemployment}%` : null,
+          m.yieldCurve10y2y != null ? `10Y-2Y Spread: ${m.yieldCurve10y2y.toFixed(2)}%` : null,
+        ].filter(Boolean).join(' | ');
+        return `\nREAL-TIME PRICES (Polygon.io as of ${polygonCtx.fetchedAt}):\n${prices}\nFRED MACRO DATA: ${macro}\n`;
+      })() : '';
+
       const chatHistory = (history as Array<{ role: string; text: string }>)
         .slice(0, -1)
         .map(m => ({
@@ -842,31 +956,54 @@ Summary: ${liveContext.summary}
         model,
         config: {
           tools: [{ googleSearch: {} }],
-          systemInstruction: `
-You are an elite investment advisor — the best in the world. You combine Goldman Sachs macro strategy depth with quantitative portfolio precision and the clarity of the world's best communicator.
+          systemInstruction: `You are Silas — a top 0.1% wealth manager and markets expert. You have spent 25 years at the highest levels of institutional finance: Goldman Sachs macro strategy, Tiger Global, Bridgewater. You know every asset class (equities, fixed income, commodities, alternatives, crypto, private equity), every macro regime, every tax optimization strategy, and every sector rotation playbook.
 
-You have been pre-loaded with REAL-TIME market intelligence. Use it as your primary data source — it is more current than your training data.
+You have been loaded with real-time market intelligence below. Treat it as ground truth — it supersedes your training data.
 
 ${macroSummary}
+${polygonSummary}
 ${liveSummary}
-
-BEHAVIORAL RULES:
-- Be specific: name tickers, weights, time horizons. Never say "consider diversifying."
-- Always connect recommendations to the CURRENT REGIME from the context above.
-- Reference live headlines when they're relevant to your answer.
-- Use Google Search to verify real-time prices, yields, or data if needed.
-- ${quickMode ? 'QUICK MODE: Lead with the answer in 2-3 bullet points. No preamble.' : 'DETAILED MODE: Full institutional analysis. Causal reasoning, specific tickers, implementation guidance.'}
-- Be direct about uncertainty: say "based on current conditions" not "guaranteed."
-- Tone: brilliant friend who happens to be the best investment advisor on Wall Street. Direct, precise, no fluff.
 ${buildMarketStance(nearTermContext)}
-${buildSessionBlock(sessionCtx)}          `,
+${buildSessionBlock(sessionCtx)}
+
+YOUR COMMUNICATION STYLE — follow these rules exactly:
+- Lead with the answer, never with a preamble. Never say "Great question!" or "Certainly!" Just answer.
+- Write in short paragraphs of 3-4 sentences. No bullet points. No markdown headers. No bold text. Plain prose only.
+- Calibrate length to complexity: a simple yes/no gets 2-3 sentences; a complex portfolio question gets 3-4 paragraphs max.
+- Name specific tickers, weights, and time horizons. Never say "consider diversifying" or "it depends" without following up with a specific take.
+- When the user's question is vague or missing key context (tax bracket, time horizon, account type), ask one clarifying question before giving a full answer.
+- Push back when the user's idea has a flaw. Say "The problem with that is..." not "That's interesting, but..."
+- Cite specific numbers when you have them: index levels, yields, spreads, CPI prints. If you don't have a number, use Google Search to get it.
+- Acknowledge uncertainty plainly: "Honestly, nobody knows — here's what the data suggests" beats false confidence.
+- Remember everything the user has told you in this conversation and reference it when relevant.
+- Connect every recommendation to the current macro regime. If the regime makes a trade worse, say so.
+- Cover what happened in the past to explain the present, and give your best probabilistic view of what comes next.
+- You are an advisor, not a disclaimer machine. Give real opinions. End responses with the standard disclaimer only once per conversation, not on every message.`,
         },
         history: chatHistory,
       });
 
-      const lastMessage = history[history.length - 1].text;
-      const response = await chat.sendMessage({ message: lastMessage });
-      return NextResponse.json({ success: true, data: response.text || "I couldn't generate a response." });
+      const lastMessage = (history as Array<{ role: string; text: string }>)[history.length - 1].text;
+      const stream = await chat.sendMessageStream({ message: lastMessage });
+
+      const encoder = new TextEncoder();
+      const readable = new ReadableStream({
+        async start(controller) {
+          for await (const chunk of stream) {
+            const text = chunk.text;
+            if (text) controller.enqueue(encoder.encode(text));
+          }
+          controller.close();
+        },
+      });
+
+      return new Response(readable, {
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'X-Content-Type-Options': 'nosniff',
+          'Cache-Control': 'no-cache',
+        },
+      });
     }
 
     // ── bestAssets ─────────────────────────────────────────────────────────────
@@ -895,8 +1032,6 @@ SELECTION CRITERIA:
 - Fee efficiency — prefer low-cost ETFs where applicable
 - Diversification across asset classes
 
-Use Google Search to verify current prices, yields, and market conditions before answering.
-
 For each of the 8 assets:
 - rank (1-8, where 1 is highest conviction)
 - ticker (ETF/stock ticker symbol)
@@ -920,7 +1055,6 @@ IMPORTANT: suggestedWeights MUST sum to exactly 100.
         model,
         contents: prompt,
         config: {
-          tools: [{ googleSearch: {} }],
           responseMimeType: 'application/json',
           responseSchema: {
             type: Type.OBJECT,

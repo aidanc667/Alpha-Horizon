@@ -57,11 +57,26 @@ export async function runMacroCacheMigration() {
   `;
 }
 
+export async function runSilasMigration() {
+  const sql = getDb();
+  await sql`
+    CREATE TABLE IF NOT EXISTS silas_messages (
+      id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id    TEXT NOT NULL,
+      role       TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+      content    TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS silas_messages_user_id_idx ON silas_messages(user_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS silas_messages_created_at_idx ON silas_messages(user_id, created_at)`;
+}
+
 /** Run once on first deploy to create tables. Called from instrumentation.ts on startup. */
 export async function runMigrations() {
-  // Portfolio Agent cache tables (safe to run every deploy — CREATE TABLE IF NOT EXISTS)
   await runMacroCacheMigration();
   await runPlanCacheMigration();
+  await runSilasMigration();
   // Feature-specific migrations — consolidated here so instrumentation.ts is the single entry point
   await runArenaMigrations();
   await runMarketMigrations();

@@ -60,7 +60,7 @@ const NAV_ITEMS = [
   },
   {
     id: 'advisor' as ActiveTab,
-    label: 'Portfolio Intelligence AI',
+    label: 'Silas',
     sublabel: 'AI Market Advisor',
     icon: Brain,
     dotColor: 'bg-orange-400',

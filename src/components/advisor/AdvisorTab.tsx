@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Brain, MessageSquare, PieChart, Zap, GitCompare, Star, Target,
-  Plus, Trash2, Send, Loader2, Activity, RefreshCw, CheckCircle,
-  AlertTriangle, Sparkles,
+  Brain, MessageSquare, PieChart, Zap, GitCompare, Star,
+  Plus, Trash2, Send, Loader2, Activity, CheckCircle,
+  AlertTriangle,
 } from 'lucide-react';
 import clsx from 'clsx';
 import type { NearTermIntelligence, LiveBriefing } from '@/types/market';
@@ -12,7 +12,7 @@ import { useAppContext } from '@/lib/appContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type AdvisorMode = 'chat' | 'portfolio' | 'thesis' | 'compare' | 'best-assets' | 'best-strategy';
+type AdvisorMode = 'chat' | 'portfolio' | 'thesis' | 'compare' | 'best-assets';
 type RiskProfile = 'Conservative' | 'Moderate' | 'Aggressive';
 type TimeHorizon = '6 months' | '1 year' | '3-5 years' | '10 years';
 type ContextStatus = 'loading' | 'ready' | 'partial' | 'failed';
@@ -48,26 +48,6 @@ interface BestAssetsResult {
   macroAlignment: string;
 }
 
-interface AllocationRow {
-  ticker: string;
-  name: string;
-  weight: number;
-  category: string;
-  rationale: string;
-  expenseRatio: string;
-}
-
-interface BestStrategyResult {
-  strategyName: string;
-  riskProfile: string;
-  expectedReturn: string;
-  expectedVolatility: string;
-  sharpeEstimate: string;
-  macroAlignment: string;
-  rebalancingGuidance: string;
-  allocations: AllocationRow[];
-  riskWarnings: string[];
-}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -93,12 +73,11 @@ const SUGGESTED_PROMPTS = [
 ];
 
 const MODES: { id: AdvisorMode; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: 'chat',          label: 'Intelligence Chat',   Icon: MessageSquare },
-  { id: 'portfolio',     label: 'Portfolio Analyzer',  Icon: PieChart },
-  { id: 'thesis',        label: 'Stress Tester',       Icon: Zap },
-  { id: 'compare',       label: 'Asset Comparison',    Icon: GitCompare },
-  { id: 'best-assets',   label: 'Best Assets Now',     Icon: Star },
-  { id: 'best-strategy', label: 'Optimal Portfolio',   Icon: Target },
+  { id: 'chat',        label: 'Intelligence Chat',  Icon: MessageSquare },
+  { id: 'portfolio',   label: 'Portfolio Analyzer', Icon: PieChart },
+  { id: 'thesis',      label: 'Stress Tester',      Icon: Zap },
+  { id: 'compare',     label: 'Asset Comparison',   Icon: GitCompare },
+  { id: 'best-assets', label: 'Best Assets Now',    Icon: Star },
 ];
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -106,17 +85,15 @@ const MODES: { id: AdvisorMode; label: string; Icon: React.ComponentType<{ class
 export default function AdvisorTab() {
   const { labSnapshot, plannerSnapshot, buildAdvisorContext } = useAppContext();
 
-  // Home screen gate
-  const [hasStarted, setHasStarted] = useState(false);
-
   // Context
   const [nearTermData, setNearTermData] = useState<NearTermIntelligence | null>(null);
   const [liveData, setLiveData]         = useState<LiveBriefing | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [polygonCtx, setPolygonCtx]     = useState<any | null>(null);
   const [contextStatus, setContextStatus] = useState<ContextStatus>('loading');
 
   // UI
-  const [mode, setMode]         = useState<AdvisorMode>('chat');
-  const [quickMode, setQuickMode] = useState(false);
+  const [mode, setMode] = useState<AdvisorMode>('chat');
 
   // Chat (shared across chat/portfolio/thesis/compare modes)
   const [messages, setMessages]   = useState<Message[]>([]);
@@ -144,11 +121,10 @@ export default function AdvisorTab() {
   const [compareResult, setCompareResult] = useState<string | null>(null);
   const [compareLoading, setCompareLoading] = useState(false);
 
-  // Generation (best-assets / best-strategy)
+  // Generation (best-assets)
   const [riskProfile, setRiskProfile] = useState<RiskProfile>('Moderate');
   const [timeHorizon, setTimeHorizon] = useState<TimeHorizon>('1 year');
-  const [bestAssetsResult, setBestAssetsResult]     = useState<BestAssetsResult | null>(null);
-  const [bestStrategyResult, setBestStrategyResult] = useState<BestStrategyResult | null>(null);
+  const [bestAssetsResult, setBestAssetsResult] = useState<BestAssetsResult | null>(null);
   const [genLoading, setGenLoading] = useState(false);
   const [genError, setGenError]     = useState<string | null>(null);
 
@@ -168,13 +144,14 @@ export default function AdvisorTab() {
     setSessionCtx(prev => ({ ...prev, crossTabContext: ctx }));
   }, [labSnapshot, plannerSnapshot, buildAdvisorContext]);
 
-  // ── Load market context after user clicks Start ────────────────────────────
+  // ── Load market context + chat history on mount ───────────────────────────
   useEffect(() => {
-    if (!hasStarted) return;
     const load = async () => {
-      const [nearRes, liveRes] = await Promise.allSettled([
+      const [nearRes, liveRes, polygonRes, historyRes] = await Promise.allSettled([
         fetch('/api/market', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'nearTerm' }) }),
         fetch('/api/market', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'liveUpdate' }) }),
+        fetch('/api/market', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'polygonContext' }) }),
+        fetch('/api/silas/messages'),
       ]);
       let nearOk = false, liveOk = false;
       if (nearRes.status === 'fulfilled' && nearRes.value.ok) {
@@ -185,23 +162,35 @@ export default function AdvisorTab() {
         const d = await liveRes.value.json();
         if (d.success) { setLiveData(d.data); liveOk = true; }
       }
+      if (polygonRes.status === 'fulfilled' && polygonRes.value.ok) {
+        const d = await polygonRes.value.json();
+        if (d.success) setPolygonCtx(d.data);
+      }
+      if (historyRes.status === 'fulfilled' && historyRes.value.ok) {
+        const d = await historyRes.value.json();
+        if (d.messages?.length) setMessages(d.messages);
+      }
       setContextStatus(nearOk && liveOk ? 'ready' : nearOk || liveOk ? 'partial' : 'failed');
     };
     load();
-  }, [hasStarted]);
+  }, []);
 
   // ── Scroll chat to bottom ──────────────────────────────────────────────────
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, chatLoading]);
 
-  // ── Send chat message ──────────────────────────────────────────────────────
+  // ── Send chat message (streaming) ─────────────────────────────────────────
   const sendChat = async (text: string) => {
     if (!text.trim() || chatLoading) return;
     const userMsg: Message = { role: 'user', text };
     setMessages(prev => [...prev, userMsg]);
     setChatInput('');
     setChatLoading(true);
+
+    // Placeholder assistant message that gets filled incrementally
+    setMessages(prev => [...prev, { role: 'assistant', text: '' }]);
+
     try {
       const historyForAPI = [...messages, userMsg].map(m => ({
         role: m.role === 'assistant' ? 'model' : 'user',
@@ -210,12 +199,35 @@ export default function AdvisorTab() {
       const res = await fetch('/api/market', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'advisorChat', history: historyForAPI, nearTermContext: nearTermData, liveContext: liveData, quickMode, sessionCtx }),
+        body: JSON.stringify({ action: 'advisorChat', history: historyForAPI, nearTermContext: nearTermData, liveContext: liveData, polygonCtx, sessionCtx }),
       });
-      const data = await res.json();
-      setMessages(prev => [...prev, { role: 'assistant', text: data.data || 'No response generated.' }]);
+
+      if (!res.body) throw new Error('No response body');
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        fullText += decoder.decode(value, { stream: true });
+        setMessages(prev => {
+          const updated = [...prev];
+          updated[updated.length - 1] = { role: 'assistant', text: fullText };
+          return updated;
+        });
+      }
+
+      // Persist to DB (fire-and-forget)
+      fetch('/api/silas/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'user', content: text }) });
+      fetch('/api/silas/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'assistant', content: fullText }) });
     } catch {
-      setMessages(prev => [...prev, { role: 'assistant', text: 'Error getting response. Please try again.' }]);
+      setMessages(prev => {
+        const updated = [...prev];
+        updated[updated.length - 1] = { role: 'assistant', text: 'Error getting response. Please try again.' };
+        return updated;
+      });
     } finally {
       setChatLoading(false);
     }
@@ -231,7 +243,7 @@ export default function AdvisorTab() {
         history: [{ role: 'user', text: prompt }],
         nearTermContext: nearTermData,
         liveContext: liveData,
-        quickMode,
+        polygonCtx,
         sessionCtx,
       }),
     });
@@ -320,131 +332,6 @@ export default function AdvisorTab() {
     }
   };
 
-  // ── Generate Best Strategy ─────────────────────────────────────────────────
-  const generateBestStrategy = async () => {
-    setGenLoading(true); setGenError(null); setBestStrategyResult(null);
-    try {
-      const res = await fetch('/api/market', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'bestStrategy', riskProfile, timeHorizon, nearTermContext: nearTermData, liveContext: liveData, sessionCtx }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setBestStrategyResult(data.data);
-        const tickers = ((data.data?.allocations || []) as any[]).slice(0, 5)
-          .map((a: any) => `${a.ticker}(${a.weight}%)`).join(', ');
-        if (tickers) setSessionCtx(prev => ({ ...prev, bestTickers: tickers }));
-      } else {
-        setGenError(data.error || 'Generation failed');
-      }
-    } catch (e: any) {
-      setGenError(e.message || 'Error generating best strategy');
-    } finally {
-      setGenLoading(false);
-    }
-  };
-
-  // ── Home splash screen ─────────────────────────────────────────────────────
-  if (!hasStarted) {
-    return (
-      <div className="min-h-full flex flex-col bg-white">
-        {/* Tab header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-orange-500/10 flex items-center justify-center flex-shrink-0">
-              <Brain className="w-4 h-4 text-orange-600" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-gray-900">Portfolio Intelligence AI</p>
-              <p className="text-xs text-gray-600">Real-Time Market-Grounded Advisor</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Hero Banner — orange theme */}
-        <div className="relative overflow-hidden px-8 pt-12 pb-10 text-center" style={{background: 'linear-gradient(135deg, #1a0a00 0%, #2d1200 50%, #1a0c00 100%)'}}>
-          <div className="absolute inset-0 opacity-10" style={{backgroundImage: 'radial-gradient(circle at 20% 50%, #f97316 0%, transparent 50%), radial-gradient(circle at 80% 20%, #fb923c 0%, transparent 40%)'}} />
-          <div className="relative z-10 max-w-2xl mx-auto space-y-4">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/20 border border-orange-500/30 text-orange-400 text-xs font-semibold uppercase tracking-widest mb-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />
-              AI-Powered · Live Market Grounding · Real-Time Data
-            </div>
-            <h1 className="text-3xl font-black tracking-tight text-white">Portfolio Intelligence AI</h1>
-            <p className="text-slate-300 text-sm leading-relaxed max-w-lg mx-auto">
-              Institutional-grade AI advisor grounded in real-time market data. Analyze your portfolio, stress-test theses, compare assets, and discover optimal allocations — all powered by live market context.
-            </p>
-            {/* Stats row */}
-            <div className="flex items-center justify-center gap-8 pt-2">
-              {[
-                { value: 'Live', label: 'Market Data' },
-                { value: 'AI', label: 'Grounded' },
-                { value: '6', label: 'Features' },
-              ].map(s => (
-                <div key={s.label} className="text-center">
-                  <p className="text-xl font-black font-mono text-orange-400">{s.value}</p>
-                  <p className="text-xs text-slate-400 uppercase tracking-wider">{s.label}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Feature cards + CTA */}
-        <div className="flex-1 px-6 py-8 max-w-4xl mx-auto w-full flex flex-col items-center gap-6">
-          {/* Feature grid */}
-          <div className="grid grid-cols-3 gap-4 w-full max-w-2xl">
-            {[
-              { label: 'Intelligence Chat',  desc: 'Real-time market Q&A grounded in live macro data',       Icon: MessageSquare, color: 'text-orange-700', iconColor: 'text-orange-600', bg: 'bg-white border-orange-200', iconBg: 'bg-orange-50', bar: 'bg-orange-400' },
-              { label: 'Portfolio Analyzer', desc: 'Analyze holdings with macro regime alignment scoring',     Icon: PieChart,      color: 'text-orange-700', iconColor: 'text-orange-600', bg: 'bg-white border-orange-200', iconBg: 'bg-orange-50', bar: 'bg-orange-400' },
-              { label: 'Stress Tester',      desc: 'Test investment theses against current market conditions', Icon: Zap,           color: 'text-orange-700', iconColor: 'text-orange-600', bg: 'bg-white border-orange-200', iconBg: 'bg-orange-50', bar: 'bg-orange-400' },
-            ].map(f => (
-              <div key={f.label} className={`p-4 border rounded-xl ${f.bg} flex flex-col gap-3`}>
-                <div className="flex items-center gap-2.5">
-                  <div className={`w-8 h-8 rounded-xl ${f.iconBg} flex items-center justify-center flex-shrink-0`}>
-                    <f.Icon className={`w-4 h-4 ${f.iconColor}`} />
-                  </div>
-                  <p className={`text-xs font-bold uppercase tracking-wide ${f.color}`}>{f.label}</p>
-                </div>
-                <div className={`h-0.5 w-8 rounded-full ${f.bar}`} />
-                <p className="text-xs text-gray-500 leading-relaxed">{f.desc}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Feature list */}
-          <div className="grid grid-cols-2 gap-2 w-full max-w-2xl">
-            {[
-              'Asset comparison vs current macro regime',
-              'Best assets now based on live market signals',
-              'Optimal portfolio allocation strategy',
-              'Suggested prompts for institutional insights',
-              'Quick & detailed response modes',
-              'Live data from Bloomberg, Reuters, FT, WSJ',
-            ].map(f => (
-              <div key={f} className="flex items-center gap-2 text-xs text-gray-600 bg-white border border-gray-100 rounded-lg px-3 py-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-orange-500 flex-shrink-0" />
-                {f}
-              </div>
-            ))}
-          </div>
-
-          <button
-            onClick={() => setHasStarted(true)}
-            className="px-10 py-3.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-bold text-sm transition-all active:scale-95 shadow-lg shadow-orange-500/25 flex items-center gap-2"
-          >
-            <Sparkles className="w-4 h-4" />
-            Start Portfolio Intelligence →
-          </button>
-
-          <p className="text-xs text-slate-500 max-w-lg text-center leading-relaxed px-4">
-            © 2026 Alpha Horizon. For informational and educational purposes only. Not financial, investment, or tax advice.
-            Consult a licensed financial advisor before making any investment decisions.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col h-screen bg-white">
 
@@ -456,7 +343,7 @@ export default function AdvisorTab() {
               <Brain className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-zinc-900 leading-tight">Portfolio Intelligence AI</h1>
+              <h1 className="text-lg font-bold text-zinc-900 leading-tight">Silas</h1>
               <p className="text-xs text-zinc-500">Real-time market-grounded AI advisor</p>
             </div>
           </div>
@@ -478,15 +365,20 @@ export default function AdvisorTab() {
                contextStatus === 'partial' ? 'Partial context' : 'Context unavailable'}
             </div>
 
-            {/* Quick / Detailed toggle */}
-            <div className="flex items-center gap-0.5 bg-zinc-100 rounded-lg p-1 border border-zinc-200">
-              <button onClick={() => setQuickMode(false)} className={clsx('px-3 py-1 rounded-md text-xs font-semibold transition-all', !quickMode ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700')}>
-                Detailed
+            {/* Clear history */}
+            {messages.length > 0 && (
+              <button
+                onClick={async () => {
+                  setMessages([]);
+                  await fetch('/api/silas/messages', { method: 'DELETE' });
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border border-zinc-200 text-zinc-500 hover:text-red-500 hover:border-red-200 transition-colors"
+                title="Clear conversation history"
+              >
+                <Trash2 className="w-3 h-3" />
+                Clear
               </button>
-              <button onClick={() => setQuickMode(true)} className={clsx('px-3 py-1 rounded-md text-xs font-semibold transition-all', quickMode ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700')}>
-                Quick
-              </button>
-            </div>
+            )}
           </div>
         </div>
 
@@ -561,7 +453,7 @@ export default function AdvisorTab() {
                 </div>
               )}
 
-              {messages.map((msg, i) => (
+              {messages.filter(msg => msg.text).map((msg, i) => (
                 <div key={i} className={clsx('flex items-start gap-3', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
                   {msg.role === 'assistant' && (
                     <div className="w-7 h-7 rounded-full bg-orange-500 flex items-center justify-center shrink-0 mt-0.5">
@@ -579,7 +471,7 @@ export default function AdvisorTab() {
                 </div>
               ))}
 
-              {chatLoading && (
+              {chatLoading && messages[messages.length - 1]?.text === '' && (
                 <div className="flex items-start gap-3 justify-start">
                   <div className="w-7 h-7 rounded-full bg-orange-500 flex items-center justify-center shrink-0">
                     <Brain className="w-4 h-4 text-white" />
@@ -643,16 +535,14 @@ export default function AdvisorTab() {
         ) : (
           /* ── Generation modes ─────────────────────────────────────────── */
           <GenerationPanel
-            mode={mode}
             riskProfile={riskProfile}
             setRiskProfile={setRiskProfile}
             timeHorizon={timeHorizon}
             setTimeHorizon={setTimeHorizon}
-            onGenerate={mode === 'best-assets' ? generateBestAssets : generateBestStrategy}
+            onGenerate={generateBestAssets}
             loading={genLoading}
             error={genError}
             bestAssetsResult={bestAssetsResult}
-            bestStrategyResult={bestStrategyResult}
             contextStatus={contextStatus}
           />
         )}
@@ -705,6 +595,8 @@ function ToolResultArea({ result, loading, emptyText }: {
 
 // ─── Portfolio Builder Panel ──────────────────────────────────────────────────
 
+interface TickerPrice { price: number | null; changePct: number | null; loading: boolean }
+
 function PortfolioBuilderPanel({
   rows, setRows, onAnalyze, loading,
 }: {
@@ -713,12 +605,38 @@ function PortfolioBuilderPanel({
   onAnalyze: () => void;
   loading: boolean;
 }) {
+  const [prices, setPrices] = React.useState<Record<string, TickerPrice>>({});
+
   const addRow = () => setRows(r => [...r, { id: Date.now().toString(), asset: '', amount: '', accountType: 'Taxable Brokerage' }]);
   const removeRow = (id: string) => setRows(r => r.filter(row => row.id !== id));
   const updateRow = (id: string, field: keyof PortfolioRow, value: string) =>
     setRows(r => r.map(row => row.id === id ? { ...row, [field]: value } : row));
 
-  const totalValue = rows.reduce((s, r) => s + (parseFloat(r.amount.replace(/,/g, '')) || 0), 0);
+  const lookupTicker = React.useCallback(async (ticker: string) => {
+    if (!ticker || ticker.length < 1) return;
+    setPrices(prev => ({ ...prev, [ticker]: { price: null, changePct: null, loading: true } }));
+    try {
+      const res = await fetch('/api/market', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'polygonTicker', ticker }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPrices(prev => ({ ...prev, [ticker]: { price: data.data.price, changePct: data.data.changePct, loading: false } }));
+      } else {
+        setPrices(prev => ({ ...prev, [ticker]: { price: null, changePct: null, loading: false } }));
+      }
+    } catch {
+      setPrices(prev => ({ ...prev, [ticker]: { price: null, changePct: null, loading: false } }));
+    }
+  }, []);
+
+  const totalValue = rows.reduce((s, r) => {
+    const ticker = r.asset.trim();
+    const p = prices[ticker];
+    if (p?.price && !r.amount.trim()) return s; // price known but no shares/amount entered
+    return s + (parseFloat(r.amount.replace(/,/g, '')) || 0);
+  }, 0);
 
   return (
     <div className="flex-shrink-0 border-b border-zinc-200 px-6 py-4 bg-zinc-50">
@@ -737,38 +655,52 @@ function PortfolioBuilderPanel({
         </button>
       </div>
 
-      <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
-        {rows.map(row => (
-          <div key={row.id} className="flex items-center gap-2">
-            <input
-              value={row.asset}
-              onChange={e => updateRow(row.id, 'asset', e.target.value.toUpperCase())}
-              placeholder="TICKER or Name"
-              className="w-32 bg-white border border-zinc-200 rounded-lg px-3 py-1.5 text-xs text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-orange-400 uppercase font-mono"
-            />
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-zinc-400">$</span>
-              <input
-                value={row.amount}
-                onChange={e => updateRow(row.id, 'amount', e.target.value)}
-                placeholder="Amount"
-                className="w-28 bg-white border border-zinc-200 rounded-lg pl-6 pr-3 py-1.5 text-xs text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-orange-400"
-              />
+      <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+        {rows.map(row => {
+          const p = prices[row.asset.trim()];
+          return (
+            <div key={row.id} className="flex items-center gap-2">
+              <div className="w-36 flex flex-col gap-0.5">
+                <input
+                  value={row.asset}
+                  onChange={e => updateRow(row.id, 'asset', e.target.value.toUpperCase())}
+                  onBlur={e => { if (e.target.value.trim()) lookupTicker(e.target.value.trim()); }}
+                  placeholder="TICKER"
+                  className="bg-white border border-zinc-200 rounded-lg px-3 py-1.5 text-xs text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-orange-400 uppercase font-mono w-full"
+                />
+                {row.asset.trim() && p && !p.loading && p.price !== null && (
+                  <span className={clsx('text-[10px] font-mono px-1', p.changePct != null && p.changePct >= 0 ? 'text-emerald-600' : 'text-red-500')}>
+                    ${p.price.toFixed(2)} {p.changePct != null ? `(${p.changePct >= 0 ? '+' : ''}${p.changePct.toFixed(2)}%)` : ''}
+                  </span>
+                )}
+                {row.asset.trim() && p?.loading && (
+                  <span className="text-[10px] text-zinc-400 px-1">Looking up…</span>
+                )}
+              </div>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-zinc-400">$</span>
+                <input
+                  value={row.amount}
+                  onChange={e => updateRow(row.id, 'amount', e.target.value)}
+                  placeholder="Amount"
+                  className="w-28 bg-white border border-zinc-200 rounded-lg pl-6 pr-3 py-1.5 text-xs text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-orange-400"
+                />
+              </div>
+              <select
+                value={row.accountType}
+                onChange={e => updateRow(row.id, 'accountType', e.target.value)}
+                className="flex-1 bg-white border border-zinc-200 rounded-lg px-2 py-1.5 text-xs text-zinc-900 focus:outline-none focus:border-orange-400"
+              >
+                {ACCOUNT_TYPES.map(t => <option key={t}>{t}</option>)}
+              </select>
+              {rows.length > 1 && (
+                <button onClick={() => removeRow(row.id)} className="p-1.5 text-zinc-300 hover:text-red-500 transition-colors">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
-            <select
-              value={row.accountType}
-              onChange={e => updateRow(row.id, 'accountType', e.target.value)}
-              className="flex-1 bg-white border border-zinc-200 rounded-lg px-2 py-1.5 text-xs text-zinc-900 focus:outline-none focus:border-orange-400"
-            >
-              {ACCOUNT_TYPES.map(t => <option key={t}>{t}</option>)}
-            </select>
-            {rows.length > 1 && (
-              <button onClick={() => removeRow(row.id)} className="p-1.5 text-zinc-300 hover:text-red-500 transition-colors">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <button
@@ -852,25 +784,20 @@ function ComparePanel({ compareA, compareB, setCompareA, setCompareB, onCompare,
   );
 }
 
-// ─── Generation Panel (Best Assets / Best Strategy) ───────────────────────────
+// ─── Generation Panel (Best Assets Now) ──────────────────────────────────────
 
 function GenerationPanel({
-  mode, riskProfile, setRiskProfile, timeHorizon, setTimeHorizon,
-  onGenerate, loading, error, bestAssetsResult, bestStrategyResult, contextStatus,
+  riskProfile, setRiskProfile, timeHorizon, setTimeHorizon,
+  onGenerate, loading, error, bestAssetsResult, contextStatus,
 }: {
-  mode: AdvisorMode;
   riskProfile: RiskProfile; setRiskProfile: (r: RiskProfile) => void;
   timeHorizon: TimeHorizon; setTimeHorizon: (h: TimeHorizon) => void;
   onGenerate: () => void; loading: boolean; error: string | null;
   bestAssetsResult: BestAssetsResult | null;
-  bestStrategyResult: BestStrategyResult | null;
   contextStatus: ContextStatus;
 }) {
-  const isBestAssets = mode === 'best-assets';
-
   return (
     <div className="flex-1 overflow-y-auto px-6 py-6 min-h-0">
-      {/* Controls */}
       <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-6 mb-6">
         <div className="flex flex-wrap items-end gap-6">
           <div>
@@ -886,30 +813,26 @@ function GenerationPanel({
             </div>
           </div>
 
-          {isBestAssets && (
-            <div>
-              <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Time Horizon</p>
-              <div className="flex gap-2">
-                {(['6 months', '1 year', '3-5 years', '10 years'] as TimeHorizon[]).map(h => (
-                  <button key={h} onClick={() => setTimeHorizon(h)}
-                    className={clsx('px-3 py-2 rounded-xl text-xs font-semibold border transition-all',
-                      timeHorizon === h ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-zinc-600 border-zinc-200 hover:border-orange-300'
-                    )}
-                  >{h}</button>
-                ))}
-              </div>
+          <div>
+            <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Time Horizon</p>
+            <div className="flex gap-2">
+              {(['6 months', '1 year', '3-5 years', '10 years'] as TimeHorizon[]).map(h => (
+                <button key={h} onClick={() => setTimeHorizon(h)}
+                  className={clsx('px-3 py-2 rounded-xl text-xs font-semibold border transition-all',
+                    timeHorizon === h ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-zinc-600 border-zinc-200 hover:border-orange-300'
+                  )}
+                >{h}</button>
+              ))}
             </div>
-          )}
+          </div>
 
           <button
             onClick={onGenerate}
             disabled={loading}
             className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-200 text-white disabled:text-zinc-400 px-6 py-2.5 rounded-xl text-sm font-bold transition-colors"
           >
-            {loading
-              ? <Loader2 className="w-4 h-4 animate-spin" />
-              : isBestAssets ? <Star className="w-4 h-4" /> : <Target className="w-4 h-4" />}
-            {loading ? 'Generating...' : isBestAssets ? 'Generate Best Assets' : 'Generate Optimal Portfolio'}
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Star className="w-4 h-4" />}
+            {loading ? 'Generating...' : 'Generate Best Assets'}
           </button>
         </div>
 
@@ -927,21 +850,16 @@ function GenerationPanel({
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 text-sm text-red-700">{error}</div>
       )}
 
-      {isBestAssets && bestAssetsResult && <BestAssetsDisplay result={bestAssetsResult} />}
-      {!isBestAssets && bestStrategyResult && <BestStrategyDisplay result={bestStrategyResult} />}
+      {bestAssetsResult && <BestAssetsDisplay result={bestAssetsResult} />}
 
-      {!loading && !error && !bestAssetsResult && !bestStrategyResult && (
+      {!loading && !error && !bestAssetsResult && (
         <div className="text-center py-16 text-zinc-400">
           <div className="w-16 h-16 rounded-2xl bg-orange-50 flex items-center justify-center mx-auto mb-4">
-            {isBestAssets ? <Star className="w-8 h-8 text-orange-300" /> : <Target className="w-8 h-8 text-orange-300" />}
+            <Star className="w-8 h-8 text-orange-300" />
           </div>
-          <p className="font-semibold text-zinc-500 mb-2 text-base">
-            {isBestAssets ? 'Best Assets Now' : 'Optimal Portfolio Strategy'}
-          </p>
+          <p className="font-semibold text-zinc-500 mb-2 text-base">Best Assets Now</p>
           <p className="text-sm max-w-sm mx-auto leading-relaxed">
-            {isBestAssets
-              ? 'Select your risk profile and time horizon, then generate forward-looking top asset picks grounded in today\'s market conditions.'
-              : 'Select your risk profile and generate a fully optimized, macro-aligned portfolio allocation for today\'s environment.'}
+            Select your risk profile and time horizon, then generate forward-looking top asset picks grounded in today&apos;s market conditions.
           </p>
         </div>
       )}
@@ -999,100 +917,3 @@ function BestAssetsDisplay({ result }: { result: BestAssetsResult }) {
   );
 }
 
-// ─── Best Strategy Display ────────────────────────────────────────────────────
-
-function BestStrategyDisplay({ result }: { result: BestStrategyResult }) {
-  const totalWeight = (result.allocations || []).reduce((s, a) => s + (a.weight || 0), 0);
-
-  return (
-    <div className="space-y-6">
-      {/* Strategy header card */}
-      <div className="bg-zinc-900 text-white rounded-2xl p-8">
-        <div className="flex items-start justify-between gap-6 flex-wrap mb-5">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-1">Optimal Strategy</p>
-            <h2 className="text-2xl font-bold leading-tight">{result.strategyName}</h2>
-            <p className="text-zinc-400 text-sm mt-1">{result.riskProfile} · Generated {new Date().toLocaleDateString()}</p>
-          </div>
-          <div className="flex gap-8">
-            <div className="text-right">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-1">Expected Return</p>
-              <p className="text-2xl font-bold text-emerald-400">{result.expectedReturn}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-1">Volatility</p>
-              <p className="text-2xl font-bold text-amber-400">{result.expectedVolatility}</p>
-            </div>
-            {result.sharpeEstimate && (
-              <div className="text-right">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-1">Sharpe Est.</p>
-                <p className="text-2xl font-bold text-blue-400">{result.sharpeEstimate}</p>
-              </div>
-            )}
-          </div>
-        </div>
-        <p className="text-zinc-300 text-sm leading-relaxed">{result.macroAlignment}</p>
-      </div>
-
-      {/* Allocations */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold uppercase tracking-widest text-zinc-500">Allocations</h3>
-          <span className={clsx('text-xs font-bold', Math.abs(totalWeight - 100) < 1 ? 'text-emerald-600' : 'text-amber-600')}>
-            Total: {totalWeight.toFixed(1)}%
-          </span>
-        </div>
-        <div className="space-y-3">
-          {(result.allocations || []).map((alloc, i) => (
-            <div key={i} className="bg-white border border-zinc-200 rounded-xl p-5 flex items-start gap-4 hover:border-orange-200 transition-colors">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-2 flex-wrap">
-                  <span className="text-base font-bold text-zinc-900 font-mono">{alloc.ticker}</span>
-                  <span className="text-sm text-zinc-600">{alloc.name}</span>
-                  <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-500">{alloc.category}</span>
-                  <span className="text-[10px] text-zinc-400">ER: {alloc.expenseRatio}</span>
-                </div>
-                <p className="text-sm text-zinc-600 leading-relaxed">{alloc.rationale}</p>
-              </div>
-              <div className="shrink-0 text-right min-w-[60px]">
-                <div className="text-2xl font-bold text-zinc-900">{alloc.weight}%</div>
-                <div className="w-14 h-1.5 bg-zinc-100 rounded-full mt-1.5 ml-auto overflow-hidden">
-                  <div className="h-full bg-orange-500 rounded-full" style={{ width: `${Math.min(alloc.weight, 100)}%` }} />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Guidance + warnings */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-5">
-          <div className="flex items-center gap-1.5 mb-2">
-            <RefreshCw className="w-3.5 h-3.5 text-blue-600" />
-            <h4 className="text-xs font-bold uppercase tracking-wider text-blue-700">Rebalancing Guidance</h4>
-          </div>
-          <p className="text-sm text-blue-800 leading-relaxed">{result.rebalancingGuidance}</p>
-        </div>
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
-          <div className="flex items-center gap-1.5 mb-2">
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-            <h4 className="text-xs font-bold uppercase tracking-wider text-amber-700">Risk Warnings</h4>
-          </div>
-          <ul className="space-y-2">
-            {(result.riskWarnings || []).map((w, i) => (
-              <li key={i} className="text-xs text-amber-800 flex items-start gap-2">
-                <div className="w-1 h-1 rounded-full bg-amber-500 mt-1.5 shrink-0" />
-                {w}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-
-      <p className="text-[10px] text-zinc-400 leading-relaxed">
-        For informational and educational purposes only. Not financial advice. Consult a licensed financial advisor before investing. © 2026 Alpha Horizon
-      </p>
-    </div>
-  );
-}
