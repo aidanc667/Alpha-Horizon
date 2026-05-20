@@ -418,7 +418,7 @@ export default function AdvisorTab() {
                       ? 'Market context loaded — ask me anything about investments, markets, and portfolio strategy.'
                       : contextStatus === 'loading'
                       ? 'Loading real-time market context in the background...'
-                      : 'Ask me anything — I have expert investment knowledge.'}
+                      : 'Ask me anything — I have expert investment knowledge'}
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-2xl mx-auto">
                     {SUGGESTED_PROMPTS.map(p => (

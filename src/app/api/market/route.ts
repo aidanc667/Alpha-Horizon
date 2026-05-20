@@ -792,20 +792,48 @@ export async function POST(req: NextRequest) {
       if (!polygonKey) return NextResponse.json({ error: 'POLYGON_API_KEY not set' }, { status: 500 });
 
       const clean = ticker.toUpperCase().replace(/[^A-Z0-9.^=-]/g, '').slice(0, 10);
-      const res = await fetch(
+
+      // Primary: snapshot endpoint (real-time last trade + today's change)
+      let price: number | null = null;
+      let changePct: number | null = null;
+      let tickerName = clean;
+
+      const snapRes = await fetch(
         `https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/${clean}?apiKey=${polygonKey}`,
         { cache: 'no-store' }
       );
-      if (!res.ok) return NextResponse.json({ error: `Polygon error ${res.status}` }, { status: res.status });
-      const data = await res.json();
-      const t = data.ticker;
-      if (!t) return NextResponse.json({ error: 'Ticker not found' }, { status: 404 });
-      // Use lastTrade for most current price, fall back through day close → prev day close
-      const price = t.lastTrade?.p || t.day?.c || t.prevDay?.c || null;
-      const changePct = t.todaysChangePerc ?? null;
+      if (snapRes.ok) {
+        const snapData = await snapRes.json();
+        const t = snapData.ticker;
+        if (t) {
+          price = t.lastTrade?.p || t.day?.c || t.prevDay?.c || null;
+          changePct = t.todaysChangePerc ?? null;
+          tickerName = t.ticker || clean;
+        }
+      }
+
+      // Fallback: prev-day aggregates endpoint (always has a close price)
+      if (!price) {
+        const prevRes = await fetch(
+          `https://api.polygon.io/v2/aggs/ticker/${clean}/prev?adjusted=true&apiKey=${polygonKey}`,
+          { cache: 'no-store' }
+        );
+        if (prevRes.ok) {
+          const prevData = await prevRes.json();
+          const result = prevData.results?.[0];
+          if (result?.c) {
+            price = result.c;
+            // calculate change% from open→close of that day as a rough proxy
+            changePct = result.o ? ((result.c - result.o) / result.o) * 100 : null;
+          }
+        }
+      }
+
+      if (!price) return NextResponse.json({ error: 'Price not available' }, { status: 404 });
+
       return NextResponse.json({
         success: true,
-        data: { ticker: t.ticker, price, changePct, name: t.ticker },
+        data: { ticker: tickerName, price, changePct, name: tickerName },
       });
     }
 
