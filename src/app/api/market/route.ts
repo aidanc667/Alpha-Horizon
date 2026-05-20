@@ -1022,14 +1022,16 @@ MARKET CONTEXT:
 ${contextStr}
 ${buildMarketStance(nearTermContext)}
 ${buildSessionBlock(sessionCtx)}
-TASK: Identify the TOP 8 best assets to own RIGHT NOW for a ${riskProfile} investor with a ${timeHorizon} time horizon.
+TASK: Identify the TOP 8 best INDIVIDUAL STOCKS to own RIGHT NOW for a ${riskProfile} investor with a ${timeHorizon} time horizon.
+
+CRITICAL: Individual stocks ONLY. No ETFs, no index funds, no mutual funds. Every pick must be a single company stock (e.g. NVDA, MSFT, JPM). If you include an ETF, the response is invalid.
 
 SELECTION CRITERIA:
-- Forward-looking expected returns (NOT historical), grounded in current macro regime
-- Risk-adjusted (Sharpe ratio consideration for each pick)
-- Current macro regime alignment (explicitly connect each pick to the regime context above)
-- Fee efficiency — prefer low-cost ETFs where applicable
-- Diversification across asset classes
+- Forward-looking expected returns grounded in current macro regime and company fundamentals
+- Risk-adjusted conviction (earnings visibility, balance sheet strength, sector tailwinds)
+- Current macro regime alignment — explicitly connect each pick to the regime context above
+- Mix of sectors — do not cluster all picks in one sector
+- Diversification across market cap (large, mid)
 
 For each of the 8 assets:
 - rank (1-8, where 1 is highest conviction)

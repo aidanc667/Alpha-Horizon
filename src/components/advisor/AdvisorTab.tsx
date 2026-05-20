@@ -76,7 +76,7 @@ const MODES: { id: AdvisorMode; label: string; Icon: React.ComponentType<{ class
   { id: 'portfolio',   label: 'Portfolio Analyzer', Icon: PieChart },
   { id: 'thesis',      label: 'Stress Tester',      Icon: Zap },
   { id: 'compare',     label: 'Asset Comparison',   Icon: GitCompare },
-  { id: 'best-assets', label: 'Best Assets Now',    Icon: Star },
+  { id: 'best-assets', label: 'Best Stocks Now',    Icon: Star },
 ];
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -246,8 +246,8 @@ export default function AdvisorTab() {
         sessionCtx,
       }),
     });
-    const data = await res.json();
-    return data.data || 'No response generated.';
+    if (!res.ok) throw new Error(`API error ${res.status}`);
+    return await res.text() || 'No response generated.';
   };
 
   // ── Analyze portfolio ──────────────────────────────────────────────────────
@@ -307,7 +307,7 @@ export default function AdvisorTab() {
     }
   };
 
-  // ── Generate Best Assets ───────────────────────────────────────────────────
+  // ── Generate Best Stocks ───────────────────────────────────────────────────
   const generateBestAssets = async () => {
     setGenLoading(true); setGenError(null); setBestAssetsResult(null);
     try {
@@ -815,7 +815,7 @@ function GenerationPanel({
             className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-200 text-white disabled:text-zinc-400 px-6 py-2.5 rounded-xl text-sm font-bold transition-colors"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Star className="w-4 h-4" />}
-            {loading ? 'Generating...' : 'Generate Best Assets'}
+            {loading ? 'Generating...' : 'Generate Best Stocks'}
           </button>
         </div>
 
@@ -840,7 +840,7 @@ function GenerationPanel({
           <div className="w-16 h-16 rounded-2xl bg-orange-50 flex items-center justify-center mx-auto mb-4">
             <Star className="w-8 h-8 text-orange-300" />
           </div>
-          <p className="font-semibold text-zinc-500 mb-2 text-base">Best Assets Now</p>
+          <p className="font-semibold text-zinc-500 mb-2 text-base">Best Stocks Now</p>
           <p className="text-sm max-w-sm mx-auto leading-relaxed">
             Select your risk profile and time horizon, then generate forward-looking top asset picks grounded in today&apos;s market conditions.
           </p>
