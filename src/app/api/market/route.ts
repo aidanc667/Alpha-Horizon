@@ -3,6 +3,7 @@ import { GoogleGenAI, Type } from '@google/genai';
 import { auth } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
 import { checkRateLimit } from '@/lib/rateLimit';
+import yahooFinance from 'yahoo-finance2';
 
 // ─── Server-side response cache ───────────────────────────────────────────────
 interface CacheEntry { data: unknown; ts: number }
@@ -788,69 +789,30 @@ export async function POST(req: NextRequest) {
       if (!ticker || typeof ticker !== 'string') {
         return NextResponse.json({ error: 'ticker required' }, { status: 400 });
       }
-      const polygonKey = process.env.POLYGON_API_KEY;
-      if (!polygonKey) return NextResponse.json({ error: 'POLYGON_API_KEY not set' }, { status: 500 });
-
       const clean = ticker.toUpperCase().replace(/[^A-Z0-9.^=-]/g, '').slice(0, 10);
-
-      // Primary: snapshot endpoint (real-time last trade + today's change)
-      let price: number | null = null;
-      let changePct: number | null = null;
-      let tickerName = clean;
-
-      const snapRes = await fetch(
-        `https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/${clean}?apiKey=${polygonKey}`,
-        { cache: 'no-store' }
-      );
-      if (snapRes.ok) {
-        const snapData = await snapRes.json();
-        const t = snapData.ticker;
-        if (t) {
-          price = t.lastTrade?.p || t.day?.c || t.prevDay?.c || null;
-          changePct = t.todaysChangePerc ?? null;
-          tickerName = t.ticker || clean;
-        }
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const quote: any = await yahooFinance.quote(clean);
+        const price: number | null = quote.regularMarketPrice ?? null;
+        const changePct: number | null = quote.regularMarketChangePercent ?? null;
+        if (!price) return NextResponse.json({ error: 'Price not available' }, { status: 404 });
+        return NextResponse.json({ success: true, data: { ticker: clean, price, changePct, name: quote.shortName || clean } });
+      } catch {
+        return NextResponse.json({ error: 'Ticker not found' }, { status: 404 });
       }
-
-      // Fallback: prev-day aggregates endpoint (always has a close price)
-      if (!price) {
-        const prevRes = await fetch(
-          `https://api.polygon.io/v2/aggs/ticker/${clean}/prev?adjusted=true&apiKey=${polygonKey}`,
-          { cache: 'no-store' }
-        );
-        if (prevRes.ok) {
-          const prevData = await prevRes.json();
-          const result = prevData.results?.[0];
-          if (result?.c) {
-            price = result.c;
-            // calculate change% from open→close of that day as a rough proxy
-            changePct = result.o ? ((result.c - result.o) / result.o) * 100 : null;
-          }
-        }
-      }
-
-      if (!price) return NextResponse.json({ error: 'Price not available' }, { status: 404 });
-
-      return NextResponse.json({
-        success: true,
-        data: { ticker: tickerName, price, changePct, name: tickerName },
-      });
     }
 
-    // ── polygonContext — real-time price snapshot from Polygon.io + FRED macro ──
+    // ── priceContext — real-time price snapshot via Yahoo Finance + FRED macro ──
     if (action === 'polygonContext') {
       const cached = getCached('polygonContext');
       if (cached) return NextResponse.json({ success: true, data: cached });
 
-      const polygonKey = process.env.POLYGON_API_KEY;
-      const fredKey    = process.env.FRED_API_KEY;
-
+      const fredKey = process.env.FRED_API_KEY;
       const TICKERS = ['SPY', 'QQQ', 'IWM', 'TLT', 'GLD', 'HYG', 'UUP', 'XLK', 'XLF', 'XLE', 'XLV', 'VIXY'];
 
-      const [polygonRes, fredRates, fredCpi, fredUnrate, fredSpread] = await Promise.allSettled([
-        polygonKey
-          ? fetch(`https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers?tickers=${TICKERS.join(',')}&apiKey=${polygonKey}`)
-          : Promise.reject('No POLYGON_API_KEY'),
+      const [yahooResults, fredRates, fredCpi, fredUnrate, fredSpread] = await Promise.allSettled([
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        Promise.all(TICKERS.map(t => (yahooFinance.quote(t) as Promise<any>).catch(() => null))),
         fredKey ? fetch(`https://api.stlouisfed.org/fred/series/observations?series_id=DFF&api_key=${fredKey}&limit=1&sort_order=desc&file_type=json`) : Promise.reject('no fred'),
         fredKey ? fetch(`https://api.stlouisfed.org/fred/series/observations?series_id=CPIAUCSL&api_key=${fredKey}&limit=13&sort_order=desc&file_type=json`) : Promise.reject('no fred'),
         fredKey ? fetch(`https://api.stlouisfed.org/fred/series/observations?series_id=UNRATE&api_key=${fredKey}&limit=1&sort_order=desc&file_type=json`) : Promise.reject('no fred'),
@@ -858,14 +820,15 @@ export async function POST(req: NextRequest) {
       ]);
 
       const priceMap: Record<string, { price: number; change1d: number; changePct1d: number }> = {};
-      if (polygonRes.status === 'fulfilled' && polygonRes.value.ok) {
-        const pData = await polygonRes.value.json();
-        for (const t of (pData.tickers || [])) {
-          priceMap[t.ticker] = {
-            price: t.day?.c ?? t.prevDay?.c ?? 0,
-            change1d: (t.day?.c ?? 0) - (t.prevDay?.c ?? 0),
-            changePct1d: t.todaysChangePerc ?? 0,
-          };
+      if (yahooResults.status === 'fulfilled') {
+        for (const quote of yahooResults.value) {
+          if (quote?.symbol && quote.regularMarketPrice) {
+            priceMap[quote.symbol] = {
+              price: quote.regularMarketPrice,
+              change1d: quote.regularMarketChange ?? 0,
+              changePct1d: quote.regularMarketChangePercent ?? 0,
+            };
+          }
         }
       }
 
@@ -952,28 +915,21 @@ AUTHORITATIVE MARKET STANCE (all recommendations must align with this — no con
         .slice(0, 6);
 
       let liveTickerContext = '';
-      const polygonKey = process.env.POLYGON_API_KEY;
-      if (mentionedTickers.length > 0 && polygonKey) {
+      if (mentionedTickers.length > 0) {
         const results = await Promise.allSettled(
-          mentionedTickers.map(ticker =>
-            fetch(`https://api.polygon.io/v2/snapshot/locale/us/markets/stocks/tickers/${ticker}?apiKey=${polygonKey}`, { cache: 'no-store' })
-              .then(r => r.json())
-          )
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          mentionedTickers.map(t => yahooFinance.quote(t) as Promise<any>)
         );
         const fetched: string[] = [];
-        for (let i = 0; i < results.length; i++) {
-          const r = results[i];
-          if (r.status === 'fulfilled') {
-            const t = r.value?.ticker;
-            if (t) {
-              const price = t.lastTrade?.p || t.day?.c || t.prevDay?.c;
-              const chg = t.todaysChangePerc;
-              if (price) fetched.push(`${mentionedTickers[i]} $${Number(price).toFixed(2)} (${chg != null ? (chg >= 0 ? '+' : '') + Number(chg).toFixed(2) + '%' : 'n/a'} today)`);
-            }
+        for (const r of results) {
+          if (r.status === 'fulfilled' && r.value?.regularMarketPrice) {
+            const q = r.value;
+            const chg = q.regularMarketChangePercent;
+            fetched.push(`${q.symbol} $${q.regularMarketPrice.toFixed(2)} (${chg != null ? (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%' : 'n/a'} today)`);
           }
         }
         if (fetched.length) {
-          liveTickerContext = `\nLIVE PRICES FETCHED NOW FOR THIS QUERY (Polygon.io, real-time — use these, not training data):\n${fetched.join(' | ')}\n`;
+          liveTickerContext = `\nLIVE PRICES FETCHED NOW FOR THIS QUERY (Yahoo Finance, real-time — use these, not training data):\n${fetched.join(' | ')}\n`;
         }
       }
 
