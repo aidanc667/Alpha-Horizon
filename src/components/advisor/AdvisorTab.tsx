@@ -112,14 +112,6 @@ export default function AdvisorTab() {
   const [compareA, setCompareA] = useState('');
   const [compareB, setCompareB] = useState('');
 
-  // Tool-specific results (portfolio / thesis / compare — each has its own result area, no shared chat)
-  const [portfolioResult, setPortfolioResult] = useState<string | null>(null);
-  const [portfolioLoading, setPortfolioLoading] = useState(false);
-  const [thesisResult, setThesisResult] = useState<string | null>(null);
-  const [thesisLoading, setThesisLoading] = useState(false);
-  const [compareResult, setCompareResult] = useState<string | null>(null);
-  const [compareLoading, setCompareLoading] = useState(false);
-
   // Generation (best-assets)
   const [riskProfile, setRiskProfile] = useState<RiskProfile>('Moderate');
   const [timeHorizon, setTimeHorizon] = useState<TimeHorizon>('1 year');
@@ -232,79 +224,30 @@ export default function AdvisorTab() {
     }
   };
 
-  // ── Shared helper: call advisorChat API and return text ───────────────────
-  const callAdvisorChat = async (prompt: string): Promise<string> => {
-    const res = await fetch('/api/market', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'advisorChat',
-        history: [{ role: 'user', text: prompt }],
-        nearTermContext: nearTermData,
-        liveContext: liveData,
-        polygonCtx,
-        sessionCtx,
-      }),
-    });
-    if (!res.ok) throw new Error(`API error ${res.status}`);
-    return await res.text() || 'No response generated.';
-  };
-
   // ── Analyze portfolio ──────────────────────────────────────────────────────
-  const analyzePortfolio = async () => {
+  const analyzePortfolio = () => {
     const valid = portfolioRows.filter(r => r.asset.trim() && r.amount.trim());
     if (!valid.length) return;
-    const holdings = valid.map(r => `${r.asset}: $${Number(r.amount).toLocaleString()} in ${r.accountType}`).join('\n');
-    const prompt = `Analyze my investment portfolio with institutional precision:\n\n${holdings}\n\nProvide: (1) Macro regime alignment score, (2) Concentration risks, (3) Tax efficiency of account placement, (4) Specific improvement suggestions with tickers and weights, (5) Forward-looking outlook and overall grade.`;
-    setPortfolioLoading(true);
-    setPortfolioResult(null);
-    try {
-      const result = await callAdvisorChat(prompt);
-      setPortfolioResult(result);
-      const holdingsStr = valid.map(r => `${r.asset}: $${Number(r.amount).toLocaleString()} in ${r.accountType}`).join(', ');
-      setSessionCtx(prev => ({
-        ...prev,
-        portfolio: holdingsStr,
-        portfolioFindings: result.slice(0, 300).replace(/\n/g, ' '),
-      }));
-    } catch {
-      setPortfolioResult('Error getting response. Please try again.');
-    } finally {
-      setPortfolioLoading(false);
-    }
+    const holdings = valid.map(r => `${r.asset}: $${Number(r.amount).toLocaleString()} in ${r.accountType}`).join(', ');
+    setSessionCtx(prev => ({ ...prev, portfolio: holdings }));
+    setMode('chat');
+    sendChat(`Analyze my portfolio — ${holdings}. Give me macro alignment, concentration risks, tax placement efficiency, and your top improvement suggestions.`);
   };
 
   // ── Stress test thesis ─────────────────────────────────────────────────────
-  const stressTestThesis = async () => {
+  const stressTestThesis = () => {
     if (!thesis.trim()) return;
-    const t = thesis;
-    const prompt = `Stress test this investment thesis against today's market conditions:\n\n"${t}"\n\nProvide: (1) Bear case — which macro scenarios invalidate this? (2) Bull case — what strengthens it? (3) Top 3 risks with current data, (4) Probability-weighted verdict, (5) Recommended position sizing if you had to bet.`;
-    setThesisLoading(true);
-    setThesisResult(null);
-    try {
-      const result = await callAdvisorChat(prompt);
-      setThesisResult(result);
-      setSessionCtx(prev => ({ ...prev, thesis: t.slice(0, 150) }));
-    } catch {
-      setThesisResult('Error getting response. Please try again.');
-    } finally {
-      setThesisLoading(false);
-    }
+    const t = thesis.trim();
+    setSessionCtx(prev => ({ ...prev, thesis: t.slice(0, 150) }));
+    setMode('chat');
+    sendChat(`Stress test this thesis against today's market: "${t}". What kills it, what confirms it, and what's the probability-weighted verdict?`);
   };
 
   // ── Compare assets ─────────────────────────────────────────────────────────
-  const compareAssets = async () => {
+  const compareAssets = () => {
     if (!compareA.trim() || !compareB.trim()) return;
-    const prompt = `Compare ${compareA} vs ${compareB} for the current macro environment. Provide: (1) Forward-looking return outlook for each given today's regime, (2) Risk-adjusted comparison (Sharpe, drawdown risk), (3) Which is better to own RIGHT NOW and why, (4) Recommended holding period, (5) Scenario where the losing pick wins.`;
-    setCompareLoading(true);
-    setCompareResult(null);
-    try {
-      setCompareResult(await callAdvisorChat(prompt));
-    } catch {
-      setCompareResult('Error getting response. Please try again.');
-    } finally {
-      setCompareLoading(false);
-    }
+    setMode('chat');
+    sendChat(`Compare ${compareA.trim()} vs ${compareB.trim()} right now. Which do you own in this macro regime and why?`);
   };
 
   // ── Generate Best Stocks ───────────────────────────────────────────────────
@@ -501,20 +444,38 @@ export default function AdvisorTab() {
             </div>
           </>
         ) : mode === 'portfolio' ? (
-          <>
-            <PortfolioBuilderPanel rows={portfolioRows} setRows={setPortfolioRows} onAnalyze={analyzePortfolio} loading={portfolioLoading} />
-            <ToolResultArea result={portfolioResult} loading={portfolioLoading} emptyText="Add your holdings above and click Analyze Portfolio." />
-          </>
+          <div className="flex flex-col flex-1 min-h-0">
+            <PortfolioBuilderPanel rows={portfolioRows} setRows={setPortfolioRows} onAnalyze={analyzePortfolio} loading={chatLoading} />
+            <div className="flex-1 flex items-center justify-center px-6 py-8 text-center">
+              <div>
+                <MessageSquare className="w-10 h-10 text-zinc-200 mx-auto mb-3" />
+                <p className="text-sm text-zinc-400 font-medium">Analysis streams into Intelligence Chat</p>
+                <p className="text-xs text-zinc-400 mt-1">Add your holdings above, then click Analyze in Chat</p>
+              </div>
+            </div>
+          </div>
         ) : mode === 'thesis' ? (
-          <>
-            <ThesisPanel thesis={thesis} setThesis={setThesis} onStressTest={stressTestThesis} loading={thesisLoading} />
-            <ToolResultArea result={thesisResult} loading={thesisLoading} emptyText="Enter your investment thesis above and click Stress Test." />
-          </>
+          <div className="flex flex-col flex-1 min-h-0">
+            <ThesisPanel thesis={thesis} setThesis={setThesis} onStressTest={stressTestThesis} loading={chatLoading} />
+            <div className="flex-1 flex items-center justify-center px-6 py-8 text-center">
+              <div>
+                <MessageSquare className="w-10 h-10 text-zinc-200 mx-auto mb-3" />
+                <p className="text-sm text-zinc-400 font-medium">Stress test streams into Intelligence Chat</p>
+                <p className="text-xs text-zinc-400 mt-1">Enter your thesis above, then click Stress Test in Chat</p>
+              </div>
+            </div>
+          </div>
         ) : mode === 'compare' ? (
-          <>
-            <ComparePanel compareA={compareA} compareB={compareB} setCompareA={setCompareA} setCompareB={setCompareB} onCompare={compareAssets} loading={compareLoading} />
-            <ToolResultArea result={compareResult} loading={compareLoading} emptyText="Enter two assets above and click Compare." />
-          </>
+          <div className="flex flex-col flex-1 min-h-0">
+            <ComparePanel compareA={compareA} compareB={compareB} setCompareA={setCompareA} setCompareB={setCompareB} onCompare={compareAssets} loading={chatLoading} />
+            <div className="flex-1 flex items-center justify-center px-6 py-8 text-center">
+              <div>
+                <MessageSquare className="w-10 h-10 text-zinc-200 mx-auto mb-3" />
+                <p className="text-sm text-zinc-400 font-medium">Comparison streams into Intelligence Chat</p>
+                <p className="text-xs text-zinc-400 mt-1">Enter two assets above, then click Compare in Chat</p>
+              </div>
+            </div>
+          </div>
         ) : (
           /* ── Generation modes ─────────────────────────────────────────── */
           <GenerationPanel
@@ -530,48 +491,6 @@ export default function AdvisorTab() {
           />
         )}
       </div>
-    </div>
-  );
-}
-
-// ─── Tool Result Area ─────────────────────────────────────────────────────────
-
-function ToolResultArea({ result, loading, emptyText }: {
-  result: string | null;
-  loading: boolean;
-  emptyText: string;
-}) {
-  return (
-    <div className="flex-1 overflow-y-auto px-6 py-5 min-h-0">
-      {loading && (
-        <div className="flex items-start gap-3">
-          <div className="w-7 h-7 rounded-full bg-orange-500 flex items-center justify-center shrink-0">
-            <Brain className="w-4 h-4 text-white" />
-          </div>
-          <div className="bg-zinc-50 border border-zinc-200 rounded-2xl rounded-tl-sm px-4 py-3.5">
-            <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-orange-400 animate-bounce [animation-delay:0ms]" />
-              <div className="w-2 h-2 rounded-full bg-orange-400 animate-bounce [animation-delay:150ms]" />
-              <div className="w-2 h-2 rounded-full bg-orange-400 animate-bounce [animation-delay:300ms]" />
-            </div>
-          </div>
-        </div>
-      )}
-      {!loading && result && (
-        <div className="flex items-start gap-3">
-          <div className="w-7 h-7 rounded-full bg-orange-500 flex items-center justify-center shrink-0 mt-0.5">
-            <Brain className="w-4 h-4 text-white" />
-          </div>
-          <div className="bg-zinc-50 text-zinc-800 border border-zinc-200 rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap max-w-[85%]">
-            {result}
-          </div>
-        </div>
-      )}
-      {!loading && !result && (
-        <div className="text-center py-12 text-zinc-400 text-sm">
-          {emptyText}
-        </div>
-      )}
     </div>
   );
 }
@@ -691,8 +610,8 @@ function PortfolioBuilderPanel({
         disabled={loading || rows.every(r => !r.asset.trim())}
         className="mt-3 w-full bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-200 text-white disabled:text-zinc-400 text-xs font-bold py-2 rounded-xl transition-colors flex items-center justify-center gap-2"
       >
-        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Activity className="w-4 h-4" />}
-        Analyze Portfolio
+        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
+        {loading ? 'Analyzing...' : 'Analyze in Chat'}
       </button>
     </div>
   );
@@ -720,8 +639,8 @@ function ThesisPanel({ thesis, setThesis, onStressTest, loading }: {
         disabled={loading || !thesis.trim()}
         className="mt-2 w-full bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-200 text-white disabled:text-zinc-400 text-xs font-bold py-2 rounded-xl transition-colors flex items-center justify-center gap-2"
       >
-        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-        Stress Test Thesis
+        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
+        {loading ? 'Testing...' : 'Stress Test in Chat'}
       </button>
     </div>
   );
@@ -759,8 +678,8 @@ function ComparePanel({ compareA, compareB, setCompareA, setCompareB, onCompare,
           disabled={loading || !compareA.trim() || !compareB.trim()}
           className="bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-200 text-white disabled:text-zinc-400 text-xs font-bold px-5 py-2.5 rounded-xl transition-colors flex items-center gap-2 whitespace-nowrap"
         >
-          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <GitCompare className="w-3.5 h-3.5" />}
-          Compare
+          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageSquare className="w-3.5 h-3.5" />}
+          {loading ? 'Comparing...' : 'Compare in Chat'}
         </button>
       </div>
     </div>
