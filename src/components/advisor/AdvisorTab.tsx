@@ -72,7 +72,7 @@ const SUGGESTED_PROMPTS = [
 
 const MODES: { id: AdvisorMode; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'chat',        label: 'Intelligence Chat',  Icon: MessageSquare },
-  { id: 'portfolio',   label: 'Portfolio Analyzer', Icon: PieChart },
+  { id: 'portfolio',   label: 'Portfolio Analysis', Icon: PieChart },
   { id: 'thesis',      label: 'Stress Test',        Icon: Zap },
   { id: 'compare',     label: 'Compare Assets',     Icon: GitCompare },
   { id: 'best-assets',     label: 'Best Stocks',       Icon: Star },
@@ -418,7 +418,7 @@ export default function AdvisorTab() {
                       ? 'Market context loaded — ask me anything about investments, markets, and portfolio strategy.'
                       : contextStatus === 'loading'
                       ? 'Loading real-time market context in the background...'
-                      : 'Ask me anything — I have broad investment knowledge.'}
+                      : 'Ask me anything — I have expert investment knowledge.'}
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-2xl mx-auto">
                     {SUGGESTED_PROMPTS.map(p => (
@@ -613,7 +613,7 @@ function PortfolioBuilderPanel({
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2">
             <PieChart className="w-4 h-4 text-orange-500" />
-            <span className="text-sm font-bold text-zinc-900">Portfolio Analyzer</span>
+            <span className="text-sm font-bold text-zinc-900">Portfolio Analysis</span>
             {totalValue > 0 && (
               <span className="text-xs text-zinc-500 font-medium">Total: ${totalValue.toLocaleString()}</span>
             )}
