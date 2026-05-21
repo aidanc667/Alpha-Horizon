@@ -1520,7 +1520,8 @@ Return a strategic allocation with a 2-sentence rationale per holding explaining
 
       const updatedAt = todayRow.updated_at ? new Date(todayRow.updated_at).getTime() : 0;
       const twentyMinAgo = Date.now() - 20 * 60 * 1000;
-      const isLiveDataStale = !todayRow.elite6_actual || updatedAt < twentyMinAgo;
+      const missingSectorData = !!(todayRow.elite6_actual && !(todayRow.elite6_actual as Record<string, unknown>).sectorRotation);
+      const isLiveDataStale = !todayRow.elite6_actual || updatedAt < twentyMinAgo || missingSectorData;
       // Noon lock needs to fire even if live data is fresh — don't let it slip between refresh windows
       const noonLockPending = isAfterNoonET() && !todayRow.is_noon_locked;
 
@@ -2160,7 +2161,8 @@ Rules:
 
       // Live data refresh
       const updatedAt = todayRow.updated_at ? new Date(todayRow.updated_at).getTime() : 0;
-      const needsLiveRefresh = !todayRow.elite6_actual || updatedAt < twentyMinAgo;
+      const missingSectorDataRL = !!(todayRow.elite6_actual && !(todayRow.elite6_actual as Record<string, unknown>).sectorRotation);
+      const needsLiveRefresh = !todayRow.elite6_actual || updatedAt < twentyMinAgo || missingSectorDataRL;
       if (needsLiveRefresh) {
         try {
           // ── Fetch all real market data in parallel ──────────────────────────────
