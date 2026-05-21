@@ -25,12 +25,12 @@ const CACHE_TTL: Record<string, number> = {
   marketMovers: 10 * 60 * 1000,   // 10 minutes
   putCallRatio: 5 * 60 * 1000,    // 5 minutes
 };
-function getCached(key: string): unknown | null {
+function getCached(key: string): unknown {
   const entry = responseCache.get(key);
-  if (!entry) return null;
+  if (!entry) return undefined;
   const ttl = CACHE_TTL[key.split(':')[0]] ?? 0;
-  if (ttl === 0) return null;
-  if (Date.now() - entry.ts > ttl) { responseCache.delete(key); return null; }
+  if (ttl === 0) return undefined;
+  if (Date.now() - entry.ts > ttl) { responseCache.delete(key); return undefined; }
   return entry.data;
 }
 function setCache(key: string, data: unknown) {
