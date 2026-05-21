@@ -160,6 +160,9 @@ export async function runMarketMigrations() {
   `;
   await sql`ALTER TABLE market_daily_records ADD COLUMN IF NOT EXISTS edge_board JSONB`;
   await sql`ALTER TABLE market_daily_records ADD COLUMN IF NOT EXISTS positioning JSONB`;
+  await sql`ALTER TABLE market_daily_records ADD COLUMN IF NOT EXISTS user_spy_prediction VARCHAR(10)`;
+  await sql`ALTER TABLE market_daily_records ADD COLUMN IF NOT EXISTS user_prediction_locked_at TIMESTAMPTZ`;
+  await sql`ALTER TABLE market_daily_records ADD COLUMN IF NOT EXISTS user_accuracy_correct BOOLEAN`;
 }
 
 /** Run once to create Strategy Arena tables */

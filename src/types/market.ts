@@ -297,40 +297,57 @@ export interface ComprehensiveMarketData extends LongTermOutlook {
 
 // ─── Triple-Card Market System ───────────────────────────────────────────────
 
-export interface Elite6Indicators {
-  spyMovement: {
-    value: string;           // e.g. "+1.2%" actual or "-0.5% to +0.3%" predicted range
-    direction: 'up' | 'down' | 'flat' | 'unknown';
-    label: string;           // e.g. "Real-time: +1.2%" or "Predicted: +0.3% to +0.8%"
-  };
-  vibeCheck: {
-    score: number;           // 0-100 (0 = Extreme Fear, 100 = Extreme Greed)
+export interface DailyIndicators {
+  // ── Predicted (scored in Yesterday's Call) ──
+  fearGreed: {
+    score: number;           // 0-100
     label: 'Extreme Fear' | 'Fear' | 'Neutral' | 'Greed' | 'Extreme Greed';
-    description: string;     // e.g. "Put/call ratio 1.4, VIX spiking — panic selling in small-caps"
+    delta: number;           // change from yesterday
+    description: string;
   };
-  assetOfDay: {
+  spyTrend: {
+    direction: 'Up' | 'Down' | 'Flat';
+    changePercent: number;   // e.g. 1.2 = +1.2%
+    above200MA: boolean;
+    above50MA: boolean;
+    volumeRatio: number | null;  // today's volume / 3-month avg volume
+    description: string;
+  };
+  sectorRotation: {
+    leader: { sector: string; ticker: string; performance: string; };
+    lagger: { sector: string; ticker: string; performance: string; };
+    implication: string;
+  };
+  optionsPulse: {
+    putCallRatio: number;    // e.g. 0.74
+    lean: 'Bullish' | 'Neutral' | 'Bearish';
+    description: string;
+  };
+  // ── Facts (reported today, not scored) ──
+  bigStory: {
     ticker: string;
     name: string;
-    bias: 'Bullish' | 'Bearish';
-    change: string;          // e.g. "+2.4%" or "Predicted +1.5%"
-    conviction: string;      // ~10-word reason for the call
+    changePercent: string;   // e.g. "+4.1%"
+    reason: string;
+    direction: 'Up' | 'Down';
   };
-  marketHealth: {
-    status: 'Healthy' | 'Mixed' | 'Fragile';
-    label: string;           // e.g. "Healthy / Broad" or "Fragile / Narrow"
-    description: string;     // e.g. "72% of S&P 500 stocks advancing — broad participation"
+  nextCatalyst: {
+    time: string;
+    event: string;
+    implication: string;
   };
-  whaleActivity: {
-    signal: 'Accumulating' | 'Distributing' | 'Neutral';
-    magnitude: 'light' | 'moderate' | 'heavy';
-    description: string;     // e.g. "Dark pool net buying $3.1B, concentrated in mega-cap tech"
-  };
-  hotSector: {
-    sector: string;          // e.g. "Technology"
-    ticker: string;          // sector ETF e.g. "XLK"
-    performance: string;     // e.g. "+2.1% leading all sectors"
-    catalyst: string;        // brief reason
-  };
+}
+
+/** @deprecated Use DailyIndicators */
+export type Elite6Indicators = DailyIndicators;
+
+export interface TomorrowPredictions {
+  fearGreed: DailyIndicators['fearGreed'];
+  spyTrend: DailyIndicators['spyTrend'];
+  sectorRotation: DailyIndicators['sectorRotation'];
+  optionsPulse: DailyIndicators['optionsPulse'];
+  confidence?: 'High' | 'Moderate' | 'Low';
+  signals?: string[];
 }
 
 export interface DailyBriefBullet {
@@ -357,13 +374,18 @@ export interface LiveHeadline {
 }
 
 export interface AccuracyBreakdown {
-  spyDirection: number;   // 0-100
-  spyMagnitude: number;   // 0-100
-  vibeCheck: number;      // 0-100
-  assetOfDay: number;     // 0-100
-  marketHealth: number;   // 0-100
-  whaleActivity: number;  // 0-100
-  hotSector: number;      // 0-100
+  fearGreed: number;       // 0-100
+  spyTrend: number;        // 0-100
+  sectorRotation: number;  // 0-100
+  optionsPulse: number;    // 0-100
+}
+
+export interface RollingAccuracy {
+  fearGreed: number | null;
+  spyTrend: number | null;
+  sectorRotation: number | null;
+  optionsPulse: number | null;
+  daysScored: number;
 }
 
 export interface DailyMarketRecord {
@@ -378,7 +400,7 @@ export interface DailyMarketRecord {
   weather: MacroWeather | null;
   liveHeadlines: LiveHeadline[];
   // Tomorrow predictions (locked at noon)
-  tomorrowPredictions: Elite6Indicators | null;
+  tomorrowPredictions: TomorrowPredictions | null;
   tomorrowOutlook: string;      // brief narrative
   // Accuracy scoring (filled next day)
   accuracyScore: number | null; // 0-100
@@ -387,13 +409,21 @@ export interface DailyMarketRecord {
   // Daily Edge Board & Positioning
   edgeBoard: DailyEdgeBoard | null;
   positioning: TodayPositioning | null;
+  // User prediction
+  userSpyPrediction?: 'Up' | 'Down' | 'Flat' | null;
+  userPredictionLockedAt?: string | null;
+  userAccuracyCorrect?: boolean | null;
 }
 
 export interface TripleCardData {
   yesterday: DailyMarketRecord | null;
   today: DailyMarketRecord;
-  isLiveDataStale: boolean;     // true if live data >20min old
+  isLiveDataStale: boolean;
+  needsRefresh: boolean;
   lastRefreshed: string;
+  rollingAccuracy?: RollingAccuracy;
+  modelStreak?: number;
+  userStreak?: number;
 }
 
 export interface DailyEdgeAsset {
