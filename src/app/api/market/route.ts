@@ -192,11 +192,13 @@ async function fetchSectorData(): Promise<{ leader: SectorQuote; lagger: SectorQ
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const quotes = await (yahooFinance as any).quote(SECTOR_ETFS);
     const results: SectorQuote[] = (Array.isArray(quotes) ? quotes : [quotes])
-      .filter((q: Record<string, unknown>) => q?.regularMarketChangePercent != null)
+      .filter((q: Record<string, unknown>) => q?.symbol != null)
       .map((q: Record<string, unknown>) => ({
         ticker: String(q.symbol),
         sector: SECTOR_NAMES[String(q.symbol)] ?? String(q.symbol),
-        changePercent: Math.round(Number(q.regularMarketChangePercent) * 100) / 100,
+        changePercent: q.regularMarketChangePercent != null
+          ? Math.round(Number(q.regularMarketChangePercent) * 100) / 100
+          : 0,
       }));
     if (results.length < 2) { setCache('sectorData', null); return null; }
     results.sort((a, b) => b.changePercent - a.changePercent);
