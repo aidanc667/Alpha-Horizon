@@ -51,7 +51,7 @@ const nextConfig = {
   },
   // Public env vars (safe to expose)
   publicRuntimeConfig: {
-    APP_NAME: 'FinPlatform',
+    APP_NAME: 'Alpha Horizon',
   },
   async headers() {
     return [
