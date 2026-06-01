@@ -53,8 +53,9 @@ const STEPS = [
   { label: 'Goal + Timeline',       subtitle: 'What is your primary investment goal?' },
   { label: 'Capital',               subtitle: 'What can you invest?' },
   { label: 'Income + Tax',          subtitle: 'Your age, income, and tax situation' },
-  { label: 'Financial Foundation',  subtitle: 'Your cash cushion, debt, and near-term plans' },
+  { label: 'Financial Foundation',  subtitle: 'Your cash cushion and debt situation' },
   { label: 'Accounts',              subtitle: 'Which investment accounts do you have or can access?' },
+  { label: 'Major Purchase',        subtitle: 'Any large expense coming up in the next 5 years?' },
   { label: 'Risk DNA',              subtitle: 'How do you handle volatility?' },
   { label: 'Portfolio Preferences', subtitle: 'Any sector tilts or restrictions? (optional — skip to continue)' },
 ] as const;
@@ -88,10 +89,11 @@ function canAdvance(step: number, d: Draft): boolean {
       return true;
     case 1: return d.startingCapital !== undefined && d.monthlyContribution !== undefined;
     case 2: return !!(d.age && d.age >= 18 && d.age <= 100 && d.annualIncome !== undefined && d.incomeStability);
-    case 3: return !!(d.emergencyFundStatus && d.debtLevel && d.majorExpenseType);
+    case 3: return !!(d.emergencyFundStatus && d.debtLevel);
     case 4: return true; // Accounts — no required selection
-    case 5: return !!(d.marketDropReaction && d.investmentExperience);
-    case 6: return true; // Portfolio Preferences — optional
+    case 5: return !!d.majorExpenseType; // Major Purchase — required selection
+    case 6: return !!(d.marketDropReaction && d.investmentExperience);
+    case 7: return true; // Portfolio Preferences — optional
     default: return false;
   }
 }
@@ -514,28 +516,6 @@ function renderStep(step: number, draft: Draft, update: (k: keyof Draft, v: unkn
             </motion.div>
           )}
         </div>
-        <div className="space-y-1.5">
-          <label className="text-xs font-mono uppercase tracking-widest text-gray-500">Major Purchase in Next 5 Years?</label>
-          <div className="grid grid-cols-2 gap-2">
-            {MAJOR_EXPENSE.map(e => (
-              <RadioBtn key={e.value} selected={draft.majorExpenseType === e.value} onClick={() => update('majorExpenseType', e.value)}>
-                <span className={`text-sm font-medium ${draft.majorExpenseType === e.value ? 'text-emerald-700' : ''}`}>{e.label}</span>
-              </RadioBtn>
-            ))}
-          </div>
-          {draft.majorExpenseType && draft.majorExpenseType !== 'none' && (
-            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="overflow-hidden mt-1">
-              <div className="p-3 bg-gray-100 rounded-xl">
-                <MoneyInput
-                  label="Estimated Cost (optional)"
-                  value={draft.largeExpenseCost}
-                  placeholder="80,000"
-                  onChange={v => update('largeExpenseCost', v)}
-                />
-              </div>
-            </motion.div>
-          )}
-        </div>
       </div>
     );
 
@@ -629,8 +609,36 @@ function renderStep(step: number, draft: Draft, update: (k: keyof Draft, v: unkn
       );
     }
 
-    // ── Q6: Risk DNA ───────────────────────────────────────────────────────────
+    // ── Q6: Major Purchase ────────────────────────────────────────────────────
     case 5: return (
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            {MAJOR_EXPENSE.map(e => (
+              <RadioBtn key={e.value} selected={draft.majorExpenseType === e.value} onClick={() => update('majorExpenseType', e.value)}>
+                <span className={`text-sm font-medium ${draft.majorExpenseType === e.value ? 'text-emerald-700' : ''}`}>{e.label}</span>
+              </RadioBtn>
+            ))}
+          </div>
+        </div>
+        {draft.majorExpenseType && draft.majorExpenseType !== 'none' && (
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="overflow-hidden">
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
+              <p className="text-xs font-semibold text-amber-800">This will factor into your liquidity and allocation strategy.</p>
+              <MoneyInput
+                label="Estimated Cost (optional)"
+                value={draft.largeExpenseCost}
+                placeholder="80,000"
+                onChange={v => update('largeExpenseCost', v)}
+              />
+            </div>
+          </motion.div>
+        )}
+      </div>
+    );
+
+    // ── Q7: Risk DNA ───────────────────────────────────────────────────────────
+    case 6: return (
       <div className="space-y-5">
         <div className="space-y-1.5">
           <label className="text-xs font-mono uppercase tracking-widest text-gray-500">
@@ -670,8 +678,8 @@ function renderStep(step: number, draft: Draft, update: (k: keyof Draft, v: unkn
       </div>
     );
 
-    // ── Q7: Portfolio Preferences ─────────────────────────────────────────────
-    case 6: {
+    // ── Q8: Portfolio Preferences ─────────────────────────────────────────────
+    case 7: {
       const toggleConstraint = (val: string) => {
         if (val === 'no_restrictions') {
           update('constraints', draft.constraints.includes('no_restrictions') ? [] : ['no_restrictions']);
@@ -783,7 +791,7 @@ export default function OnboardingFlow({ onComplete }: Props) {
         </button>
         {isLast && (
           <p className="text-center text-xs text-gray-400 mt-2">
-            Step 7 is optional — click Continue to skip restrictions
+            Step 8 is optional — click Continue to skip restrictions
           </p>
         )}
       </div>

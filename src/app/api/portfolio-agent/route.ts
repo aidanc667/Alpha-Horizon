@@ -250,7 +250,7 @@ export async function POST(req: NextRequest) {
         }
 
         await pace(1200);
-        const agent1Summary = `Risk: ${clientProfile.riskProfile.effectiveRiskTolerance} (${clientProfile.riskProfile.riskScore}/10) · Horizon: ${clientProfile.timeHorizon.yearsToGoal}yr · Tax: ${(clientProfile.taxProfile.federalMarginalRate * 100).toFixed(0)}% federal + ${(clientProfile.taxProfile.stateMarginalRate * 100).toFixed(1)}% ${intakeAnswers.state ?? ''}`;
+        const agent1Summary = `Score ${clientProfile.riskProfile.riskScore}/10 (${clientProfile.riskProfile.effectiveRiskTolerance}) · Capacity: ${clientProfile.riskProfile.riskCapacity} · Willingness: ${clientProfile.riskProfile.riskWillingness} · Max equity: ${(clientProfile.riskProfile.maxEquityAllowed * 100).toFixed(0)}% · ${clientProfile.timeHorizon.yearsToGoal}yr horizon · ${(clientProfile.taxProfile.combinedMarginalRate * 100).toFixed(0)}% combined tax rate`;
         log(`Profile: risk ${clientProfile.riskProfile.riskScore}/10 | ${clientProfile.timeHorizon.yearsToGoal}yr horizon | ${(clientProfile.taxProfile.combinedMarginalRate * 100).toFixed(0)}% combined tax rate`);
         agentDone('clientProfile', agent1Summary);
 
@@ -300,7 +300,16 @@ export async function POST(req: NextRequest) {
         });
         a3Span.end();
         await pace(1800);
-        const agent3Summary = `${portfolio.allocation.length} ETFs · Expected ${(portfolio.statistics.expectedReturn * 100).toFixed(1)}% return · Vol ${(portfolio.statistics.expectedVolatility * 100).toFixed(1)}% · Sharpe ${portfolio.statistics.sharpeRatio.toFixed(2)}`;
+        const topHoldings = [...portfolio.allocation]
+          .sort((a, b) => b.weight - a.weight)
+          .slice(0, 3)
+          .map(h => {
+            const r = portfolio.etfRationale[h.ticker]?.rationale ?? '';
+            const brief = r.split(/[;,]/)[0].trim().slice(0, 52);
+            return `${h.ticker} ${(h.weight * 100).toFixed(0)}% — ${brief}`;
+          })
+          .join(' · ');
+        const agent3Summary = `${topHoldings}${portfolio.allocation.length > 3 ? ` · +${portfolio.allocation.length - 3} more` : ''} · Expected ${(portfolio.statistics.expectedReturn * 100).toFixed(1)}% return · Sharpe ${portfolio.statistics.sharpeRatio.toFixed(2)}`;
         log(`Portfolio: ${portfolio.allocation.length} holdings | expected return ${(portfolio.statistics.expectedReturn * 100).toFixed(1)}% | Sharpe ${portfolio.statistics.sharpeRatio.toFixed(2)}`);
         agentDone('portfolioConstruction', agent3Summary);
 
@@ -340,10 +349,12 @@ export async function POST(req: NextRequest) {
         });
         a5Span.end();
         await pace(1400);
-        const agent4Summary = `${riskAnalysis.passesRiskCheck ? '✓ Approved' : '✗ Review required'} — ${riskAnalysis.riskLevel} risk · ${riskAnalysis.warnings.length} warning${riskAnalysis.warnings.length !== 1 ? 's' : ''}`;
+        const topWarning = riskAnalysis.warnings.length > 0 ? ` · ⚠ ${riskAnalysis.warnings[0].slice(0, 55)}` : '';
+        const agent4Summary = `${riskAnalysis.passesRiskCheck ? '✓ Approved' : '✗ Review required'} — ${riskAnalysis.riskLevel} risk · ${riskAnalysis.warnings.length} warning${riskAnalysis.warnings.length !== 1 ? 's' : ''}${topWarning}`;
         log(`Risk: ${riskAnalysis.riskLevel} (${riskAnalysis.warnings.length} warning${riskAnalysis.warnings.length !== 1 ? 's' : ''})`);
         agentDone('riskAnalysis', agent4Summary);
-        const agent5Summary = `Est. ${taxOptimization.estimatedAnnualSavings}bps tax alpha · ${taxOptimization.recommendations.length} recommendation${taxOptimization.recommendations.length !== 1 ? 's' : ''} · ${taxOptimization.tlhPairs.length} TLH pair${taxOptimization.tlhPairs.length !== 1 ? 's' : ''}`;
+        const topRec = taxOptimization.recommendations[0] ? ` · ${taxOptimization.recommendations[0].title}` : '';
+        const agent5Summary = `Est. ${taxOptimization.estimatedAnnualSavings}bps tax alpha · ${taxOptimization.tlhPairs.length} TLH pair${taxOptimization.tlhPairs.length !== 1 ? 's' : ''}${topRec}`;
         log(`Tax: ${taxOptimization.estimatedAnnualSavings}bps potential savings identified`);
         agentDone('taxOptimization', agent5Summary);
 
