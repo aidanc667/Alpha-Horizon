@@ -1,7 +1,7 @@
 # Alpha Horizon — Claude Code Guide
 
 ## Project overview
-Institutional-grade multi-agent portfolio construction app. Users answer 12 intake questions; a 7-agent pipeline constructs a personalized ETF portfolio with risk analysis, tax optimization, and a Monte Carlo projection. Built on Next.js 14 App Router, TypeScript strict, Clerk auth, Neon Postgres.
+Institutional-grade multi-agent portfolio construction app. Users complete a 7-slide intake wizard (~16 questions); a 7-agent pipeline constructs a personalized ETF portfolio with risk analysis, tax optimization, and a Monte Carlo projection. Built on Next.js 14 App Router, TypeScript strict, Clerk auth, Neon Postgres.
 
 ## Dev commands
 ```bash
@@ -21,6 +21,7 @@ npx tsc --noEmit # type-check without building
 
 ### Agent pipeline (`src/app/api/portfolio-agent/route.ts`)
 Streams NDJSON (`application/x-ndjson`). Each `{ type: 'log', message }` line maps to one pipeline stage; final `{ type: 'plan', ... }` delivers the complete `V3Plan`.
+Rate limited: 10 plans/hr per user via `src/lib/rateLimit.ts` → `rate_limits` table.
 
 | Agent | File | Type | What it does |
 |-------|------|------|-------------|
@@ -34,9 +35,29 @@ Streams NDJSON (`application/x-ndjson`). Each `{ type: 'log', message }` line ma
 
 Critic pass threshold: `overall >= 85` in `agent6.ts`. Retry only triggers for `alignment < 60` or `riskManagement < 60`.
 
+### Intake wizard (`src/components/planner/OnboardingFlow.tsx`)
+7 slides — collects all `IntakeAnswers` fields:
+
+| Slide | Label | Key fields |
+|-------|-------|-----------|
+| 1 | Goal + Timeline | `goal`, `timeHorizon`, `riskTolerance` |
+| 2 | Capital | `initialInvestment`, `monthlyContribution` |
+| 3 | Income + Tax | `age`, `annualIncome`, `taxFilingStatus`, `taxBracket`, `employerMatchPct` |
+| 4 | Financial Foundation | `emergencyFundStatus`, `debtLevel`, `majorExpenseType` |
+| 5 | Accounts | `availableAccounts`, `hsaContributing` (sub-question) |
+| 6 | Risk DNA | `volatilityComfort`, `investmentExperience`, `drawdownResponse` |
+| 7 | Portfolio Preferences | `esgPreference`, `sectorConstraints` (optional) |
+
+### Results dashboard (`src/components/planner/PlanResults.tsx`)
+Tabs: Overview · Financial Metrics · Monte Carlo · Tax · Portfolio.
+
+**Financial Metrics** (6): Expected CAGR, Real Return (inflation-adj.), Annual Volatility, Sharpe Ratio, Est. Max Drawdown, Sortino Ratio.
+**Monte Carlo**: Analytical lognormal engine (<5ms). Contribution sensitivity at +$250/+$500/+$1K/mo. P50/P10 outcome chips with goal gap indicator.
+**Tax tab**: Withdrawal sequencing note (taxable → traditional → Roth). Account-type placement cards. 401k contribution tracker vs IRS limit with employer match callout.
+
 ### Caching (`src/lib/agentResponseCache.ts`)
 - **L1**: in-process memory (~0ms, lost on cold start)
-- **L2**: Neon `plan_cache` table (SHA-256 hash of IntakeAnswers, 24hr TTL)
+- **L2**: Neon `plan_cache` table (SHA-256 hash of IntakeAnswers, cache key `plan_v6`, 24hr TTL)
 - Macro data separately cached in `macro_cache` table
 
 ### Database (`src/lib/db.ts`)
@@ -62,13 +83,13 @@ src/lib/data/
   institutionalCMAs.ts  — JPM/Vanguard/BlackRock 10-yr return + vol forecasts
   calculateETFReturns.ts — expected return resolver
 
-src/apps/portfolio-agent/
-  page.tsx              — intake wizard + results UI entry point
-  components/           — IntakeWizard, ResultsDashboard, section components
+src/components/planner/
+  OnboardingFlow.tsx    — 7-slide intake wizard
+  PlanResults.tsx       — results dashboard (tabs + charts)
 
 src/lib/
+  rateLimit.ts          — sliding-window rate limiter (DB-backed)
   monteCarlo/analyticalMonteCarlo.ts — Monte Carlo engine
-  intake/questions/     — 12 intake questions split by section
   intake/validation.ts  — intake answer validation
 ```
 
@@ -82,6 +103,9 @@ Edit `WEIGHTS` in `src/lib/agents/agent6.ts`. Weights must sum to 1.0. Pass thre
 
 ### Debugging a bad plan
 Read the NDJSON log stream first — each line tells you which agent ran and what it produced. CAPE=25 exactly in the macro line = agent2 fallback (cache/fetch miss). Revision loop = agent6 score < 85 with alignment or riskManagement < 60.
+
+### Bumping cache key
+When `IntakeAnswers` schema changes, increment the cache key in `src/lib/agentResponseCache.ts` (currently `plan_v6`) to invalidate stale plans.
 
 ## Conventions
 - TypeScript strict mode — no `any`, no implicit returns
