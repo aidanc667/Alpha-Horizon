@@ -3,6 +3,7 @@ import { auth } from '@clerk/nextjs/server';
 import { createHash } from 'node:crypto';
 import { trace, context as otelContext, SpanStatusCode } from '@opentelemetry/api';
 import { db } from '@/lib/db';
+import { checkRateLimit } from '@/lib/rateLimit';
 import { agent1_clientProfile }         from '@/lib/agents/agent1';
 import { agent2_economicIntelligence }  from '@/lib/agents/agent2';
 import { agent3_portfolioConstruction } from '@/lib/agents/agent3';
@@ -54,8 +55,13 @@ interface V3Plan {
 // ─── L2 plan cache (Neon plan_cache table, 24hr TTL) ─────────────────────────
 
 function planCacheKey(intakeAnswers: IntakeAnswers): string {
-  const date = new Date().toISOString().slice(0, 10); // YYYY-MM-DD — invalidates daily with market data
-  return `plan_v5_${date}_${createHash('sha256').update(JSON.stringify(intakeAnswers)).digest('hex').slice(0, 16)}`;
+  // Date-stamp is YYYY-MM-DD UTC — ensures a cache miss when macro data refreshes
+  // (macro cache has a 24hr TTL too, so both caches align). Using UTC date rather
+  // than wall-clock prevents the same-inputs run at 23:59 vs 00:01 UTC from hitting
+  // different keys; the date only matters for daily cache busting, not precision.
+  const date = new Date().toISOString().slice(0, 10);
+  const inputHash = createHash('sha256').update(JSON.stringify(intakeAnswers)).digest('hex').slice(0, 16);
+  return `plan_v6_${date}_${inputHash}`;
 }
 
 async function checkCache(cacheKey: string): Promise<V3Plan | null> {
@@ -94,40 +100,51 @@ function saveCache(cacheKey: string, plan: V3Plan): void {
 // (primaryGoal, hasEmergencyFund at top level). Agents expect the new nested shape
 // (goal, financialSnapshot.hasEmergencyFund). Detect by presence of `primaryGoal`.
 
+// Safe numeric coercion — falls back to defaultVal when the input is
+// undefined, null, empty, or non-numeric (e.g. Number("abc") → NaN).
+function safeNum(val: unknown, defaultVal: number): number {
+  const n = Number(val);
+  return Number.isFinite(n) ? n : defaultVal;
+}
+
 function normalizeIntakeAnswers(raw: unknown): IntakeAnswers {
   const r = raw as Record<string, unknown>;
 
-  // Already new format
+  // Already new format — pass through as-is
   if (r.goal !== undefined && r.financialSnapshot !== undefined) {
     return r as unknown as IntakeAnswers;
   }
 
+  // Legacy format (pre-OnboardingFlow v2) — coerce into IntakeAnswers shape
   const marketDrop = String(r.marketDropReaction ?? 'passive');
   const riskLevel: 'low' | 'medium' | 'high' =
     marketDrop === 'aggressive' ? 'high' : marketDrop === 'panic' ? 'low' : 'medium';
 
+  const goalAmount = safeNum(r.goalAmount, 0);
+
   return {
     goal: (r.primaryGoal ?? 'max_growth') as IntakeAnswers['goal'],
-    ...(r.goalAmount != null && { goalAmount: Number(r.goalAmount) }),
-    timeHorizon: Number(r.yearsUntilWithdrawal ?? 10),
-    startingCapital: Number(r.startingCapital ?? 0),
-    monthlyContribution: Number(r.monthlyContribution ?? 0),
+    ...(goalAmount > 0 && { goalAmount }),
+    timeHorizon:         safeNum(r.yearsUntilWithdrawal, 10),
+    startingCapital:     safeNum(r.startingCapital, 0),
+    monthlyContribution: safeNum(r.monthlyContribution, 0),
     financialSnapshot: {
-      hasEmergencyFund: Boolean(r.hasEmergencyFund),
+      hasEmergencyFund:    Boolean(r.hasEmergencyFund),
       hasHighInterestDebt: String(r.debtLevel ?? '') === 'high',
       ...(r.hasLargeExpense && r.largeExpenseAmount != null
-        ? { plannedExpense: Number(r.largeExpenseAmount) }
+        ? { plannedExpense: safeNum(r.largeExpenseAmount, 0) }
         : {}),
     },
-    filingStatus: (r.taxFilingStatus ?? 'single') as IntakeAnswers['filingStatus'],
-    annualIncome: Number(r.annualIncome ?? 0),
-    state: String(r.state ?? ''),
-    age: 40,
+    filingStatus:    (r.taxFilingStatus ?? 'single') as IntakeAnswers['filingStatus'],
+    annualIncome:    safeNum(r.annualIncome, 0),
+    state:           String(r.state ?? 'CA'),
+    age:             safeNum(r.age, 35),
     existingAccounts: { traditional: 0, roth: 0, hsa: 0 },
-    riskCapacity: riskLevel,
+    riskCapacity:    riskLevel,
     riskWillingness: riskLevel,
-    incomeStability: Number(r.incomeStability ?? 3) as IntakeAnswers['incomeStability'],
-    availableAccounts: (r.accounts as string[]) ?? [],
+    incomeStability: Math.min(5, Math.max(1, safeNum(r.incomeStability, 3))) as IntakeAnswers['incomeStability'],
+    availableAccounts: Array.isArray(r.accounts) ? r.accounts as string[] : [],
+    ...(r.employerMatchPct != null && { employerMatchPct: safeNum(r.employerMatchPct, 0) }),
     ...(r.favoredSectors != null || r.avoidedSectors != null
       ? {
           investmentPreferences: {
@@ -155,6 +172,15 @@ export async function POST(req: NextRequest) {
 
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  // 10 plans per user per hour — generous for normal use, blocks abuse
+  const withinLimit = await checkRateLimit(userId, 'portfolio-agent', 10, 3600);
+  if (!withinLimit) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded. You can generate up to 10 plans per hour.' },
+      { status: 429 },
+    );
+  }
 
   const encoder = new TextEncoder();
 

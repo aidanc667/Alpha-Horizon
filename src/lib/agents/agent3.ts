@@ -97,7 +97,12 @@ export function agent3_portfolioConstruction(input: {
   const sharpeRatio =
     expectedVolatility > 0 ? (expectedReturn - riskFreeRate) / expectedVolatility : 0;
 
-  // Max drawdown estimate — positive decimal (0.28 = −28% peak-to-trough)
+  // Max drawdown estimate — positive decimal (0.28 = −28% peak-to-trough).
+  // Coefficients sourced from historical worst-case drawdowns per asset class:
+  //   Equity: −57% GFC 2008–09, −34% COVID 2020 → blended worst-case ≈ 55%
+  //   Bonds:  −18% 2022 rate-shock → conservative estimate ≈ 15%
+  //   Cash:   near-zero duration → ~1%
+  // This produces a GFC-calibrated stress scenario, not an average expectation.
   const equityPct = allocation
     .filter((s) => s.category === 'growth')
     .reduce((sum, s) => sum + s.weight, 0);

@@ -52,6 +52,22 @@ const AGENT_COLORS: Record<AgentName, string> = {
 
 const ALL_AGENTS: AgentName[] = [...AGENT_PIPELINE, 'ipsGenerator'];
 
+// Maps API-emitted agent names → frontend AgentName keys (API names differ from constants)
+const API_NAME_MAP: Record<string, AgentName> = {
+  clientProfile:          'clientProfile',
+  economicIntelligence:   'capitalMarkets',
+  capitalMarkets:         'capitalMarkets',
+  portfolioConstruction:  'portfolioConstruction',
+  riskAnalysis:           'riskAgent',
+  riskAgent:              'riskAgent',
+  taxOptimization:        'taxImplementation',
+  taxImplementation:      'taxImplementation',
+  critic:                 'criticEvaluator',
+  criticEvaluator:        'criticEvaluator',
+  ipsGenerator:           'ipsGenerator',
+  synthesis:              'ipsGenerator',
+};
+
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface AgentStreamPanelProps {
@@ -285,6 +301,79 @@ function StreamingOverlay({
   );
 }
 
+// ─── Detailed agent card (post-completion accordion) ──────────────────────────
+
+function DetailedAgentCard({ agent, entry }: { agent: AgentName; entry: AgentEntry }) {
+  const color = AGENT_COLORS[agent];
+  const summary = entry.summary ?? '';
+
+  // Split "·"-separated summary into individual chips for visual rendering
+  const chips = summary
+    .split('·')
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  return (
+    <div
+      className="rounded-xl p-4 border"
+      style={{ background: `${color}06`, borderColor: `${color}20` }}
+    >
+      {/* Header row */}
+      <div className="flex items-center gap-2.5 mb-2">
+        <div
+          className="w-7 h-7 rounded-lg flex items-center justify-center text-sm flex-shrink-0"
+          style={{ background: `${color}18`, border: `1px solid ${color}30` }}
+        >
+          {AGENT_ICONS[agent]}
+        </div>
+        <span className="text-sm font-semibold" style={{ color }}>
+          {AGENT_LABELS[agent]}
+        </span>
+        <div
+          className="ml-auto w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
+          style={{ background: `${color}20`, border: `1px solid ${color}40` }}
+        >
+          <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+            <path d="M1 4L3 6L7 2" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+      </div>
+
+      {/* What this agent was responsible for */}
+      <p className="text-xs text-slate-500 leading-relaxed mb-2.5">
+        {AGENT_DESCRIPTIONS[agent]}
+      </p>
+
+      {/* What it actually found / decided */}
+      {chips.length > 0 && (
+        <div className="border-t pt-2.5 space-y-1.5" style={{ borderColor: `${color}15` }}>
+          <p className="text-[9px] uppercase tracking-widest font-bold" style={{ color: `${color}80` }}>
+            Output
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {chips.map((chip, i) => (
+              <span
+                key={i}
+                className="text-[11px] font-mono px-2 py-0.5 rounded-md"
+                style={{ background: `${color}12`, color: `${color}dd`, border: `1px solid ${color}20` }}
+              >
+                {chip}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* No summary yet (cache hit with no streaming) */}
+      {chips.length === 0 && (
+        <div className="border-t pt-2" style={{ borderColor: `${color}15` }}>
+          <span className="text-[11px] text-slate-600 font-mono italic">Completed (loaded from cache)</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Accordion (post-completion) ──────────────────────────────────────────────
 
 function CompletedAccordion({
@@ -333,21 +422,15 @@ function CompletedAccordion({
 
       {/* Expanded content */}
       {open && (
-        <div className="border-t border-white/5 px-4 py-5">
-          <div className="space-y-0">
-            {ALL_AGENTS.map((agent, idx) => (
-              <AgentRow
-                key={agent}
-                agent={agent}
-                status={agents[agent].status}
-                summary={agents[agent].summary}
-                isLast={idx === ALL_AGENTS.length - 1}
-              />
-            ))}
-          </div>
+        <div className="border-t border-white/5 px-4 py-5 space-y-3">
+          {/* Agent detail cards */}
+          {ALL_AGENTS.map(agent => (
+            <DetailedAgentCard key={agent} agent={agent} entry={agents[agent]} />
+          ))}
 
+          {/* Critic loop iterations */}
           {criticIterations && criticIterations.length > 0 && (
-            <div className="mt-5 border-t border-white/5 pt-4">
+            <div className="border-t border-white/5 pt-4">
               <div className="text-xs font-mono uppercase tracking-widest text-slate-600 mb-3">
                 Critic Loop — {criticIterations.length} iteration{criticIterations.length !== 1 ? 's' : ''}
               </div>
@@ -466,17 +549,17 @@ export default function AgentStreamPanel({ answers, onComplete, onReset }: Agent
             try { chunk = JSON.parse(trimmed) as StreamChunk; } catch { continue; }
 
             if (chunk.type === 'agent_start') {
-              const name = chunk.agent as AgentName;
+              const name = API_NAME_MAP[chunk.agent] ?? chunk.agent as AgentName;
               if (ALL_AGENTS.includes(name)) markAgent(name, 'running');
               addLog(`[${AGENT_LABELS[name] ?? chunk.agent}] started`);
 
             } else if (chunk.type === 'agent_done') {
-              const name = chunk.agent as AgentName;
+              const name = API_NAME_MAP[chunk.agent] ?? chunk.agent as AgentName;
               if (ALL_AGENTS.includes(name)) markAgent(name, 'complete', chunk.summary);
               addLog(`[${AGENT_LABELS[name] ?? chunk.agent}] done — ${chunk.summary.slice(0, 80)}`);
 
               // Extract critic score from the evaluator summary
-              if (name === 'criticEvaluator') {
+              if (name === 'criticEvaluator' || chunk.agent === 'critic') {
                 const match = chunk.summary.match(/(\d+)\/100/);
                 if (match) setCriticScore(Number(match[1]));
               }

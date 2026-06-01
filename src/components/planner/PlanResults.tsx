@@ -76,6 +76,81 @@ const ACCOUNT_COLORS: Record<string, { bg: string; text: string; label: string }
 
 // ─── Tab 1 — Portfolio ─────────────────────────────────────────────────────────
 
+function MonteCarloTable({ plan, stats, answers }: { plan: V3Plan; stats: V3Plan['portfolio']['statistics']; answers: IntakeAnswers }) {
+  const [mcExpanded, setMcExpanded] = useState(false);
+  const mcProj = plan.monteCarlo.projections;
+  const horizon = answers.timeHorizon;
+
+  // Build 5–6 milestone years that span the horizon without duplicates
+  function buildMilestones(h: number): number[] {
+    if (h <= 5)  return [1, 2, 3, Math.max(4, h - 1), h].filter((y, i, a) => y > 0 && a.indexOf(y) === i);
+    if (h <= 10) return [1, 3, 5, Math.round(h * 0.75), h].filter((y, i, a) => a.indexOf(y) === i);
+    if (h <= 20) return [1, 3, 5, 10, Math.round(h * 0.75), h].filter((y, i, a) => a.indexOf(y) === i);
+    if (h <= 30) return [1, 5, 10, 15, Math.round(h * 0.75), h].filter((y, i, a) => a.indexOf(y) === i);
+    return [1, 5, 10, 20, Math.round(h * 0.5), Math.round(h * 0.75), h].filter((y, i, a) => a.indexOf(y) === i);
+  }
+
+  const milestones = buildMilestones(horizon);
+  const mcRows = milestones.map(yr => {
+    const exact   = mcProj.find(p => p.year === yr);
+    const nearest = mcProj.reduce((best, p) =>
+      Math.abs(p.year - yr) < Math.abs(best.year - yr) ? p : best
+    );
+    return { ...(exact ?? nearest), displayYear: yr };
+  });
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+      <button
+        className="w-full flex items-center justify-between px-5 py-3 text-left"
+        onClick={() => setMcExpanded(x => !x)}
+      >
+        <h3 className="text-xs font-bold text-gray-900 uppercase tracking-widest">
+          Monte Carlo Projection Table
+        </h3>
+        <span className="text-gray-400 text-xs">{mcExpanded ? '▲ Collapse' : '▼ Expand'}</span>
+      </button>
+      {mcExpanded && (
+        <div className="px-5 pb-5">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-[10px] uppercase tracking-wider text-gray-400 border-b border-gray-100">
+                <th className="text-left pb-2 font-medium">Year</th>
+                <th className="text-right pb-2 font-medium">P10 (Bear)</th>
+                <th className="text-right pb-2 font-medium">P50 (Median)</th>
+                <th className="text-right pb-2 font-medium">P90 (Bull)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {mcRows.map(row => {
+                const isGoal = row.displayYear === horizon;
+                return (
+                  <tr key={row.displayYear} className={isGoal ? 'bg-emerald-50' : ''}>
+                    <td className="py-2 font-mono font-bold text-gray-700">
+                      Yr {row.displayYear}
+                      {isGoal && (
+                        <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wide text-emerald-600 bg-emerald-100 px-1 py-0.5 rounded">
+                          Goal
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2 text-right font-mono text-red-500">{fmt$(row.p10)}</td>
+                    <td className={`py-2 text-right font-mono font-bold ${isGoal ? 'text-emerald-700' : 'text-gray-900'}`}>{fmt$(row.p50)}</td>
+                    <td className="py-2 text-right font-mono text-emerald-600">{fmt$(row.p90)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <p className="text-[10px] text-gray-400 mt-3">
+            Analytical lognormal model · µ={fmtPct(stats.expectedReturn)} σ={fmtPct(stats.expectedVolatility)} ·
+            Includes ${answers?.monthlyContribution ?? 0}/mo contributions
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PortfolioTab({
   plan,
   backtest,
@@ -109,7 +184,8 @@ function PortfolioTab({
       }));
   }, [backtest.result]);
 
-  // ── Projection chart data
+  // ── Projection chart data — capped at 40 years for readability
+  const projectionYears = Math.min(Math.max(answers.timeHorizon, 5), 40);
   const projData = useMemo(
     () =>
       generateProjectionSeries(
@@ -117,7 +193,7 @@ function PortfolioTab({
         answers.monthlyContribution,
         stats.expectedReturn,
         stats.expectedVolatility,
-        15,
+        projectionYears,
       ).map((d) => ({
         ...d,
         bandBase: d.p10,
@@ -130,29 +206,63 @@ function PortfolioTab({
       answers.monthlyContribution,
       stats.expectedReturn,
       stats.expectedVolatility,
+      projectionYears,
     ],
   );
 
   const p50final = projData.at(-1)?.p50 ?? 0;
   const p10final = projData.at(-1)?.p10 ?? 0;
   const bt = backtest.result;
+
+  // ── Strategy Analytics base values (needed by contribSensitivity below) ───
+  const T   = answers.timeHorizon;
+  const mu  = stats.expectedReturn;
+  const sig = stats.expectedVolatility;
+
+  // ── Contribution sensitivity — P(success) at +$250, +$500, +$1000/mo ─────
+  const goalAmt = plan.monteCarlo.inputs.initialValue > 0 ? (answers.goalAmount ?? 0) : 0;
+  const contribSensitivity = useMemo(() => {
+    if (!goalAmt || goalAmt <= 0) return null;
+    const v0 = answers.startingCapital;
+    const driftAdj = (mu - 0.5 * sig * sig) * T;
+    const spread   = sig * Math.sqrt(T);
+    if (spread <= 0 || T <= 0) return null;
+
+    function successProb(pmt: number): number {
+      const rm = Math.pow(1 + mu, 1 / 12) - 1;
+      const contribFV = rm < 1e-9 ? pmt * T * 12 : pmt * ((Math.pow(1 + rm, T * 12) - 1) / rm);
+      const lumpTarget = Math.max(1, goalAmt - contribFV);
+      const z = (Math.log(lumpTarget / Math.max(1, v0)) - driftAdj) / spread;
+      // normal CDF via erfApprox
+      const cdf = (x: number) => 0.5 * (1 + erfApprox(x / Math.SQRT2));
+      return Math.min(1, Math.max(0, cdf(-z)));
+    }
+
+    const base = successProb(answers.monthlyContribution);
+    if (base >= 0.85) return null; // already on track — no nudge needed
+    return [
+      { label: 'Current', extra: 0,    prob: base },
+      { label: '+$250/mo', extra: 250,  prob: successProb(answers.monthlyContribution + 250) },
+      { label: '+$500/mo', extra: 500,  prob: successProb(answers.monthlyContribution + 500) },
+      { label: '+$1K/mo',  extra: 1000, prob: successProb(answers.monthlyContribution + 1000) },
+    ];
+  }, [goalAmt, answers.startingCapital, answers.monthlyContribution, answers.timeHorizon, mu, sig]);
   const btVtFinal = bt ? bt.dailyData.at(-1)?.benchmarkValue ?? 0 : 0;
   const btAlphaDlr = bt ? fmt$(bt.metrics.endingValue - btVtFinal) : null;
   const btReturn = bt ? `+${bt.metrics.totalReturnPct.toFixed(0)}%` : null;
 
   // ── Strategy Analytics: forward-looking, analytically computed ────────────
-  const T = answers.timeHorizon;
-  const mu = stats.expectedReturn;
-  const sig = stats.expectedVolatility;
   const rf = macro.macroData.treasury10Y;
   const maxDD = stats.maxDrawdownEstimate;
-  const d = rf - mu;
-  const zS = sig > 0 ? d / sig : 0;
-  const semiDevSq = (d * d + sig * sig) * normalCDF(zS) + d * sig * normalPDF(zS);
+  // Sortino semi-deviation: E[min(R-rf, 0)^2] for normal N(mu, sig^2).
+  // Using rfExcess = rf - mu (i.e. -delta) so that normalCDF(rfExcess/sig)
+  // = Phi(-delta/sig) and the product term flips sign correctly.
+  // Verified: identical result to the canonical delta-form.
+  const rfExcess = rf - mu;
+  const zS = sig > 0 ? rfExcess / sig : 0;
+  const semiDevSq = (rfExcess * rfExcess + sig * sig) * normalCDF(zS) + rfExcess * sig * normalPDF(zS);
   const semiDev = Math.sqrt(Math.max(semiDevSq, 0));
   const sortinoRatio = semiDev > 0 ? (mu - rf) / semiDev : 0;
-  const cumulativeReturn = Math.pow(1 + mu, T) - 1;
-  const calmarRatio = maxDD > 0 ? cumulativeReturn / maxDD : 0;
 
   const macroDate = macro.macroFetchedAt
     ? new Date(macro.macroFetchedAt).toLocaleDateString('en-US', {
@@ -282,45 +392,89 @@ function PortfolioTab({
           </div>
         </div>
 
-        {/* Strategy Analytics */}
+        {/* Financial Metrics */}
         <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
           <h3 className="text-xs font-bold text-gray-900 uppercase tracking-widest mb-4">
-            Strategy Analytics
+            Financial Metrics
           </h3>
           <div className="grid grid-cols-2 gap-3">
             <MetricCard
               label="Expected CAGR"
               value={`+${(mu * 100).toFixed(1)}%/yr`}
-              sub="annualized, without contributions"
+              sub="from CMAs — weighted by allocation"
+            />
+            <MetricCard
+              label="Real Return (inflation-adj.)"
+              value={`+${Math.max(0, (mu - macro.macroData.cpiYoY) * 100).toFixed(1)}%/yr`}
+              sub={`after ${(macro.macroData.cpiYoY * 100).toFixed(1)}% CPI — actual purchasing power gain`}
             />
             <MetricCard
               label="Annual Volatility"
               value={`${(sig * 100).toFixed(1)}%/yr`}
-              sub="expected return variation"
+              sub="from covariance matrix — 1σ band"
+            />
+            <MetricCard
+              label="Sharpe Ratio"
+              value={stats.sharpeRatio.toFixed(2)}
+              sub="excess return per unit of total risk"
+            />
+            <MetricCard
+              label="Est. Max Drawdown"
+              value={`-${(maxDD * 100).toFixed(1)}%`}
+              sub="GFC 2008-style stress scenario"
             />
             <MetricCard
               label="Sortino Ratio"
               value={sortinoRatio.toFixed(2)}
-              sub="downside-only risk-adjusted"
-            />
-            <MetricCard
-              label="Stress Drawdown"
-              value={`-${(maxDD * 100).toFixed(1)}%`}
-              sub="GFC-style stress scenario"
-            />
-            <MetricCard
-              label={`Calmar Ratio (${T}yr)`}
-              value={calmarRatio.toFixed(2)}
-              sub="cumulative return ÷ max pain"
-            />
-            <MetricCard
-              label="95% 1-Yr VaR"
-              value={`-${(Math.max(0, -(mu - 1.645 * sig)) * 100).toFixed(1)}%`}
-              sub="1-in-20 year worst-case loss"
+              sub="excess return per unit of downside risk"
             />
           </div>
         </div>
       </div>
+
+      {/* ── 401k Contribution + Match Callout */}
+      {(() => {
+        const limit401k = (answers.age ?? 35) >= 50 ? 30500 : 23500;
+        const annual = answers.monthlyContribution * 12;
+        const has401k = answers.availableAccounts.some((a: string) => a.toLowerCase().includes('401'));
+        if (!has401k) return null;
+        const gap = limit401k - annual;
+        const gapPerMonth = Math.max(0, Math.ceil(gap / 12));
+        const matchPct = answers.employerMatchPct ?? 0;
+        const matchDollar = matchPct > 0 ? Math.round(answers.annualIncome * matchPct / 100) : 0;
+        const contributingToMatch = matchPct > 0 && annual >= answers.annualIncome * matchPct / 100;
+        return (
+          <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 space-y-2">
+            <p className="text-[10px] uppercase tracking-widest text-blue-500 font-bold">401(k) Contribution Tracker</p>
+            <div className="flex flex-wrap gap-4 text-xs">
+              <div>
+                <span className="text-blue-400">Annual pace</span>
+                <span className="ml-2 font-mono font-bold text-blue-900">{fmt$(annual)}</span>
+              </div>
+              <div>
+                <span className="text-blue-400">IRS limit{(answers.age ?? 35) >= 50 ? ' (catch-up)' : ''}</span>
+                <span className="ml-2 font-mono font-bold text-blue-900">{fmt$(limit401k)}</span>
+              </div>
+              {gap > 0 && (
+                <div>
+                  <span className="text-blue-400">To max out</span>
+                  <span className="ml-2 font-mono font-bold text-blue-900">+{fmt$(gapPerMonth)}/mo</span>
+                </div>
+              )}
+            </div>
+            {matchDollar > 0 && (
+              <div className={`rounded-lg px-3 py-2 text-xs font-medium mt-1 ${contributingToMatch ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                {contributingToMatch
+                  ? `✓ You're capturing the full ${matchPct}% employer match (~${fmt$(matchDollar)}/yr in free money).`
+                  : `⚠ You're leaving ~${fmt$(matchDollar)}/yr in employer match on the table. Increase contributions to ${fmt$(Math.ceil(answers.annualIncome * matchPct / 100 / 12))}/mo to capture it.`}
+              </div>
+            )}
+            {gap <= 0 && (
+              <p className="text-[11px] text-emerald-700 font-semibold">✓ You're maxing your 401(k) — excellent tax efficiency.</p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── Graph 1: Historical backtest */}
       <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
@@ -407,30 +561,8 @@ function PortfolioTab({
                   }}
                   labelStyle={{ color: '#94a3b8', marginBottom: 4 }}
                 />
-                <ReferenceArea
-                  x1="2020-02"
-                  x2="2020-04"
-                  fill="#ef4444"
-                  fillOpacity={0.06}
-                  label={{
-                    value: 'COVID −34%',
-                    position: 'insideTop',
-                    fontSize: 9,
-                    fill: '#ef4444',
-                  }}
-                />
-                <ReferenceArea
-                  x1="2022-01"
-                  x2="2022-12"
-                  fill="#ef4444"
-                  fillOpacity={0.06}
-                  label={{
-                    value: '2022 Bear −19%',
-                    position: 'insideTop',
-                    fontSize: 9,
-                    fill: '#ef4444',
-                  }}
-                />
+                <ReferenceArea x1="2020-02" x2="2020-04" fill="#ef4444" fillOpacity={0.06} />
+                <ReferenceArea x1="2022-01" x2="2022-12" fill="#ef4444" fillOpacity={0.06} />
                 <Line
                   type="monotone"
                   dataKey="contributed"
@@ -488,28 +620,32 @@ function PortfolioTab({
       <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
         <div className="mb-3">
           <h3 className="text-xs font-bold text-gray-900 uppercase tracking-widest">
-            15-Year Projection
+            {projectionYears}-Year Projection
           </h3>
           <div className="flex flex-wrap gap-3 mt-2">
-            {[
-              { label: 'P50 at 15yr', value: fmt$(p50final) },
-              {
-                label: 'Success Prob.',
-                value:
-                  plan.monteCarlo.goalSuccessProbability != null
-                    ? fmtPct(plan.monteCarlo.goalSuccessProbability)
-                    : '—',
-              },
-              { label: 'P10 at 15yr', value: fmt$(p10final) },
-            ].map(({ label, value }) => (
-              <span
-                key={label}
-                className="text-[11px] font-mono bg-slate-50 border border-gray-100 rounded-md px-2 py-0.5"
-              >
-                <span className="text-gray-500">{label}:</span>{' '}
-                <span className="font-bold text-gray-800">{value}</span>
-              </span>
-            ))}
+            {(() => {
+              const successProb = plan.monteCarlo.goalSuccessProbability;
+              const probVal = successProb != null ? fmtPct(successProb) : '—';
+              const goalGap = goalAmt > 0 && p50final > 0
+                ? p50final >= goalAmt
+                  ? `+${fmt$(Math.round(p50final - goalAmt))} surplus`
+                  : `-${fmt$(Math.round(goalAmt - p50final))} gap`
+                : null;
+              return [
+                { label: `P50 (yr ${projectionYears})`, value: fmt$(p50final) },
+                { label: 'Success Prob.', value: probVal, highlight: successProb != null && successProb < 0.5 },
+                ...(goalAmt > 0 ? [{ label: `Goal (${fmt$(goalAmt)}) gap`, value: goalGap ?? '—', highlight: false }] : []),
+                { label: `P10 (yr ${projectionYears})`, value: fmt$(p10final), highlight: false },
+              ].map(({ label, value, highlight }) => (
+                <span
+                  key={label}
+                  className={`text-[11px] font-mono border rounded-md px-2 py-0.5 ${highlight ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-gray-100'}`}
+                >
+                  <span className="text-gray-500">{label}:</span>{' '}
+                  <span className={`font-bold ${highlight ? 'text-amber-700' : 'text-gray-800'}`}>{value}</span>
+                </span>
+              ));
+            })()}
           </div>
         </div>
 
@@ -670,6 +806,56 @@ function PortfolioTab({
           </div>
         </div>
       </div>
+
+      {/* ── Monte Carlo Projection Table */}
+      <MonteCarloTable plan={plan} stats={stats} answers={answers} />
+
+      {/* ── Contribution Sensitivity */}
+      {contribSensitivity && (
+        <div className="rounded-xl border border-blue-100 bg-blue-50 p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-bold text-blue-900 uppercase tracking-widest">
+              Boost Your Success Probability
+            </h3>
+            <span className="text-[10px] font-mono text-blue-400">Goal: {fmt$(goalAmt)}</span>
+          </div>
+          <div className="grid grid-cols-4 gap-2">
+            {contribSensitivity.map(({ label, extra, prob }) => (
+              <div
+                key={label}
+                className={`rounded-lg p-3 text-center ${extra === 0 ? 'bg-white border border-blue-200' : 'bg-blue-600 text-white'}`}
+              >
+                <p className={`text-lg font-black font-mono ${extra === 0 ? 'text-blue-700' : 'text-white'}`}>
+                  {fmtPct(prob)}
+                </p>
+                <p className={`text-[10px] font-semibold mt-0.5 ${extra === 0 ? 'text-blue-400' : 'text-blue-200'}`}>
+                  {label}
+                </p>
+                {extra > 0 && (
+                  <p className="text-[9px] text-blue-300 mt-0.5">+{fmt$(extra * 12)}/yr</p>
+                )}
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] text-blue-400 mt-2">
+            Based on {fmt$(answers.monthlyContribution)}/mo current contributions · lognormal model · {answers.timeHorizon}-year horizon
+          </p>
+        </div>
+      )}
+
+      {/* ── Catch-up contribution callout */}
+      {(answers.age ?? 35) >= 50 && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 flex items-start gap-3">
+          <span className="text-lg flex-shrink-0">🎯</span>
+          <div>
+            <p className="text-xs font-bold text-emerald-800">Catch-up contributions available (age {answers.age})</p>
+            <p className="text-[11px] text-emerald-700 mt-0.5">
+              You can contribute <strong>$30,500/yr</strong> to your 401k (vs $23,500) and <strong>$8,000/yr</strong> to your IRA (vs $7,000).
+              {' '}That's an extra <strong>$8,000/yr</strong> in tax-advantaged space — apply it in the savings waterfall below.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -699,8 +885,6 @@ function AnalysisTab({
   backtest: BacktestState;
   answers: IntakeAnswers;
 }) {
-  const [mcExpanded, setMcExpanded] = useState(false);
-
   const stats    = plan.portfolio.statistics;
   const alloc    = plan.portfolio.allocation;
   const taxOpt   = plan.taxOptimization;
@@ -728,9 +912,9 @@ function AnalysisTab({
   const costBps   = Math.round((0.0030 - stats.weightedExpenseRatio) * 10_000); // vs 30bps typical active
 
   const alphaRows = [
-    { source: 'Factor Premium', bps: factorBps, desc: 'Small-cap value tilt (AVUV/AVDV)' },
+    { source: 'Factor Premium (est.)', bps: factorBps, desc: 'Historical Fama-French SCV premium — long-run estimate, not forward-looking' },
     { source: 'Tax Alpha', bps: taxBps, desc: 'Optimal asset location & muni bond selection' },
-    { source: 'International Diversification', bps: intlBps, desc: 'Global equity diversification premium' },
+    { source: 'Intl. Diversification (est.)', bps: intlBps, desc: 'Historical diversification premium — compresses in high-valuation environments' },
     { source: 'Bond Efficiency', bps: bondBps, desc: 'Muni bond yield advantage for your bracket' },
     { source: 'Low-Cost Advantage', bps: Math.max(0, costBps), desc: 'vs 30bps average active fund expense ratio' },
   ].filter(r => r.bps > 0);
@@ -775,16 +959,6 @@ function AnalysisTab({
     { label: 'INTL',   weight: buckets.intl   / total, color: '#3b82f6' },
     { label: 'FIXED',  weight: buckets.fixed  / total, color: '#f59e0b' },
   ].filter(b => b.weight > 0.005);
-
-  // ── Monte Carlo table rows (from plan.monteCarlo.projections)
-  const mcProj = plan.monteCarlo.projections;
-  const mcRows = [5, 10, 15].map(yr => {
-    const exact   = mcProj.find(p => p.year === yr);
-    const nearest = mcProj.reduce((best, p) =>
-      Math.abs(p.year - yr) < Math.abs(best.year - yr) ? p : best
-    );
-    return exact ?? nearest;
-  });
 
   return (
     <div className="space-y-4">
@@ -985,46 +1159,6 @@ function AnalysisTab({
         </div>
       </div>
 
-      {/* ── Monte Carlo Table (collapsible) */}
-      <div className="rounded-xl border border-gray-100 bg-white shadow-sm overflow-hidden">
-        <button
-          className="w-full flex items-center justify-between px-5 py-3 text-left"
-          onClick={() => setMcExpanded(x => !x)}
-        >
-          <h3 className="text-xs font-bold text-gray-900 uppercase tracking-widest">
-            Monte Carlo Projection Table
-          </h3>
-          <span className="text-gray-400 text-xs">{mcExpanded ? '▲ Collapse' : '▼ Expand'}</span>
-        </button>
-        {mcExpanded && (
-          <div className="px-5 pb-5">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-[10px] uppercase tracking-wider text-gray-400 border-b border-gray-100">
-                  <th className="text-left pb-2 font-medium">Year</th>
-                  <th className="text-right pb-2 font-medium">P10 (Bear)</th>
-                  <th className="text-right pb-2 font-medium">P50 (Median)</th>
-                  <th className="text-right pb-2 font-medium">P90 (Bull)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {mcRows.map(row => (
-                  <tr key={row.year}>
-                    <td className="py-2 font-mono font-bold text-gray-700">Yr {row.year}</td>
-                    <td className="py-2 text-right font-mono text-red-500">{fmt$(row.p10)}</td>
-                    <td className="py-2 text-right font-mono font-bold text-gray-900">{fmt$(row.p50)}</td>
-                    <td className="py-2 text-right font-mono text-emerald-600">{fmt$(row.p90)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p className="text-[10px] text-gray-400 mt-3">
-              Analytical lognormal model · µ={fmtPct(stats.expectedReturn)} σ={fmtPct(stats.expectedVolatility)} ·
-              Includes ${answers?.monthlyContribution ?? 0}/mo contributions
-            </p>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
@@ -1131,7 +1265,7 @@ function TaxPlanningTab({
   const niitApplies = taxProfile.investmentIncomeMarginalRate > taxProfile.combinedMarginalRate;
   const niitRate    = niitApplies ? taxProfile.investmentIncomeMarginalRate - taxProfile.combinedMarginalRate : 0;
 
-  // Estimate tax drag without asset location: bonds taxed at ordinary rates in taxable
+  // Estimate tax drag comparison: optimized placement vs all-assets-in-taxable-brokerage
   const bondAlloc   = alloc.filter(s => s.category === 'income' || s.category === 'safety');
   const equityAlloc = alloc.filter(s => s.category === 'growth' || s.category === 'alternative');
   const bondWeight  = bondAlloc.reduce((s, x) => s + x.weight, 0);
@@ -1139,24 +1273,58 @@ function TaxPlanningTab({
   const assumedBondYield = 0.045;
   const assumedDividendYield = 0.016;
   const annualCapital = answers.startingCapital;
-  // Unoptimized: all in taxable, bonds at ordinary income rate
-  const dragUnoptimized = Math.round(
+  const mu = plan.portfolio.statistics.expectedReturn;
+
+  // Baseline: ALL assets in taxable brokerage (no account optimization)
+  // Bonds: interest taxed at ordinary income rate
+  // Equity: dividends at LTCG + annual turnover/gains at LTCG (ETFs ~1% turnover)
+  const dragAllTaxable = Math.round(
     annualCapital * (
       bondWeight * assumedBondYield * taxProfile.investmentIncomeMarginalRate +
-      equityWeight * assumedDividendYield * taxProfile.ltcgRate
+      equityWeight * (assumedDividendYield * taxProfile.ltcgRate + 0.01 * mu * taxProfile.ltcgRate)
     )
   );
-  // Optimized: bonds sheltered in tax-deferred (0 current drag), equity dividends at LTCG rate
+
+  // Optimized: actual placement
   const sheltered = alloc.filter(s => s.accountPlacement === 'traditional' || s.accountPlacement === 'hsa');
   const shelteredWeight = sheltered.reduce((s, x) => s + x.weight, 0);
   const rothHeld = alloc.filter(s => s.accountPlacement === 'roth');
   const rothWeight = rothHeld.reduce((s, x) => s + x.weight, 0);
   const taxableHeld = alloc.filter(s => s.accountPlacement === 'taxable' || s.accountPlacement === 'any');
   const taxableWeight = taxableHeld.reduce((s, x) => s + x.weight, 0);
-  const dragOptimized = Math.round(
-    annualCapital * taxableWeight * assumedDividendYield * taxProfile.ltcgRate
-  );
-  const locationSaving$ = Math.max(0, dragUnoptimized - dragOptimized);
+  // Taxable: equity dividends at LTCG (index ETFs have near-zero turnover)
+  const taxableDrag = annualCapital * taxableWeight * assumedDividendYield * taxProfile.ltcgRate;
+  // Roth: dividends AND eventual growth are tax-free — annual equivalent benefit vs taxable
+  const rothGrowthBenefit = annualCapital * rothWeight * (assumedDividendYield * taxProfile.ltcgRate + mu * taxProfile.ltcgRate * 0.45);
+  // Sheltered (trad/HSA): bond income deferred — no current-year tax
+  const shelteredBenefit = annualCapital * shelteredWeight * assumedBondYield * taxProfile.investmentIncomeMarginalRate;
+  const dragOptimized = Math.max(0, Math.round(taxableDrag));
+  const locationSaving$ = Math.max(0, Math.round(dragAllTaxable - taxableDrag + rothGrowthBenefit + shelteredBenefit));
+
+  // ── Estimated annual income tax ──────────────────────────────────────────────
+  function estimateFederalTax(income: number, filing: string): number {
+    const stdDed = filing === 'married_filing_jointly' ? 30_000 : 15_000;
+    const taxable = Math.max(0, income - stdDed);
+    const brackets = filing === 'married_filing_jointly'
+      ? [[23_850, 0.10], [96_950, 0.12], [206_700, 0.22], [394_600, 0.24], [501_050, 0.32], [751_600, 0.35], [Infinity, 0.37]]
+      : [[11_925, 0.10], [48_475, 0.12], [103_350, 0.22], [197_300, 0.24], [250_525, 0.32], [626_350, 0.35], [Infinity, 0.37]];
+    let tax = 0, remaining = taxable, prev = 0;
+    for (const [ceil, rate] of brackets) {
+      const inBracket = Math.min(remaining, (ceil as number) - prev);
+      tax += inBracket * (rate as number);
+      remaining -= inBracket;
+      if (remaining <= 0) break;
+      prev = ceil as number;
+    }
+    return Math.round(tax);
+  }
+  const estFederalTax = estimateFederalTax(answers.annualIncome, answers.filingStatus);
+  const estStateTax = Math.round(answers.annualIncome * taxProfile.stateMarginalRate * 0.7);
+  // SS wage base: $176,100 for 2025; 2026 SSA announcement expected Oct 2025.
+  // Update this constant each October when SSA publishes the following year's limit.
+  const SS_WAGE_BASE_2026 = 176_100; // TODO: update annually from https://www.ssa.gov/oact/cola/cbb.html
+  const estFicaTax = Math.round(Math.min(answers.annualIncome, SS_WAGE_BASE_2026) * 0.0765);
+  const estTotalAnnualTax = estFederalTax + estStateTax + estFicaTax;
 
   type RateRow = { label: string; rate: string; applies: boolean; highlight?: boolean; note?: string };
   const rateRows: RateRow[] = [
@@ -1209,7 +1377,7 @@ function TaxPlanningTab({
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-6">
           {/* Rate table */}
-          <div>
+          <div className="space-y-4">
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-[10px] uppercase tracking-wider text-gray-400 border-b border-gray-100">
@@ -1232,6 +1400,31 @@ function TaxPlanningTab({
                 ))}
               </tbody>
             </table>
+            {/* Estimated annual tax bill */}
+            <div className="rounded-lg border border-gray-100 bg-slate-50 p-3">
+              <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-2">
+                Estimated Annual Tax Bill
+              </p>
+              <div className="space-y-1.5">
+                {[
+                  { label: 'Federal Income Tax', value: estFederalTax },
+                  { label: `${answers.state} State Tax`, value: estStateTax },
+                  { label: 'FICA / Payroll Tax', value: estFicaTax },
+                ].map(({ label, value }) => (
+                  <div key={label} className="flex justify-between text-xs">
+                    <span className="text-gray-500">{label}</span>
+                    <span className="font-mono font-semibold text-gray-700">−{fmt$(value)}</span>
+                  </div>
+                ))}
+                <div className="border-t border-gray-200 pt-1.5 flex justify-between text-xs">
+                  <span className="font-semibold text-gray-800">Total Est. Annual Taxes</span>
+                  <span className="font-mono font-black text-red-500">−{fmt$(estTotalAnnualTax)}</span>
+                </div>
+                <p className="text-[9px] text-gray-400 pt-0.5">
+                  Includes standard deduction · excludes retirement contributions · FICA capped at {fmt$(SS_WAGE_BASE_2026)} SS wage base
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Asset location impact */}
@@ -1242,8 +1435,8 @@ function TaxPlanningTab({
               </p>
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <span className="text-xs text-gray-500">Without optimization</span>
-                  <span className="font-mono text-xs font-bold text-red-500">−{fmt$(dragUnoptimized)}/yr</span>
+                  <span className="text-xs text-gray-500">All assets in taxable</span>
+                  <span className="font-mono text-xs font-bold text-red-500">−{fmt$(dragAllTaxable)}/yr</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-xs text-gray-500">With asset location</span>
@@ -1431,6 +1624,33 @@ function TaxPlanningTab({
           </div>
         </div>
       )}
+      {/* ── Withdrawal Sequencing */}
+      <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
+        <h3 className="text-xs font-bold text-gray-900 uppercase tracking-widest mb-3">
+          Retirement Withdrawal Sequencing
+        </h3>
+        <p className="text-xs text-gray-500 mb-3">
+          When you retire, the order you withdraw from accounts has a significant tax impact. The conventional sequence minimizes lifetime taxes:
+        </p>
+        <ol className="space-y-2">
+          {[
+            { step: '1', label: 'Taxable Brokerage First', detail: 'Qualified dividends and long-term gains taxed at 0–20%. Use tax-loss harvesting to offset gains. Lets tax-deferred accounts compound longer.' },
+            { step: '2', label: 'Traditional 401(k) / IRA', detail: 'Withdrawals taxed as ordinary income. Take Required Minimum Distributions (RMDs) starting at age 73 — plan contributions to keep future RMDs manageable.' },
+            { step: '3', label: 'Roth IRA Last', detail: 'Qualified withdrawals are completely tax-free with no RMDs. Let this compound as long as possible — it\'s your most valuable tax shelter in retirement.' },
+          ].map(({ step, label, detail }) => (
+            <li key={step} className="flex gap-3 items-start">
+              <span className="flex-shrink-0 w-5 h-5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold flex items-center justify-center mt-0.5">{step}</span>
+              <div>
+                <p className="text-xs font-semibold text-gray-800">{label}</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">{detail}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+        <p className="text-[10px] text-gray-400 mt-3 border-t border-gray-50 pt-2">
+          This is general guidance — optimal sequencing depends on your future tax bracket, Social Security timing, and Roth conversion strategy. Consult a tax advisor for personalized withdrawal planning.
+        </p>
+      </div>
     </div>
   );
 }

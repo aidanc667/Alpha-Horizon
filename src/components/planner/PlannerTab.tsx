@@ -334,7 +334,6 @@ export default function PlannerTab() {
             <div className="flex items-center gap-3">
               {saveStatus === 'saving' && <span className="text-xs text-gray-400 animate-pulse">Saving…</span>}
               {saveStatus === 'saved' && <span className="text-xs text-emerald-600 font-semibold">✓ Saved</span>}
-              {saveStatus === 'error' && <span className="text-xs text-red-400">Save failed</span>}
               <button
                 onClick={handleReset}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-600 hover:text-gray-700 bg-gray-100 rounded-lg transition-colors"

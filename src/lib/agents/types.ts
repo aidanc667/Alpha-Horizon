@@ -267,6 +267,13 @@ export interface IntakeAnswers {
   availableAccounts: string[];
 
   /**
+   * Employer 401(k) match as a percentage of salary (e.g. 4 = 4%).
+   * Used to compute the dollar value of uncaptured match.
+   * Undefined when no 401(k) is available or match is unknown.
+   */
+  employerMatchPct?: number;
+
+  /**
    * Optional sector or ESG tilts to constrain the ETF universe.
    * When undefined or all fields omitted, the agent uses pure quant optimization.
    */
