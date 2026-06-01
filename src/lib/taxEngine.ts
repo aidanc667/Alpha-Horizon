@@ -99,7 +99,7 @@ function applyBrackets(
 
   const tiers: BracketTier[] = brackets
     .filter(b => taxableIncome > b.from)
-    .map((b, idx, arr) => {
+    .map((b) => {
       const incomeInBracket = Math.min(taxableIncome, b.to === Infinity ? taxableIncome : b.to) - b.from;
       const taxInBracket = incomeInBracket * b.rate;
       totalTax += taxInBracket;

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI, Type } from '@google/genai';
 import { auth } from '@clerk/nextjs/server';
 import { CURATED_ASSETS } from '@/lib/assets';
-import { BUCKET_RATES } from '@/lib/constants';
 import { checkRateLimit } from '@/lib/rateLimit';
 
 // ─── API key lives ONLY on the server ────────────────────────────────────────
@@ -11,16 +10,6 @@ function getApiKey(): string {
   if (!key) throw new Error('GEMINI_API_KEY is not set in server environment.');
   return key;
 }
-
-// ─── Math helpers ─────────────────────────────────────────────────────────────
-const phi = (x: number) => {
-  const a1=0.254829592,a2=-0.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=0.3275911;
-  const sign = x < 0 ? -1 : 1;
-  const absX = Math.abs(x)/Math.sqrt(2.0);
-  const t = 1.0/(1.0+p*absX);
-  const y = 1.0-(((((a5*t+a4)*t)+a3)*t+a2)*t+a1)*t*Math.exp(-absX*absX);
-  return 0.5*(1.0+sign*y);
-};
 
 // ─── POST /api/gemini ─────────────────────────────────────────────────────────
 // Body: { action: 'generatePlan' | 'generateReport', responses, plan? }
@@ -512,7 +501,6 @@ TASK: Return JSON matching schema exactly. Every number realistic and non-zero. 
 }
 
 function buildTaxEnrichmentPrompt(plan: any, responses: any): string {
-  const income = Number(String(responses.annualIncome || '0').replace(/,/g, ''));
   const hasRoth = responses.rothOption === 'Yes' || (Array.isArray(responses.taxAdvantagedAccounts) && responses.taxAdvantagedAccounts.some((a: string) => a.toLowerCase().includes('roth')));
   const has401k = Array.isArray(responses.taxAdvantagedAccounts) && responses.taxAdvantagedAccounts.some((a: string) => a.toLowerCase().includes('401'));
   const hasHSA = Array.isArray(responses.taxAdvantagedAccounts) && responses.taxAdvantagedAccounts.some((a: string) => a.toLowerCase().includes('hsa'));

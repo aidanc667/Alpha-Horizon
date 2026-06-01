@@ -246,7 +246,7 @@ function PortfolioTab({
       { label: '+$500/mo', extra: 500,  prob: successProb(answers.monthlyContribution + 500) },
       { label: '+$1K/mo',  extra: 1000, prob: successProb(answers.monthlyContribution + 1000) },
     ];
-  }, [goalAmt, answers.startingCapital, answers.monthlyContribution, answers.timeHorizon, mu, sig]);
+  }, [goalAmt, answers.startingCapital, answers.monthlyContribution, mu, sig, T]);
   const btVtFinal = bt ? bt.dailyData.at(-1)?.benchmarkValue ?? 0 : 0;
   const btAlphaDlr = bt ? fmt$(bt.metrics.endingValue - btVtFinal) : null;
   const btReturn = bt ? `+${bt.metrics.totalReturnPct.toFixed(0)}%` : null;
@@ -421,7 +421,7 @@ function PortfolioTab({
             <MetricCard
               label="Est. Max Drawdown"
               value={`-${(maxDD * 100).toFixed(1)}%`}
-              sub="GFC 2008-style stress scenario"
+              sub={`simulated P50 — deepest trough over ${plan.clientProfile.timeHorizon.yearsToGoal}yr horizon`}
             />
             <MetricCard
               label="Sortino Ratio"
@@ -434,22 +434,55 @@ function PortfolioTab({
 
       {/* ── 401k Contribution + Match Callout */}
       {(() => {
-        const limit401k = (answers.age ?? 35) >= 50 ? 30500 : 23500;
-        const annual = answers.monthlyContribution * 12;
         const has401k = answers.availableAccounts.some((a: string) => a.toLowerCase().includes('401'));
         if (!has401k) return null;
-        const gap = limit401k - annual;
-        const gapPerMonth = Math.max(0, Math.ceil(gap / 12));
+
+        const limit401k = (answers.age ?? 35) >= 50 ? 30500 : 23500;
         const matchPct = answers.employerMatchPct ?? 0;
         const matchDollar = matchPct > 0 ? Math.round(answers.annualIncome * matchPct / 100) : 0;
-        const contributingToMatch = matchPct > 0 && annual >= answers.annualIncome * matchPct / 100;
+
+        // Check whether the optimizer actually placed any assets in a traditional/401k account
+        const traditional401kAlloc = alloc.filter((s: { accountPlacement: string }) =>
+          s.accountPlacement === 'traditional'
+        );
+        const has401kHoldings = traditional401kAlloc.length > 0;
+
+        if (!has401kHoldings) {
+          // Nothing placed in 401k — explain why and what to do with 401k contributions
+          return (
+            <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 space-y-2">
+              <p className="text-[10px] uppercase tracking-widest text-blue-500 font-bold">401(k) — No Holdings Placed</p>
+              <p className="text-xs text-blue-700">
+                Your portfolio is all-equity with no bond ETFs. Bonds (e.g. BND) are the ideal 401(k) candidate because their interest income gets shielded from taxes. With this aggressive allocation, the optimizer placed everything in Taxable or Roth IRA instead.
+              </p>
+              <p className="text-xs text-blue-600">
+                <strong>What to buy in your 401k:</strong> Contribute enough to capture your employer match, then buy the closest available equivalent to your equity allocation (typically a broad US index fund). Mirror the same percentages across all your accounts combined.
+              </p>
+              {matchDollar > 0 && (
+                <div className="rounded-lg px-3 py-2 text-xs font-medium mt-1 bg-amber-100 text-amber-800">
+                  ⚠ Make sure you&apos;re contributing at least {matchPct}% of salary (~{fmt$(Math.ceil(answers.annualIncome * matchPct / 100 / 12))}/mo) to capture your ~{fmt$(matchDollar)}/yr employer match — that&apos;s a 100% instant return.
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // Assets ARE placed in 401k — show the contribution pace tracker
+        // Only count contributions proportional to 401k allocation weight
+        const traditional401kWeight = traditional401kAlloc.reduce(
+          (sum: number, s: { weight: number }) => sum + s.weight, 0
+        );
+        const est401kAnnual = Math.round(answers.monthlyContribution * 12 * traditional401kWeight);
+        const gap = limit401k - est401kAnnual;
+        const gapPerMonth = Math.max(0, Math.ceil(gap / 12));
+        const contributingToMatch = matchPct > 0 && est401kAnnual >= answers.annualIncome * matchPct / 100;
         return (
           <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 space-y-2">
             <p className="text-[10px] uppercase tracking-widest text-blue-500 font-bold">401(k) Contribution Tracker</p>
             <div className="flex flex-wrap gap-4 text-xs">
               <div>
-                <span className="text-blue-400">Annual pace</span>
-                <span className="ml-2 font-mono font-bold text-blue-900">{fmt$(annual)}</span>
+                <span className="text-blue-400">Est. 401(k) pace</span>
+                <span className="ml-2 font-mono font-bold text-blue-900">{fmt$(est401kAnnual)}/yr</span>
               </div>
               <div>
                 <span className="text-blue-400">IRS limit{(answers.age ?? 35) >= 50 ? ' (catch-up)' : ''}</span>
@@ -470,7 +503,7 @@ function PortfolioTab({
               </div>
             )}
             {gap <= 0 && (
-              <p className="text-[11px] text-emerald-700 font-semibold">✓ You're maxing your 401(k) — excellent tax efficiency.</p>
+              <p className="text-[11px] text-emerald-700 font-semibold">✓ You&apos;re maxing your 401(k) — excellent tax efficiency.</p>
             )}
           </div>
         );
@@ -851,7 +884,7 @@ function PortfolioTab({
             <p className="text-xs font-bold text-emerald-800">Catch-up contributions available (age {answers.age})</p>
             <p className="text-[11px] text-emerald-700 mt-0.5">
               You can contribute <strong>$30,500/yr</strong> to your 401k (vs $23,500) and <strong>$8,000/yr</strong> to your IRA (vs $7,000).
-              {' '}That's an extra <strong>$8,000/yr</strong> in tax-advantaged space — apply it in the savings waterfall below.
+              {' '}That&apos;s an extra <strong>$8,000/yr</strong> in tax-advantaged space — apply it in the savings waterfall below.
             </p>
           </div>
         </div>
@@ -879,11 +912,9 @@ const VT_MAX_DD    = 34.0; // COVID drawdown pct
 function AnalysisTab({
   plan,
   backtest,
-  answers,
 }: {
   plan: V3Plan;
   backtest: BacktestState;
-  answers: IntakeAnswers;
 }) {
   const stats    = plan.portfolio.statistics;
   const alloc    = plan.portfolio.allocation;
@@ -1698,6 +1729,17 @@ export default function PlanResults({ plan, backtest, answers, ips }: Props) {
           </div>
         </div>
       )}
+      {/* Legal disclaimer */}
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 flex items-start gap-2.5">
+        <span className="text-slate-400 text-xs leading-none mt-0.5 flex-shrink-0">ⓘ</span>
+        <p className="text-[11px] text-slate-500 leading-relaxed">
+          <span className="font-semibold text-slate-600">For educational purposes only. Not investment advice.</span>{' '}
+          This analysis is generated by an automated system and does not constitute a recommendation to buy or sell any security.
+          Consult a licensed financial advisor before implementing any investment strategy.
+          Past performance does not guarantee future results.
+        </p>
+      </div>
+
       {/* Tab bar */}
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
         {TABS.map((tab) => (
@@ -1719,7 +1761,7 @@ export default function PlanResults({ plan, backtest, answers, ips }: Props) {
         <PortfolioTab plan={plan} backtest={backtest} answers={answers} />
       )}
       {activeTab === 'analysis' && (
-        <AnalysisTab plan={plan} backtest={backtest} answers={answers} />
+        <AnalysisTab plan={plan} backtest={backtest} />
       )}
       {activeTab === 'tax' && <TaxPlanningTab plan={plan} answers={answers} />}
       {activeTab === 'ips' && <IPSTab ips={ips ?? plan.ips} />}

@@ -10,11 +10,11 @@ function getDb() {
 export const sql = new Proxy({} as ReturnType<typeof neon>, {
   get: (_target, prop) => {
     const db = getDb();
-    return (db as any)[prop];
+    return (db as ReturnType<typeof neon>)[prop as keyof ReturnType<typeof neon>];
   },
   apply: (_target, _thisArg, args) => {
     const db = getDb();
-    return (db as any)(...args);
+    return (db as (...a: unknown[]) => unknown)(...args);
   },
 });
 

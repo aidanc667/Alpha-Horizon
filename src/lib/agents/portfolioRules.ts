@@ -118,10 +118,9 @@ function buildEquitySleeveSpec(riskScore: number, taxBracket: number, preference
 
 function buildBondSleeveSpec(
   riskScore: number,
-  taxBracket: number,
-  accounts: string[],
+  _taxBracket: number,
+  _accounts: string[],
 ): SleeveSpec {
-  const hasTaxable = accounts.some(a => /taxable|brokerage/i.test(a));
   const tickers: string[] = [];
 
   // ── Core bond: VTEB (TEY-adjusted) wins vs BND at high brackets ──────

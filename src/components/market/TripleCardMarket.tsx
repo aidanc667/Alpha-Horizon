@@ -63,13 +63,7 @@ function Elite6Grid({
     ? 'bg-red-500/20 text-red-300 border-red-500/30'
     : 'bg-slate-500/20 text-slate-300 border-slate-500/30';
 
-  // ── Big Story ──
-  const bigStory = ind.bigStory as DailyIndicators['bigStory'] | undefined;
-  const storyEmoji = bigStory?.direction === 'Up' ? '⚡' : bigStory?.direction === 'Down' ? '💥' : '📰';
-  const storyColor = bigStory?.direction === 'Up' ? 'text-emerald-400' : bigStory?.direction === 'Down' ? 'text-red-400' : 'text-slate-400';
-
   // ── Next Catalyst ──
-  const nextCatalyst = ind.nextCatalyst as DailyIndicators['nextCatalyst'] | undefined;
 
   return (
     <div>
@@ -1065,7 +1059,7 @@ function TomorrowCard({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function TripleCardMarket({ onBack: _onBack }: TripleCardMarketProps) {
+export default function TripleCardMarket(_props: TripleCardMarketProps) {
   const [activeCard, setActiveCard] = useState(1); // 0=Yesterday, 1=Today, 2=Tomorrow
   const [data, setData] = useState<TripleCardData | null>(null);
   const [loading, setLoading] = useState(true);

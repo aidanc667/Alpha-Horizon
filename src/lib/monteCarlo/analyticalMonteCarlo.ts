@@ -1,5 +1,69 @@
 import type { Agent1Output, Agent3Output, MonteCarloOutput, ProjectionPoint } from '@/lib/agents/types';
 
+// ─── Simulated median maximum drawdown ───────────────────────────────────────
+
+/**
+ * Simulates N monthly-step paths for a GBM portfolio and returns the median
+ * peak-to-trough maximum drawdown across all paths (P50 MDD).
+ *
+ * Each path uses independent standard-normal draws so there is no shared
+ * state between simulations. The result is the drawdown magnitude a typical
+ * investor should expect to experience at some point during the horizon.
+ *
+ * Runs in <30ms for N=500, T=30 (180 000 arithmetic ops).
+ *
+ * @param mu     - annual expected return (decimal)
+ * @param sig    - annual volatility (decimal)
+ * @param years  - investment horizon in years
+ * @param N      - number of simulated paths (default 500)
+ */
+export function simulateMedianMaxDrawdown(
+  mu: number,
+  sig: number,
+  years: number,
+  N = 500,
+): number {
+  if (years <= 0 || sig <= 0) return 0;
+
+  const months    = Math.round(years * 12);
+  const muM       = mu  / 12;               // monthly drift
+  const sigM      = sig / Math.sqrt(12);    // monthly vol
+  const logDrift  = muM - 0.5 * sigM * sigM;
+
+  // Box-Muller transform: produces pairs of independent standard normals
+  // deterministically seeded via counter to avoid crypto/random dependency
+  let seed = 1.234567; // arbitrary fixed seed — same answers on every call
+  function nextNormal(): number {
+    // LCG to produce u1, u2 in (0,1)
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    const u1 = (seed / 4294967296) * 0.9998 + 0.0001;
+    seed = (seed * 1664525 + 1013904223) % 4294967296;
+    const u2 = (seed / 4294967296) * 0.9998 + 0.0001;
+    return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  }
+
+  const mdds: number[] = new Array(N);
+
+  for (let i = 0; i < N; i++) {
+    let value = 1.0;
+    let peak  = 1.0;
+    let mdd   = 0.0;
+
+    for (let t = 0; t < months; t++) {
+      value *= Math.exp(logDrift + sigM * nextNormal());
+      if (value > peak) peak = value;
+      const dd = (peak - value) / peak;
+      if (dd > mdd) mdd = dd;
+    }
+
+    mdds[i] = mdd;
+  }
+
+  // Return the median (P50) — sort and take the middle value
+  mdds.sort((a, b) => a - b);
+  return mdds[Math.floor(N / 2)];
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /** Standard normal quantiles for the 10th and 90th percentiles. */

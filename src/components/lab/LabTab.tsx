@@ -2,8 +2,8 @@
 
 import React, { useState, useMemo } from 'react';
 import {
-  AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, Legend, ScatterChart, Scatter
+  AreaChart, Area, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, ScatterChart, Scatter
 } from 'recharts';
 import {
   TrendingUp, Plus, Trash2, RefreshCw, AlertTriangle,

@@ -184,7 +184,7 @@ export const ETF_UNIVERSE: ETF[] = [
     name: 'Schwab U.S. TIPS ETF',
     category: 'bonds',
     expenseRatio: 0.0003,
-    expectedReturn: 0.044,
+    expectedReturn: 0.047,
     volatility: 0.040,
     taxEfficiency: 'fair',
     factorExposures: NO_FACTORS,

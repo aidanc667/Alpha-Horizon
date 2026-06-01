@@ -22,8 +22,8 @@ export async function runSimulation(input: SimulationInput): Promise<SimulationR
       }
       const json = await res.json();
       dataMap[t] = json.data;
-    } catch (e: any) {
-      warnings.push(`Could not fetch data for ${t}: ${e.message}`);
+    } catch (e: unknown) {
+      warnings.push(`Could not fetch data for ${t}: ${e instanceof Error ? e.message : String(e)}`);
     }
   }));
 
@@ -49,12 +49,12 @@ export async function runSimulation(input: SimulationInput): Promise<SimulationR
   let bValue = input.initialInvestment;
   let totalContrib = input.initialInvestment;
 
-  let tickerVals = input.allocations.reduce((acc, a) => {
+  const tickerVals = input.allocations.reduce((acc, a) => {
     acc[a.ticker] = (a.percentage / 100) * input.initialInvestment;
     return acc;
   }, {} as Record<string, number>);
 
-  let benchVals: Record<string, number> = {
+  const benchVals: Record<string, number> = {
     [benchmarks[0]]: 0.6 * input.initialInvestment,
     [benchmarks[1]]: 0.4 * input.initialInvestment,
   };

@@ -316,13 +316,13 @@ function DetailedAgentCard({ agent, entry }: { agent: AgentName; entry: AgentEnt
   return (
     <div
       className="rounded-xl p-4 border"
-      style={{ background: `${color}06`, borderColor: `${color}20` }}
+      style={{ background: `${color}14`, borderColor: `${color}35` }}
     >
       {/* Header row */}
       <div className="flex items-center gap-2.5 mb-2">
         <div
           className="w-7 h-7 rounded-lg flex items-center justify-center text-sm flex-shrink-0"
-          style={{ background: `${color}18`, border: `1px solid ${color}30` }}
+          style={{ background: `${color}28`, border: `1px solid ${color}50` }}
         >
           {AGENT_ICONS[agent]}
         </div>
@@ -331,7 +331,7 @@ function DetailedAgentCard({ agent, entry }: { agent: AgentName; entry: AgentEnt
         </span>
         <div
           className="ml-auto w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
-          style={{ background: `${color}20`, border: `1px solid ${color}40` }}
+          style={{ background: `${color}30`, border: `1px solid ${color}60` }}
         >
           <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
             <path d="M1 4L3 6L7 2" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -340,14 +340,14 @@ function DetailedAgentCard({ agent, entry }: { agent: AgentName; entry: AgentEnt
       </div>
 
       {/* What this agent was responsible for */}
-      <p className="text-xs text-slate-500 leading-relaxed mb-2.5">
+      <p className="text-xs text-slate-300 leading-relaxed mb-2.5">
         {AGENT_DESCRIPTIONS[agent]}
       </p>
 
       {/* What it actually found / decided */}
       {chips.length > 0 && (
-        <div className="border-t pt-2.5 space-y-1.5" style={{ borderColor: `${color}15` }}>
-          <p className="text-[9px] uppercase tracking-widest font-bold" style={{ color: `${color}80` }}>
+        <div className="border-t pt-2.5 space-y-1.5" style={{ borderColor: `${color}30` }}>
+          <p className="text-[9px] uppercase tracking-widest font-bold" style={{ color: `${color}cc` }}>
             Output
           </p>
           <div className="flex flex-wrap gap-1.5">
@@ -355,7 +355,7 @@ function DetailedAgentCard({ agent, entry }: { agent: AgentName; entry: AgentEnt
               <span
                 key={i}
                 className="text-[11px] font-mono px-2 py-0.5 rounded-md"
-                style={{ background: `${color}12`, color: `${color}dd`, border: `1px solid ${color}20` }}
+                style={{ background: `${color}22`, color: '#e2e8f0', border: `1px solid ${color}45` }}
               >
                 {chip}
               </span>
@@ -366,8 +366,8 @@ function DetailedAgentCard({ agent, entry }: { agent: AgentName; entry: AgentEnt
 
       {/* No summary yet (cache hit with no streaming) */}
       {chips.length === 0 && (
-        <div className="border-t pt-2" style={{ borderColor: `${color}15` }}>
-          <span className="text-[11px] text-slate-600 font-mono italic">Completed (loaded from cache)</span>
+        <div className="border-t pt-2" style={{ borderColor: `${color}30` }}>
+          <span className="text-[11px] text-slate-400 font-mono italic">Completed (loaded from cache)</span>
         </div>
       )}
     </div>

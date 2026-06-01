@@ -236,6 +236,29 @@ export async function agent7_synthesis(input: {
       actionableNextSteps: string[];
     };
 
+    // Sanitize LLM output — strip hallucinated tickers not in the actual portfolio
+    // and enforce array length bounds to prevent bloated or empty responses.
+    const validTickers = new Set(input.portfolio.allocation.map(s => s.ticker));
+    const sanitizeStrings = (arr: string[], max: number): string[] =>
+      Array.isArray(arr) ? arr.filter(s => typeof s === 'string' && s.trim().length > 0).slice(0, max) : [];
+
+    const keyInsights = sanitizeStrings(parsed.keyInsights, 5);
+    const actionableNextSteps = sanitizeStrings(parsed.actionableNextSteps, 3);
+
+    // Remove any step that references a ticker symbol not in the portfolio — a
+    // hallucinated ticker (e.g. "buy FSKAX") would give the user wrong instructions.
+    const TICKER_RE = /\b([A-Z]{2,5})\b/g;
+    const filterHallucinatedTickers = (items: string[]) =>
+      items.filter(item => {
+        const mentioned = Array.from(item.matchAll(TICKER_RE), m => m[1])
+          .filter(t => t.length >= 2 && t.length <= 5 && t === t.toUpperCase());
+        // Allow items with no tickers, or where every mentioned ticker is in the portfolio
+        return mentioned.length === 0 || mentioned.every(t => validTickers.has(t));
+      });
+
+    const safeInsights = filterHallucinatedTickers(keyInsights);
+    const safeSteps    = filterHallucinatedTickers(actionableNextSteps);
+
     // primaryRisk is always generated deterministically — LLMs hallucinate
     // specific risk levels and drawdown numbers when given creative latitude.
     const primaryRisk = buildDeterministicPrimaryRisk(input);
@@ -257,9 +280,9 @@ export async function agent7_synthesis(input: {
       timestamp: new Date().toISOString(),
       executionTimeMs,
       portfolioNarrative:  parsed.portfolioNarrative,
-      keyInsights:         parsed.keyInsights,
+      keyInsights:         safeInsights,
       primaryRisk,
-      actionableNextSteps: parsed.actionableNextSteps,
+      actionableNextSteps: safeSteps,
       performance: {
         targetLatencyMs: 5000,
         actualLatencyMs: executionTimeMs,
