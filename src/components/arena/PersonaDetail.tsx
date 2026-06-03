@@ -349,7 +349,8 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
 
   const handleAnalyzeInSilas = () => {
     if (!persona) return;
-    const latestSnap = snapshots[snapshots.length - 1] ?? null;
+    // snapshots are ordered DESC (newest first) from the API
+    const latestSnap = snapshots[0] ?? null;
     const currentValue = latestSnap ? Number(latestSnap.portfolio_value) : Number(persona.starting_balance);
     const benchmarkValue = latestSnap ? Number(latestSnap.benchmark_value) : Number(persona.starting_balance);
     const totalReturn = (currentValue / Number(persona.starting_balance) - 1) * 100;
@@ -361,9 +362,16 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
     const inceptionDate = new Date(persona.inception_date);
     const daysRunning = Math.floor((Date.now() - inceptionDate.getTime()) / 86400000);
     const riskLabel = persona.risk_score <= 3 ? 'Conservative' : persona.risk_score <= 6 ? 'Moderate' : 'Aggressive';
-    const allocations = persona.allocation_json
-      .map(h => `${h.ticker} ${(h.weight * 100).toFixed(0)}%`)
-      .join(', ');
+    // Use current weights from latest snapshot if available, fall back to inception weights
+    const allocations = (latestSnap?.holdings_detail_json ?? []).length > 0
+      ? latestSnap!.holdings_detail_json
+          .slice()
+          .sort((a, b) => b.weightCurrent - a.weightCurrent)
+          .map(h => `${h.ticker} ${(h.weightCurrent * 100).toFixed(1)}%`)
+          .join(', ')
+      : persona.allocation_json
+          .map(h => `${h.ticker} ${(h.weight * 100).toFixed(0)}%`)
+          .join(', ');
 
     setArenaSnapshot({
       personaName: persona.name,
