@@ -241,8 +241,9 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
 
   // Chart data — both indexed to starting_balance
   const chartData = [...snapshots].reverse().map(s => ({
-    // Append T12:00:00 so the date parses in local time, not UTC midnight (which shifts the label back one day in US timezones)
-    date: new Date(s.snapshot_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    // Neon returns DATE as a JS Date object; extract YYYY-MM-DD string then re-parse at noon local
+    // to avoid UTC-midnight shifting the label back one day in US timezones.
+    date: new Date(new Date(s.snapshot_date).toISOString().split('T')[0] + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
     portfolio: Number(s.portfolio_value),
     benchmark: Number(s.benchmark_value),
   }));
