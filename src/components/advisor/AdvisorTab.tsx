@@ -637,7 +637,7 @@ export default function AdvisorTab() {
                   ? `Macro data as of ${nearTermData.timestamp}`
                   : 'Market context loading...'
                 }{liveData ? ` · ${liveData.newsHeadlines?.length || 0} live headlines` : ''}
-                {' · For informational purposes only · © 2026 Alpha Horizon'}
+                {' · For informational purposes only. Not financial advice. © 2026 Alpha Horizon'}
               </p>
             </div>
           </>
