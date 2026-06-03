@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
+import { checkRateLimit } from '@/lib/rateLimit';
 
 const MAX_HISTORY = 100;
 
@@ -27,6 +28,10 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  if (!await checkRateLimit(userId, 'silas_messages', 120)) {
+    return NextResponse.json({ error: 'Too many requests.' }, { status: 429 });
+  }
 
   const { role, content } = await req.json();
   if (!role || !content || !['user', 'assistant'].includes(role)) {
