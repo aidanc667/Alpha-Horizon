@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Brain, MessageSquare, PieChart, Zap, GitCompare, Star,
   Plus, Trash2, Send, Loader2, Activity, AlertTriangle,
-  CalendarDays, Eye, TrendingUp, TrendingDown, RefreshCw, X, FlaskConical,
+  CalendarDays, Eye, TrendingUp, TrendingDown, RefreshCw, X, BarChart3,
 } from 'lucide-react';
 import clsx from 'clsx';
 import ReactMarkdown from 'react-markdown';
@@ -13,7 +13,7 @@ import { useAppContext } from '@/lib/appContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type AdvisorMode = 'chat' | 'portfolio' | 'thesis' | 'compare' | 'best-assets' | 'macro-calendar' | 'watchlist';
+type AdvisorMode = 'chat' | 'portfolio' | 'thesis' | 'compare' | 'best-assets' | 'best-strategy' | 'macro-calendar' | 'watchlist';
 type RiskProfile = 'Conservative' | 'Moderate' | 'Aggressive';
 type TimeHorizon = '6 months' | '1 year' | '3-5 years' | '10 years';
 type ContextStatus = 'loading' | 'ready' | 'partial' | 'failed';
@@ -49,6 +49,26 @@ interface BestAssetsResult {
   macroAlignment: string;
 }
 
+interface StrategyAllocation {
+  ticker: string;
+  name: string;
+  weight: number;
+  category: string;
+  rationale: string;
+  expenseRatio: string;
+}
+
+interface BestStrategyResult {
+  strategyName: string;
+  riskProfile: string;
+  expectedReturn: string;
+  expectedVolatility: string;
+  sharpeEstimate: string;
+  macroAlignment: string;
+  rebalancingGuidance: string;
+  allocations: StrategyAllocation[];
+  riskWarnings: string[];
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -72,19 +92,20 @@ const SUGGESTED_PROMPTS = [
 ];
 
 const MODES: { id: AdvisorMode; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: 'chat',        label: 'Intelligence Chat',  Icon: MessageSquare },
-  { id: 'portfolio',   label: 'Portfolio Analysis', Icon: PieChart },
-  { id: 'thesis',      label: 'Stress Test',        Icon: Zap },
-  { id: 'compare',     label: 'Compare Assets',     Icon: GitCompare },
-  { id: 'best-assets',     label: 'Best Stocks',       Icon: Star },
-  { id: 'macro-calendar', label: 'Macro Calendar',    Icon: CalendarDays },
-  { id: 'watchlist',      label: 'Watchlist',          Icon: Eye },
+  { id: 'chat',          label: 'Intelligence Chat',   Icon: MessageSquare },
+  { id: 'portfolio',     label: 'Portfolio Analysis',  Icon: PieChart },
+  { id: 'thesis',        label: 'Stress Test',         Icon: Zap },
+  { id: 'compare',       label: 'Compare Assets',      Icon: GitCompare },
+  { id: 'best-assets',   label: 'Best Stocks',         Icon: Star },
+  { id: 'best-strategy', label: 'Optimal Portfolio',   Icon: BarChart3 },
+  { id: 'macro-calendar', label: 'Macro Calendar',     Icon: CalendarDays },
+  { id: 'watchlist',     label: 'Watchlist',           Icon: Eye },
 ];
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function AdvisorTab() {
-  const { labSnapshot, plannerSnapshot, buildAdvisorContext, navigateToLab } = useAppContext();
+  const { labSnapshot, plannerSnapshot, buildAdvisorContext } = useAppContext();
 
   // Context
   const [nearTermData, setNearTermData] = useState<NearTermIntelligence | null>(null);
@@ -113,12 +134,19 @@ export default function AdvisorTab() {
   // Compare
   const [compareItems, setCompareItems] = useState<string[]>(['', '']);
 
-  // Generation (best-assets)
+  // Best Stocks
   const [riskProfile, setRiskProfile] = useState<RiskProfile>('Moderate');
   const [timeHorizon, setTimeHorizon] = useState<TimeHorizon>('1 year');
   const [bestAssetsResult, setBestAssetsResult] = useState<BestAssetsResult | null>(null);
   const [genLoading, setGenLoading] = useState(false);
   const [genError, setGenError]     = useState<string | null>(null);
+
+  // Optimal Portfolio
+  const [strategyRiskProfile, setStrategyRiskProfile] = useState<RiskProfile>('Moderate');
+  const [strategyHorizon, setStrategyHorizon]         = useState<TimeHorizon>('1 year');
+  const [bestStrategyResult, setBestStrategyResult]   = useState<BestStrategyResult | null>(null);
+  const [strategyLoading, setStrategyLoading]         = useState(false);
+  const [strategyError, setStrategyError]             = useState<string | null>(null);
 
   // Watchlist
   const [watchlistTickers, setWatchlistTickers] = useState<string[]>([]);
@@ -128,11 +156,11 @@ export default function AdvisorTab() {
 
   // Session context — accumulates across tool uses so all modes stay consistent
   const [sessionCtx, setSessionCtx] = useState({
-    portfolio: '',          // e.g. "SPY 60%, BND 40% in Taxable Brokerage"
-    portfolioFindings: '',  // first 300 chars of portfolio analysis result
-    thesis: '',             // last stress-tested thesis
-    bestTickers: '',        // top tickers from last Best Assets or Optimal Portfolio run
-    crossTabContext: '',    // snapshot injected from Lab + Planner tabs
+    portfolio: '',
+    portfolioFindings: '',
+    thesis: '',
+    bestTickers: '',
+    crossTabContext: '',
   });
 
   const [dismissedLab, setDismissedLab] = useState(false);
@@ -182,6 +210,10 @@ export default function AdvisorTab() {
     }
   };
 
+  const fetchAllWatchlistPrices = (tickers: string[]) => {
+    tickers.forEach(t => fetchWatchlistPrice(t));
+  };
+
   const addToWatchlist = async () => {
     const t = watchlistInput.trim().toUpperCase();
     if (!t || watchlistTickers.includes(t) || watchlistTickers.length >= 20) return;
@@ -198,6 +230,14 @@ export default function AdvisorTab() {
     setWatchlistTickers(prev => prev.filter(t => t !== ticker));
     setWatchlistPrices(prev => { const n = { ...prev }; delete n[ticker]; return n; });
   };
+
+  // ── Auto-refresh watchlist prices every 60s when on watchlist tab ──────────
+  useEffect(() => {
+    if (mode !== 'watchlist' || watchlistTickers.length === 0) return;
+    const interval = setInterval(() => fetchAllWatchlistPrices(watchlistTickers), 60_000);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, watchlistTickers]);
 
   // ── Load market context + chat history on mount ───────────────────────────
   useEffect(() => {
@@ -227,7 +267,6 @@ export default function AdvisorTab() {
       }
       setContextStatus(nearOk && liveOk ? 'ready' : nearOk || liveOk ? 'partial' : 'failed');
 
-      // load watchlist
       const wRes = await fetch('/api/silas/watchlist');
       if (wRes.ok) {
         const wd = await wRes.json();
@@ -238,6 +277,7 @@ export default function AdvisorTab() {
       }
     };
     load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Scroll chat to bottom ──────────────────────────────────────────────────
@@ -252,8 +292,6 @@ export default function AdvisorTab() {
     setMessages(prev => [...prev, userMsg]);
     setChatInput('');
     setChatLoading(true);
-
-    // Placeholder assistant message that gets filled incrementally
     setMessages(prev => [...prev, { role: 'assistant', text: '' }]);
 
     try {
@@ -284,9 +322,9 @@ export default function AdvisorTab() {
         });
       }
 
-      // Persist to DB (fire-and-forget)
-      fetch('/api/silas/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'user', content: text }) });
-      fetch('/api/silas/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'assistant', content: fullText }) });
+      // Persist sequentially to avoid race with clear-history
+      await fetch('/api/silas/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'user', content: text }) });
+      await fetch('/api/silas/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'assistant', content: fullText }) });
     } catch {
       setMessages(prev => {
         const updated = [...prev];
@@ -336,18 +374,49 @@ export default function AdvisorTab() {
       const data = await res.json();
       if (data.success) {
         setBestAssetsResult(data.data);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const tickers = ((data.data?.assets || []) as any[]).slice(0, 5)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           .map((a: any) => `${a.ticker}(${a.suggestedWeight}%)`).join(', ');
         if (tickers) setSessionCtx(prev => ({ ...prev, bestTickers: tickers }));
       } else {
         setGenError(data.error || 'Generation failed');
       }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (e: any) {
       setGenError(e.message || 'Error generating best assets');
     } finally {
       setGenLoading(false);
     }
   };
+
+  // ── Generate Optimal Portfolio ─────────────────────────────────────────────
+  const generateBestStrategy = async () => {
+    setStrategyLoading(true); setStrategyError(null); setBestStrategyResult(null);
+    try {
+      const res = await fetch('/api/market', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'bestStrategy', riskProfile: strategyRiskProfile, timeHorizon: strategyHorizon, nearTermContext: nearTermData, liveContext: liveData, sessionCtx }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBestStrategyResult(data.data);
+        const tickers = ((data.data?.allocations || []) as StrategyAllocation[]).slice(0, 5)
+          .map(a => `${a.ticker}(${a.weight}%)`).join(', ');
+        if (tickers) setSessionCtx(prev => ({ ...prev, bestTickers: tickers }));
+      } else {
+        setStrategyError(data.error || 'Generation failed');
+      }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } catch (e: any) {
+      setStrategyError(e.message || 'Error generating portfolio');
+    } finally {
+      setStrategyLoading(false);
+    }
+  };
+
+  // Suppress unused warning — buildAdvisorContext used by other tabs via context
+  void buildAdvisorContext;
 
   return (
     <div className="flex flex-col h-screen bg-white">
@@ -366,7 +435,6 @@ export default function AdvisorTab() {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Clear history */}
             {messages.length > 0 && (
               <button
                 onClick={async () => {
@@ -456,52 +524,38 @@ export default function AdvisorTab() {
                 </div>
               )}
 
-              {messages.filter(msg => msg.text).map((msg, i, arr) => {
-                const isLastAssistant = msg.role === 'assistant' && i === arr.length - 1 && !chatLoading;
-                return (
-                  <div key={i} className={clsx('flex items-start gap-3', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
-                    {msg.role === 'assistant' && (
-                      <div className="w-7 h-7 rounded-full bg-orange-500 flex items-center justify-center shrink-0 mt-0.5">
-                        <Brain className="w-4 h-4 text-white" />
-                      </div>
-                    )}
-                    <div className="flex flex-col gap-1.5 max-w-[85%]">
-                      <div className={clsx(
-                        'rounded-2xl px-4 py-3 text-sm leading-relaxed',
-                        msg.role === 'user'
-                          ? 'bg-zinc-900 text-white rounded-tr-sm'
-                          : 'bg-zinc-50 text-zinc-800 border border-zinc-200 rounded-tl-sm'
-                      )}>
-                        {msg.role === 'assistant' ? (
-                          <ReactMarkdown
-                            components={{
-                              p:      ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                              ul:     ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-0.5">{children}</ul>,
-                              ol:     ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-0.5">{children}</ol>,
-                              li:     ({ children }) => <li className="text-sm">{children}</li>,
-                              strong: ({ children }) => <strong className="font-semibold text-zinc-900">{children}</strong>,
-                              h3:     ({ children }) => <h3 className="font-bold text-zinc-900 mt-3 mb-1">{children}</h3>,
-                              h4:     ({ children }) => <h4 className="font-semibold text-zinc-800 mt-2 mb-1">{children}</h4>,
-                              code:   ({ children }) => <code className="font-mono text-xs bg-zinc-200 px-1 py-0.5 rounded">{children}</code>,
-                            }}
-                          >
-                            {msg.text}
-                          </ReactMarkdown>
-                        ) : msg.text}
-                      </div>
-                      {isLastAssistant && (
-                        <button
-                          onClick={navigateToLab}
-                          className="self-start flex items-center gap-1.5 text-[11px] font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg transition-all"
-                        >
-                          <FlaskConical className="w-3 h-3" />
-                          Test in Lab
-                        </button>
-                      )}
+              {messages.filter(msg => msg.text).map((msg, i) => (
+                <div key={i} className={clsx('flex items-start gap-3', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
+                  {msg.role === 'assistant' && (
+                    <div className="w-7 h-7 rounded-full bg-orange-500 flex items-center justify-center shrink-0 mt-0.5">
+                      <Brain className="w-4 h-4 text-white" />
                     </div>
+                  )}
+                  <div className={clsx(
+                    'rounded-2xl px-4 py-3 text-sm leading-relaxed max-w-[85%]',
+                    msg.role === 'user'
+                      ? 'bg-zinc-900 text-white rounded-tr-sm'
+                      : 'bg-zinc-50 text-zinc-800 border border-zinc-200 rounded-tl-sm'
+                  )}>
+                    {msg.role === 'assistant' ? (
+                      <ReactMarkdown
+                        components={{
+                          p:      ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                          ul:     ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-0.5">{children}</ul>,
+                          ol:     ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-0.5">{children}</ol>,
+                          li:     ({ children }) => <li className="text-sm">{children}</li>,
+                          strong: ({ children }) => <strong className="font-semibold text-zinc-900">{children}</strong>,
+                          h3:     ({ children }) => <h3 className="font-bold text-zinc-900 mt-3 mb-1">{children}</h3>,
+                          h4:     ({ children }) => <h4 className="font-semibold text-zinc-800 mt-2 mb-1">{children}</h4>,
+                          code:   ({ children }) => <code className="font-mono text-xs bg-zinc-200 px-1 py-0.5 rounded">{children}</code>,
+                        }}
+                      >
+                        {msg.text}
+                      </ReactMarkdown>
+                    ) : msg.text}
                   </div>
-                );
-              })}
+                </div>
+              ))}
 
               {chatLoading && messages[messages.length - 1]?.text === '' && (
                 <div className="flex items-start gap-3 justify-start">
@@ -582,9 +636,33 @@ export default function AdvisorTab() {
               </div>
             </div>
           </div>
+        ) : mode === 'best-assets' ? (
+          <BestAssetsPanel
+            riskProfile={riskProfile}
+            setRiskProfile={setRiskProfile}
+            timeHorizon={timeHorizon}
+            setTimeHorizon={setTimeHorizon}
+            onGenerate={generateBestAssets}
+            loading={genLoading}
+            error={genError}
+            result={bestAssetsResult}
+            contextStatus={contextStatus}
+          />
+        ) : mode === 'best-strategy' ? (
+          <BestStrategyPanel
+            riskProfile={strategyRiskProfile}
+            setRiskProfile={setStrategyRiskProfile}
+            timeHorizon={strategyHorizon}
+            setTimeHorizon={setStrategyHorizon}
+            onGenerate={generateBestStrategy}
+            loading={strategyLoading}
+            error={strategyError}
+            result={bestStrategyResult}
+            contextStatus={contextStatus}
+          />
         ) : mode === 'macro-calendar' ? (
           <MacroCalendarPanel onAskSilas={(prompt) => { setMode('chat'); sendChat(prompt); }} />
-        ) : mode === 'watchlist' ? (
+        ) : (
           <WatchlistPanel
             tickers={watchlistTickers}
             prices={watchlistPrices}
@@ -595,19 +673,6 @@ export default function AdvisorTab() {
             onRemove={removeFromWatchlist}
             onRefresh={fetchWatchlistPrice}
             onAskSilas={(prompt) => { setMode('chat'); sendChat(prompt); }}
-          />
-        ) : (
-          /* ── Generation modes ─────────────────────────────────────────── */
-          <GenerationPanel
-            riskProfile={riskProfile}
-            setRiskProfile={setRiskProfile}
-            timeHorizon={timeHorizon}
-            setTimeHorizon={setTimeHorizon}
-            onGenerate={generateBestAssets}
-            loading={genLoading}
-            error={genError}
-            bestAssetsResult={bestAssetsResult}
-            contextStatus={contextStatus}
           />
         )}
       </div>
@@ -654,9 +719,6 @@ function PortfolioBuilderPanel({
   }, []);
 
   const totalValue = rows.reduce((s, r) => {
-    const ticker = r.asset.trim();
-    const p = prices[ticker];
-    if (p?.price && !r.amount.trim()) return s; // price known but no shares/amount entered
     return s + (parseFloat(r.amount.replace(/,/g, '')) || 0);
   }, 0);
 
@@ -832,48 +894,55 @@ function ComparePanel({ items, setItems, onCompare, loading }: {
   );
 }
 
-// ─── Generation Panel (Best Assets Now) ──────────────────────────────────────
+// ─── Shared controls (risk + horizon selectors) ───────────────────────────────
 
-function GenerationPanel({
-  riskProfile, setRiskProfile, timeHorizon, setTimeHorizon,
-  onGenerate, loading, error, bestAssetsResult, contextStatus,
-}: {
+function RiskHorizonControls({ riskProfile, setRiskProfile, timeHorizon, setTimeHorizon }: {
+  riskProfile: RiskProfile; setRiskProfile: (r: RiskProfile) => void;
+  timeHorizon: TimeHorizon; setTimeHorizon: (h: TimeHorizon) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-end gap-6">
+      <div>
+        <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Risk Profile</p>
+        <div className="flex gap-2">
+          {(['Conservative', 'Moderate', 'Aggressive'] as RiskProfile[]).map(r => (
+            <button key={r} onClick={() => setRiskProfile(r)}
+              className={clsx('px-4 py-2 rounded-xl text-xs font-semibold border transition-all',
+                riskProfile === r ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-zinc-600 border-zinc-200 hover:border-orange-300'
+              )}
+            >{r}</button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Time Horizon</p>
+        <div className="flex gap-2">
+          {(['6 months', '1 year', '3-5 years', '10 years'] as TimeHorizon[]).map(h => (
+            <button key={h} onClick={() => setTimeHorizon(h)}
+              className={clsx('px-3 py-2 rounded-xl text-xs font-semibold border transition-all',
+                timeHorizon === h ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-zinc-600 border-zinc-200 hover:border-orange-300'
+              )}
+            >{h}</button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Best Stocks Panel ────────────────────────────────────────────────────────
+
+function BestAssetsPanel({ riskProfile, setRiskProfile, timeHorizon, setTimeHorizon, onGenerate, loading, error, result, contextStatus }: {
   riskProfile: RiskProfile; setRiskProfile: (r: RiskProfile) => void;
   timeHorizon: TimeHorizon; setTimeHorizon: (h: TimeHorizon) => void;
   onGenerate: () => void; loading: boolean; error: string | null;
-  bestAssetsResult: BestAssetsResult | null;
-  contextStatus: ContextStatus;
+  result: BestAssetsResult | null; contextStatus: ContextStatus;
 }) {
   return (
     <div className="flex-1 overflow-y-auto px-6 py-6 min-h-0">
       <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-6 mb-6">
         <div className="flex flex-wrap items-end gap-6">
-          <div>
-            <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Risk Profile</p>
-            <div className="flex gap-2">
-              {(['Conservative', 'Moderate', 'Aggressive'] as RiskProfile[]).map(r => (
-                <button key={r} onClick={() => setRiskProfile(r)}
-                  className={clsx('px-4 py-2 rounded-xl text-xs font-semibold border transition-all',
-                    riskProfile === r ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-zinc-600 border-zinc-200 hover:border-orange-300'
-                  )}
-                >{r}</button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Time Horizon</p>
-            <div className="flex gap-2">
-              {(['6 months', '1 year', '3-5 years', '10 years'] as TimeHorizon[]).map(h => (
-                <button key={h} onClick={() => setTimeHorizon(h)}
-                  className={clsx('px-3 py-2 rounded-xl text-xs font-semibold border transition-all',
-                    timeHorizon === h ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-zinc-600 border-zinc-200 hover:border-orange-300'
-                  )}
-                >{h}</button>
-              ))}
-            </div>
-          </div>
-
+          <RiskHorizonControls riskProfile={riskProfile} setRiskProfile={setRiskProfile} timeHorizon={timeHorizon} setTimeHorizon={setTimeHorizon} />
           <button
             onClick={onGenerate}
             disabled={loading}
@@ -883,7 +952,6 @@ function GenerationPanel({
             {loading ? 'Generating...' : 'Generate Best Stocks'}
           </button>
         </div>
-
         {contextStatus === 'loading' && (
           <p className="text-xs text-amber-600 mt-3 flex items-center gap-1.5">
             <AlertTriangle className="w-3 h-3" />
@@ -892,13 +960,44 @@ function GenerationPanel({
         )}
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 text-sm text-red-700">{error}</div>
-      )}
+      {error && <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 text-sm text-red-700">{error}</div>}
 
-      {bestAssetsResult && <BestAssetsDisplay result={bestAssetsResult} />}
-
-      {!loading && !error && !bestAssetsResult && (
+      {result ? (
+        <div className="space-y-5">
+          <div>
+            <h2 className="text-xl font-bold text-zinc-900">Top Stocks Right Now</h2>
+            <p className="text-sm text-zinc-500 mt-0.5">{result.generatedAt} · Regime: <span className="font-medium text-zinc-700">{result.regime}</span></p>
+          </div>
+          <div className="bg-orange-50 border border-orange-200 rounded-xl px-5 py-4 text-sm text-orange-900 leading-relaxed">
+            <span className="font-bold">Macro Alignment: </span>{result.macroAlignment}
+          </div>
+          <div className="space-y-3">
+            {(result.assets || []).map((asset, i) => (
+              <div key={i} className="bg-white border border-zinc-200 rounded-xl p-5 flex items-start gap-4 hover:border-orange-200 transition-colors">
+                <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 font-bold text-sm flex items-center justify-center shrink-0">{asset.rank}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <span className="text-base font-bold text-zinc-900 font-mono">{asset.ticker}</span>
+                    <span className="text-sm text-zinc-600">{asset.name}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600">{asset.category}</span>
+                    <span className={clsx('text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full',
+                      asset.risk === 'Low' ? 'bg-emerald-100 text-emerald-700' :
+                      asset.risk === 'Medium' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+                    )}>{asset.risk} Risk</span>
+                  </div>
+                  <p className="text-sm text-zinc-600 leading-relaxed mb-3">{asset.rationale}</p>
+                  <div className="flex items-center gap-6 text-xs text-zinc-500 flex-wrap">
+                    <span><strong className="text-zinc-700">Weight:</strong> {asset.suggestedWeight}%</span>
+                    <span><strong className="text-zinc-700">Fwd Return:</strong> {asset.forwardReturn}</span>
+                    <span><strong className="text-zinc-700">ER:</strong> {asset.expenseRatio}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-[10px] text-zinc-400 leading-relaxed">For informational and educational purposes only. Not financial advice. © 2026 Alpha Horizon</p>
+        </div>
+      ) : !loading && !error && (
         <div className="text-center py-16 text-zinc-400">
           <div className="w-16 h-16 rounded-2xl bg-orange-50 flex items-center justify-center mx-auto mb-4">
             <Star className="w-8 h-8 text-orange-300" />
@@ -913,52 +1012,118 @@ function GenerationPanel({
   );
 }
 
-// ─── Best Assets Display ──────────────────────────────────────────────────────
+// ─── Optimal Portfolio Panel ──────────────────────────────────────────────────
 
-function BestAssetsDisplay({ result }: { result: BestAssetsResult }) {
+function BestStrategyPanel({ riskProfile, setRiskProfile, timeHorizon, setTimeHorizon, onGenerate, loading, error, result, contextStatus }: {
+  riskProfile: RiskProfile; setRiskProfile: (r: RiskProfile) => void;
+  timeHorizon: TimeHorizon; setTimeHorizon: (h: TimeHorizon) => void;
+  onGenerate: () => void; loading: boolean; error: string | null;
+  result: BestStrategyResult | null; contextStatus: ContextStatus;
+}) {
   return (
-    <div className="space-y-5">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h2 className="text-xl font-bold text-zinc-900">Top Assets Right Now</h2>
-          <p className="text-sm text-zinc-500 mt-0.5">{result.generatedAt} · Regime: <span className="font-medium text-zinc-700">{result.regime}</span></p>
+    <div className="flex-1 overflow-y-auto px-6 py-6 min-h-0">
+      <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-6 mb-6">
+        <div className="flex flex-wrap items-end gap-6">
+          <RiskHorizonControls riskProfile={riskProfile} setRiskProfile={setRiskProfile} timeHorizon={timeHorizon} setTimeHorizon={setTimeHorizon} />
+          <button
+            onClick={onGenerate}
+            disabled={loading}
+            className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-200 text-white disabled:text-zinc-400 px-6 py-2.5 rounded-xl text-sm font-bold transition-colors"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <BarChart3 className="w-4 h-4" />}
+            {loading ? 'Building...' : 'Build Optimal Portfolio'}
+          </button>
         </div>
+        {contextStatus === 'loading' && (
+          <p className="text-xs text-amber-600 mt-3 flex items-center gap-1.5">
+            <AlertTriangle className="w-3 h-3" />
+            Market context still loading — results will improve once ready.
+          </p>
+        )}
       </div>
 
-      <div className="bg-orange-50 border border-orange-200 rounded-xl px-5 py-4 text-sm text-orange-900 leading-relaxed">
-        <span className="font-bold">Macro Alignment: </span>{result.macroAlignment}
-      </div>
+      {error && <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 text-sm text-red-700">{error}</div>}
 
-      <div className="space-y-3">
-        {(result.assets || []).map((asset, i) => (
-          <div key={i} className="bg-white border border-zinc-200 rounded-xl p-5 flex items-start gap-4 hover:border-orange-200 transition-colors">
-            <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 font-bold text-sm flex items-center justify-center shrink-0">
-              {asset.rank}
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-2 flex-wrap">
-                <span className="text-base font-bold text-zinc-900 font-mono">{asset.ticker}</span>
-                <span className="text-sm text-zinc-600">{asset.name}</span>
-                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600">{asset.category}</span>
-                <span className={clsx(
-                  'text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full',
-                  asset.risk === 'Low' ? 'bg-emerald-100 text-emerald-700' :
-                  asset.risk === 'Medium' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
-                )}>{asset.risk} Risk</span>
-              </div>
-              <p className="text-sm text-zinc-600 leading-relaxed mb-3">{asset.rationale}</p>
-              <div className="flex items-center gap-6 text-xs text-zinc-500 flex-wrap">
-                <span><strong className="text-zinc-700">Weight:</strong> {asset.suggestedWeight}%</span>
-                <span><strong className="text-zinc-700">Fwd Return:</strong> {asset.forwardReturn}</span>
-                <span><strong className="text-zinc-700">ER:</strong> {asset.expenseRatio}</span>
-              </div>
+      {result ? (
+        <div className="space-y-5">
+          {/* Header */}
+          <div>
+            <h2 className="text-xl font-bold text-zinc-900">{result.strategyName}</h2>
+            <div className="flex flex-wrap gap-3 mt-2">
+              {[
+                { label: 'Expected Return', value: result.expectedReturn },
+                { label: 'Volatility', value: result.expectedVolatility },
+                { label: 'Sharpe', value: result.sharpeEstimate },
+              ].map(({ label, value }) => (
+                <div key={label} className="bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2.5 text-center">
+                  <p className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">{label}</p>
+                  <p className="text-sm font-bold text-zinc-900 mt-0.5">{value}</p>
+                </div>
+              ))}
             </div>
           </div>
-        ))}
-      </div>
-      <p className="text-[10px] text-zinc-400 leading-relaxed">
-        For informational and educational purposes only. Not financial advice. Past performance does not guarantee future results. © 2026 Alpha Horizon
-      </p>
+
+          {/* Macro alignment */}
+          <div className="bg-orange-50 border border-orange-200 rounded-xl px-5 py-4 text-sm text-orange-900 leading-relaxed">
+            <span className="font-bold">Macro Alignment: </span>{result.macroAlignment}
+          </div>
+
+          {/* Allocations */}
+          <div>
+            <h3 className="text-sm font-bold text-zinc-700 uppercase tracking-wider mb-3">Allocations</h3>
+            <div className="space-y-2">
+              {(result.allocations || []).map((alloc, i) => (
+                <div key={i} className="bg-white border border-zinc-200 rounded-xl p-4 flex items-start gap-4 hover:border-orange-200 transition-colors">
+                  <div className="w-12 text-center shrink-0">
+                    <p className="text-lg font-bold text-orange-600">{alloc.weight}%</p>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="text-sm font-bold text-zinc-900 font-mono">{alloc.ticker}</span>
+                      <span className="text-sm text-zinc-600">{alloc.name}</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600">{alloc.category}</span>
+                    </div>
+                    <p className="text-xs text-zinc-600 leading-relaxed">{alloc.rationale}</p>
+                    <p className="text-[10px] text-zinc-400 mt-1">ER: {alloc.expenseRatio}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Rebalancing */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl px-5 py-4 text-sm text-blue-900 leading-relaxed">
+            <span className="font-bold">Rebalancing: </span>{result.rebalancingGuidance}
+          </div>
+
+          {/* Risk warnings */}
+          {result.riskWarnings?.length > 0 && (
+            <div>
+              <h3 className="text-sm font-bold text-zinc-700 uppercase tracking-wider mb-2">Risk Warnings</h3>
+              <ul className="space-y-1.5">
+                {result.riskWarnings.map((w, i) => (
+                  <li key={i} className="flex items-start gap-2 text-xs text-zinc-600">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                    {w}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <p className="text-[10px] text-zinc-400 leading-relaxed">For informational and educational purposes only. Not financial advice. © 2026 Alpha Horizon</p>
+        </div>
+      ) : !loading && !error && (
+        <div className="text-center py-16 text-zinc-400">
+          <div className="w-16 h-16 rounded-2xl bg-orange-50 flex items-center justify-center mx-auto mb-4">
+            <BarChart3 className="w-8 h-8 text-orange-300" />
+          </div>
+          <p className="font-semibold text-zinc-500 mb-2 text-base">Optimal Portfolio</p>
+          <p className="text-sm max-w-sm mx-auto leading-relaxed">
+            Sharpe-optimized ETF portfolio built for your risk profile and time horizon. Uses MPT principles calibrated to today&apos;s macro regime.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -966,29 +1131,46 @@ function BestAssetsDisplay({ result }: { result: BestAssetsResult }) {
 // ─── Macro Calendar Data ──────────────────────────────────────────────────────
 
 const MACRO_EVENTS = [
-  // FOMC
+  // ── FOMC (Fed publishes full schedule a year in advance) ──────────────────
   { date: '2026-06-17', label: 'FOMC Meeting', detail: 'Fed rate decision + press conference', type: 'fomc' as const },
-  { date: '2026-07-28', label: 'FOMC Meeting', detail: 'Fed rate decision + press conference', type: 'fomc' as const },
+  { date: '2026-07-29', label: 'FOMC Meeting', detail: 'Fed rate decision + press conference', type: 'fomc' as const },
   { date: '2026-09-16', label: 'FOMC Meeting', detail: 'Fed rate decision + press conference', type: 'fomc' as const },
   { date: '2026-10-28', label: 'FOMC Meeting', detail: 'Fed rate decision + press conference', type: 'fomc' as const },
   { date: '2026-12-09', label: 'FOMC Meeting', detail: 'Fed rate decision + press conference', type: 'fomc' as const },
-  // CPI
-  { date: '2026-06-10', label: 'CPI Release', detail: 'May Consumer Price Index', type: 'cpi' as const },
-  { date: '2026-07-14', label: 'CPI Release', detail: 'June Consumer Price Index', type: 'cpi' as const },
-  { date: '2026-08-12', label: 'CPI Release', detail: 'July Consumer Price Index', type: 'cpi' as const },
-  { date: '2026-09-09', label: 'CPI Release', detail: 'August Consumer Price Index', type: 'cpi' as const },
-  { date: '2026-10-14', label: 'CPI Release', detail: 'September Consumer Price Index', type: 'cpi' as const },
-  { date: '2026-11-12', label: 'CPI Release', detail: 'October Consumer Price Index', type: 'cpi' as const },
-  { date: '2026-12-10', label: 'CPI Release', detail: 'November Consumer Price Index', type: 'cpi' as const },
-  // NFP
-  { date: '2026-06-05', label: 'Jobs Report (NFP)', detail: 'May Non-Farm Payrolls', type: 'nfp' as const },
-  { date: '2026-07-10', label: 'Jobs Report (NFP)', detail: 'June Non-Farm Payrolls', type: 'nfp' as const },
+  { date: '2027-01-27', label: 'FOMC Meeting', detail: 'Fed rate decision + press conference', type: 'fomc' as const },
+  { date: '2027-03-17', label: 'FOMC Meeting', detail: 'Fed rate decision + press conference', type: 'fomc' as const },
+  { date: '2027-05-05', label: 'FOMC Meeting', detail: 'Fed rate decision + press conference', type: 'fomc' as const },
+  { date: '2027-06-16', label: 'FOMC Meeting', detail: 'Fed rate decision + press conference', type: 'fomc' as const },
+  { date: '2027-07-28', label: 'FOMC Meeting', detail: 'Fed rate decision + press conference', type: 'fomc' as const },
+  { date: '2027-09-15', label: 'FOMC Meeting', detail: 'Fed rate decision + press conference', type: 'fomc' as const },
+  { date: '2027-10-27', label: 'FOMC Meeting', detail: 'Fed rate decision + press conference', type: 'fomc' as const },
+  { date: '2027-12-08', label: 'FOMC Meeting', detail: 'Fed rate decision + press conference', type: 'fomc' as const },
+  // ── CPI (BLS publishes release schedule annually) ─────────────────────────
+  { date: '2026-06-11', label: 'CPI Release', detail: 'May Consumer Price Index', type: 'cpi' as const },
+  { date: '2026-07-15', label: 'CPI Release', detail: 'June Consumer Price Index', type: 'cpi' as const },
+  { date: '2026-08-13', label: 'CPI Release', detail: 'July Consumer Price Index', type: 'cpi' as const },
+  { date: '2026-09-11', label: 'CPI Release', detail: 'August Consumer Price Index', type: 'cpi' as const },
+  { date: '2026-10-15', label: 'CPI Release', detail: 'September Consumer Price Index', type: 'cpi' as const },
+  { date: '2026-11-13', label: 'CPI Release', detail: 'October Consumer Price Index', type: 'cpi' as const },
+  { date: '2026-12-11', label: 'CPI Release', detail: 'November Consumer Price Index', type: 'cpi' as const },
+  { date: '2027-01-15', label: 'CPI Release', detail: 'December Consumer Price Index', type: 'cpi' as const },
+  { date: '2027-02-12', label: 'CPI Release', detail: 'January Consumer Price Index', type: 'cpi' as const },
+  { date: '2027-03-12', label: 'CPI Release', detail: 'February Consumer Price Index', type: 'cpi' as const },
+  { date: '2027-04-14', label: 'CPI Release', detail: 'March Consumer Price Index', type: 'cpi' as const },
+  { date: '2027-05-14', label: 'CPI Release', detail: 'April Consumer Price Index', type: 'cpi' as const },
+  // ── NFP (BLS — first Friday of the month) ─────────────────────────────────
+  { date: '2026-07-02', label: 'Jobs Report (NFP)', detail: 'June Non-Farm Payrolls', type: 'nfp' as const },
   { date: '2026-08-07', label: 'Jobs Report (NFP)', detail: 'July Non-Farm Payrolls', type: 'nfp' as const },
   { date: '2026-09-04', label: 'Jobs Report (NFP)', detail: 'August Non-Farm Payrolls', type: 'nfp' as const },
   { date: '2026-10-02', label: 'Jobs Report (NFP)', detail: 'September Non-Farm Payrolls', type: 'nfp' as const },
   { date: '2026-11-06', label: 'Jobs Report (NFP)', detail: 'October Non-Farm Payrolls', type: 'nfp' as const },
   { date: '2026-12-04', label: 'Jobs Report (NFP)', detail: 'November Non-Farm Payrolls', type: 'nfp' as const },
-  // Earnings
+  { date: '2027-01-08', label: 'Jobs Report (NFP)', detail: 'December Non-Farm Payrolls', type: 'nfp' as const },
+  { date: '2027-02-05', label: 'Jobs Report (NFP)', detail: 'January Non-Farm Payrolls', type: 'nfp' as const },
+  { date: '2027-03-05', label: 'Jobs Report (NFP)', detail: 'February Non-Farm Payrolls', type: 'nfp' as const },
+  { date: '2027-04-02', label: 'Jobs Report (NFP)', detail: 'March Non-Farm Payrolls', type: 'nfp' as const },
+  { date: '2027-05-07', label: 'Jobs Report (NFP)', detail: 'April Non-Farm Payrolls', type: 'nfp' as const },
+  // ── Earnings (Q2 2026 + Q3 2026) ──────────────────────────────────────────
   { date: '2026-07-14', label: 'JPMorgan (JPM) Earnings', detail: 'Q2 2026 results', type: 'earnings' as const },
   { date: '2026-07-17', label: 'Netflix (NFLX) Earnings', detail: 'Q2 2026 results', type: 'earnings' as const },
   { date: '2026-07-22', label: 'Tesla (TSLA) Earnings', detail: 'Q2 2026 results', type: 'earnings' as const },
@@ -998,6 +1180,15 @@ const MACRO_EVENTS = [
   { date: '2026-07-30', label: 'Microsoft (MSFT) Earnings', detail: 'Q2 2026 results', type: 'earnings' as const },
   { date: '2026-08-01', label: 'Amazon (AMZN) Earnings', detail: 'Q2 2026 results', type: 'earnings' as const },
   { date: '2026-08-20', label: 'NVIDIA (NVDA) Earnings', detail: 'Q2 2026 results', type: 'earnings' as const },
+  { date: '2026-10-13', label: 'JPMorgan (JPM) Earnings', detail: 'Q3 2026 results', type: 'earnings' as const },
+  { date: '2026-10-16', label: 'Netflix (NFLX) Earnings', detail: 'Q3 2026 results', type: 'earnings' as const },
+  { date: '2026-10-21', label: 'Tesla (TSLA) Earnings', detail: 'Q3 2026 results', type: 'earnings' as const },
+  { date: '2026-10-27', label: 'Alphabet (GOOGL) Earnings', detail: 'Q3 2026 results', type: 'earnings' as const },
+  { date: '2026-10-28', label: 'Meta (META) Earnings', detail: 'Q3 2026 results', type: 'earnings' as const },
+  { date: '2026-10-29', label: 'Apple (AAPL) Earnings', detail: 'Q3 2026 results', type: 'earnings' as const },
+  { date: '2026-10-29', label: 'Microsoft (MSFT) Earnings', detail: 'Q3 2026 results', type: 'earnings' as const },
+  { date: '2026-10-30', label: 'Amazon (AMZN) Earnings', detail: 'Q3 2026 results', type: 'earnings' as const },
+  { date: '2026-11-19', label: 'NVIDIA (NVDA) Earnings', detail: 'Q3 2026 results', type: 'earnings' as const },
 ].sort((a, b) => a.date.localeCompare(b.date));
 
 type EventType = 'fomc' | 'cpi' | 'nfp' | 'earnings';
@@ -1018,15 +1209,13 @@ const EVENT_LABELS: Record<EventType, string> = {
 function MacroCalendarPanel({ onAskSilas }: { onAskSilas: (prompt: string) => void }) {
   const today = new Date();
 
-  const upcomingEvents = MACRO_EVENTS.filter(e => new Date(e.date) >= today).slice(0, 20);
+  const upcomingEvents = MACRO_EVENTS.filter(e => new Date(e.date) >= today).slice(0, 24);
 
-  const daysUntil = (dateStr: string) => {
-    return Math.ceil((new Date(dateStr).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  };
+  const daysUntil = (dateStr: string) =>
+    Math.ceil((new Date(dateStr).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' });
-  };
+  const formatDate = (dateStr: string) =>
+    new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', weekday: 'short' });
 
   const buildPrompt = (event: typeof MACRO_EVENTS[0]) => {
     const days = daysUntil(event.date);
@@ -1038,13 +1227,16 @@ function MacroCalendarPanel({ onAskSilas }: { onAskSilas: (prompt: string) => vo
 
   return (
     <div className="flex-1 overflow-y-auto px-6 py-5 min-h-0">
-      {/* Legend */}
-      <div className="flex items-center gap-3 mb-5 flex-wrap">
-        {(['fomc', 'cpi', 'nfp', 'earnings'] as EventType[]).map(type => (
-          <span key={type} className={clsx('text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full', EVENT_COLORS[type].badge)}>
-            {EVENT_LABELS[type]}
-          </span>
-        ))}
+      {/* Legend + schedule note */}
+      <div className="flex items-center justify-between gap-3 mb-5 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap">
+          {(['fomc', 'cpi', 'nfp', 'earnings'] as EventType[]).map(type => (
+            <span key={type} className={clsx('text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full', EVENT_COLORS[type].badge)}>
+              {EVENT_LABELS[type]}
+            </span>
+          ))}
+        </div>
+        <span className="text-[10px] text-zinc-400 font-medium">Scheduled through May 2027 · Dates approximate for earnings</span>
       </div>
 
       <div className="space-y-2">
@@ -1057,16 +1249,11 @@ function MacroCalendarPanel({ onAskSilas }: { onAskSilas: (prompt: string) => vo
               'flex items-center gap-4 px-4 py-3.5 rounded-xl border transition-all',
               isNext ? `${colors.bg} border-current border-opacity-20` : 'bg-white border-zinc-200 hover:border-zinc-300'
             )}>
-              {/* Date block */}
               <div className="w-14 text-center flex-shrink-0">
                 <p className="text-[10px] font-semibold text-zinc-500 uppercase">{new Date(event.date).toLocaleDateString('en-US', { month: 'short' })}</p>
                 <p className="text-xl font-bold text-zinc-900 leading-none">{new Date(event.date).getDate()}</p>
               </div>
-
-              {/* Dot */}
               <div className={clsx('w-2 h-2 rounded-full flex-shrink-0', colors.dot)} />
-
-              {/* Info */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className={clsx('text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full', colors.badge)}>
@@ -1076,8 +1263,6 @@ function MacroCalendarPanel({ onAskSilas }: { onAskSilas: (prompt: string) => vo
                 </div>
                 <p className="text-xs text-zinc-500 mt-0.5">{event.detail}</p>
               </div>
-
-              {/* Days + Ask button */}
               <div className="flex items-center gap-3 flex-shrink-0">
                 <span className={clsx(
                   'text-xs font-bold px-2.5 py-1 rounded-full',
@@ -1117,11 +1302,11 @@ function WatchlistPanel({
 }) {
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* Header + add ticker bar */}
       <div className="flex-shrink-0 border-b border-zinc-200 px-6 py-4 bg-zinc-50">
         <div className="flex items-center gap-2 mb-1">
           <Eye className="w-4 h-4 text-orange-500" />
           <span className="text-sm font-bold text-zinc-900">Watchlist</span>
+          <span className="text-[10px] text-zinc-400 font-medium ml-1">Auto-refreshes every 60s</span>
         </div>
         <p className="text-xs text-zinc-500 leading-relaxed mb-3">Track your favorite tickers with live prices and daily change. Hit &quot;Ask Silas&quot; on any position to get a real-time read.</p>
         <div className="flex items-center gap-3">
@@ -1148,7 +1333,6 @@ function WatchlistPanel({
         {tickers.length >= 20 && <p className="text-xs text-zinc-400 mt-2">Maximum 20 tickers reached.</p>}
       </div>
 
-      {/* Ticker list */}
       <div className="flex-1 overflow-y-auto px-6 py-5 min-h-0">
         {tickers.length === 0 ? (
           <div className="text-center py-16">
@@ -1163,12 +1347,9 @@ function WatchlistPanel({
               const isUp = p?.changePct != null && p.changePct >= 0;
               return (
                 <div key={ticker} className="flex items-center gap-4 bg-white border border-zinc-200 hover:border-zinc-300 rounded-xl px-4 py-3.5 transition-all group">
-                  {/* Ticker */}
                   <div className="w-20 flex-shrink-0">
                     <p className="text-sm font-bold text-zinc-900 font-mono">{ticker}</p>
                   </div>
-
-                  {/* Price */}
                   <div className="flex-1 min-w-0">
                     {p?.loading ? (
                       <p className="text-xs text-zinc-400">Loading…</p>
@@ -1189,8 +1370,6 @@ function WatchlistPanel({
                       <p className="text-xs text-zinc-400">Price unavailable</p>
                     )}
                   </div>
-
-                  {/* Actions */}
                   <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={() => onRefresh(ticker)}
@@ -1221,4 +1400,3 @@ function WatchlistPanel({
     </div>
   );
 }
-
