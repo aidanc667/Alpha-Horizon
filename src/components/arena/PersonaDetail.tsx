@@ -11,7 +11,7 @@ interface PersonaDetailProps {
   onDelete?: (id: string) => void;
 }
 
-type Period = 'today' | '1w' | '1m' | 'all';
+type Period = '6m' | '1w' | '1m' | 'all';
 
 export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDetailProps) {
   const [persona, setPersona] = useState<Persona | null>(null);
@@ -23,6 +23,7 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
   const [briefingTime, setBriefingTime] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [period, setPeriod] = useState<Period>('all');
+  const [failedTickers, setFailedTickers] = useState<string[]>([]);
   const [showThesis, setShowThesis] = useState(false);
   const [isMarketHours, setIsMarketHours] = useState(false);
   const [showAddPosition, setShowAddPosition] = useState(false);
@@ -78,6 +79,7 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setIsMarketHours(data.isMarketHours ?? false);
+      setFailedTickers(data.failedTickers ?? []);
       await loadPersona();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Refresh failed');
@@ -254,7 +256,7 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
 
   const filteredChart = (() => {
     if (period === 'all' || chartData.length === 0) return chartData;
-    const days = period === 'today' ? 1 : period === '1w' ? 7 : 30;
+    const days = period === '6m' ? 180 : period === '1w' ? 7 : 30;
     return chartData.slice(Math.max(0, chartData.length - days));
   })();
 
@@ -273,7 +275,7 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
     return new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' }) + ' ET';
   };
 
-  const PERIODS: Period[] = ['today', '1w', '1m', 'all'];
+  const PERIODS: Period[] = ['1w', '1m', '6m', 'all'];
 
   // Compute portfolio intelligence metrics from snapshot history
   const computeMetrics = () => {
@@ -562,7 +564,7 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
                     period === p ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'text-slate-500 hover:text-slate-300'
                   }`}
                 >
-                  {p === 'today' ? '1D' : p === '1w' ? '1W' : p === '1m' ? '1M' : 'All'}
+                  {p === '1w' ? '1W' : p === '1m' ? '1M' : p === '6m' ? '6M' : 'All'}
                 </button>
               ))}
             </div>
@@ -588,6 +590,17 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
             </div>
           )}
         </div>
+
+        {/* Price fetch warning */}
+        {failedTickers.length > 0 && (
+          <div className="flex items-start gap-3 p-4 bg-red-500/10 border border-red-500/25 rounded-2xl">
+            <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-red-300 text-sm font-semibold">Price fetch failed for: {failedTickers.join(', ')}</p>
+              <p className="text-red-400/70 text-xs mt-0.5">These positions are showing inception prices. Yahoo Finance may be temporarily unavailable — try refreshing again in a moment.</p>
+            </div>
+          </div>
+        )}
 
         {/* Holdings Table */}
         {latestSnapshot && latestSnapshot.holdings_detail_json.length > 0 && (

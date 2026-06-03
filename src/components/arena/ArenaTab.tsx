@@ -22,6 +22,7 @@ export default function ArenaTab() {
   const [showCreate, setShowCreate] = useState(false);
   const [sortBy, setSortBy] = useState<SortBy>('newest');
   const [migrated, setMigrated] = useState(false);
+  const [priceWarning, setPriceWarning] = useState<string | null>(null);
   const lastRefreshedAt = useRef<number>(0);
   const REFRESH_THROTTLE_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -35,15 +36,23 @@ export default function ArenaTab() {
 
       if (silentRefresh && loaded.length > 0) {
         lastRefreshedAt.current = Date.now();
+        setPriceWarning(null);
         // Refresh all personas in parallel for live today% — fire-and-forget, update cards when done
         Promise.all(
-          loaded.map(p => fetch(`/api/personas/${p.id}/refresh`, { method: 'POST' }).catch(() => null))
-        ).then(() =>
-          fetch('/api/personas')
-            .then(r => r.json())
-            .then(d => { if (d.personas) setPersonas(d.personas); })
-            .catch(() => null)
-        );
+          loaded.map(p =>
+            fetch(`/api/personas/${p.id}/refresh`, { method: 'POST' })
+              .then(r => r.json())
+              .catch(() => null)
+          )
+        ).then(results => {
+          const allFailed = results.flatMap(r => r?.failedTickers ?? []);
+          if (allFailed.length > 0) {
+            const unique = [...new Set(allFailed)];
+            setPriceWarning(`⚠️ Price fetch failed for: ${unique.join(', ')} — showing last known values`);
+          }
+          return fetch('/api/personas').then(r => r.json());
+        }).then(d => { if (d?.personas) setPersonas(d.personas); })
+          .catch(() => null);
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load personas');
@@ -146,6 +155,14 @@ export default function ArenaTab() {
           <div className="flex items-center gap-2 p-4 bg-red-500/10 border border-red-500/20 rounded-xl mb-4">
             <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
             <p className="text-red-300 text-sm">{error}</p>
+          </div>
+        )}
+
+        {/* Price fetch warning */}
+        {priceWarning && (
+          <div className="flex items-center justify-between gap-3 p-3 bg-amber-500/10 border border-amber-500/25 rounded-xl mb-4">
+            <p className="text-amber-300 text-xs">{priceWarning}</p>
+            <button onClick={() => setPriceWarning(null)} className="text-amber-500 hover:text-amber-300 text-xs flex-shrink-0">Dismiss</button>
           </div>
         )}
 

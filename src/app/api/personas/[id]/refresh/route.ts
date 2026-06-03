@@ -66,6 +66,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
     // Fetch all prices in parallel
     let anyMarketOpen = false;
+    const failedTickers: string[] = [];
     const priceMap: Record<string, { price: number; todayChangePct: number }> = {
       CASH: { price: 1.0, todayChangePct: 0 },
     };
@@ -74,9 +75,11 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       try {
         const result = await fetchPrice(t);
         if (result.isMarketOpen) anyMarketOpen = true;
-        return { ticker: t, ...result };
+        return { ticker: t, ...result, failed: false };
+      } catch {
+        failedTickers.push(t);
+        return { ticker: t, price: allocation.find((h: PersonaHolding) => h.ticker === t)?.inceptionPrice || 0, todayChangePct: 0, isMarketOpen: false, failed: true };
       }
-      catch { return { ticker: t, price: allocation.find((h: PersonaHolding) => h.ticker === t)?.inceptionPrice || 0, todayChangePct: 0, isMarketOpen: false }; }
     }));
     priceResults.forEach(r => { priceMap[r.ticker] = { price: r.price, todayChangePct: r.todayChangePct }; });
 
@@ -135,7 +138,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       snapshot = inserted[0];
     }
 
-    return NextResponse.json({ snapshot, priceMap, isMarketHours: anyMarketOpen });
+    return NextResponse.json({ snapshot, priceMap, isMarketHours: anyMarketOpen, failedTickers });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'Server error';
     console.error('[POST /api/personas/[id]/refresh]', e);
