@@ -10,9 +10,10 @@ async function fetchPrice(ticker: string): Promise<{ price: number; prevClose: n
     return { price: cached.price, prevClose: cached.prevClose };
   }
 
-  // Use chartPreviousClose from meta (unadjusted) instead of adjclose array.
-  // adjclose is dividend-adjusted and diverges from the actual daily % change on ex-dividend days.
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=2d`;
+  // range=5d so we always have at least 2 candles even across long weekends.
+  // We use the second-to-last candle's unadjusted close as yesterday's close —
+  // meta.chartPreviousClose is the close from BEFORE the chart range, not yesterday's.
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=5d`;
   const res = await fetch(url, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
@@ -22,12 +23,13 @@ async function fetchPrice(ticker: string): Promise<{ price: number; prevClose: n
 
   if (!res.ok) throw new Error(`Yahoo Finance ${res.status} for ${ticker}`);
   const json: unknown = await res.json();
-  const data = json as { chart?: { result?: Array<{ meta: { regularMarketPrice: number; chartPreviousClose?: number; previousClose?: number } }> } };
+  const data = json as { chart?: { result?: Array<{ meta: { regularMarketPrice: number }; indicators?: { quote?: Array<{ close?: (number | null)[] }> } }> } };
   const result = data.chart?.result?.[0];
   if (!result) throw new Error(`No data for ${ticker}`);
 
   const price: number = result.meta.regularMarketPrice;
-  const prevClose: number = result.meta.chartPreviousClose ?? result.meta.previousClose ?? price;
+  const closes = (result.indicators?.quote?.[0]?.close ?? []).filter((c): c is number => c != null);
+  const prevClose: number = closes.length >= 2 ? closes[closes.length - 2] : price;
 
   priceCache.set(ticker, { price, prevClose, ts: Date.now() });
   return { price, prevClose };

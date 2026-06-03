@@ -5,16 +5,20 @@ import type { PersonaHolding, PersonaSnapshotHolding, BenchmarkComponent } from 
 
 interface YahooMeta {
   regularMarketPrice: number;
-  chartPreviousClose?: number;
-  previousClose?: number;
   marketState?: string; // 'REGULAR' | 'CLOSED' | 'PRE' | 'POST'
 }
-interface YahooResult { meta: YahooMeta; }
+interface YahooResult {
+  meta: YahooMeta;
+  indicators?: { quote?: Array<{ close?: (number | null)[] }> };
+}
 interface YahooChart { chart?: { result?: YahooResult[] } }
 
 async function fetchPrice(ticker: string): Promise<{ price: number; todayChangePct: number; isMarketOpen: boolean }> {
   if (ticker === 'CASH') return { price: 1.0, todayChangePct: 0, isMarketOpen: false };
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=2d`;
+  // range=5d gives enough candles to reliably find yesterday's close even across long weekends.
+  // We do NOT use meta.chartPreviousClose — that field is the close from BEFORE the chart range
+  // starts, not yesterday's close, so it produces wildly wrong daily % values.
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=5d`;
   const res = await fetch(url, {
     headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36' },
     cache: 'no-store',
@@ -25,11 +29,13 @@ async function fetchPrice(ticker: string): Promise<{ price: number; todayChangeP
   const meta = result?.meta;
   const price: number = meta?.regularMarketPrice ?? 0;
   const isMarketOpen = meta?.marketState === 'REGULAR';
-  // chartPreviousClose is the unadjusted previous session close — matches Google Finance's reference price.
-  // We avoid adjclose here because dividend adjustments cause it to diverge from the actual daily % change.
-  const prevClose: number = meta?.chartPreviousClose ?? meta?.previousClose ?? price;
-  // Zero out today's change only in pre-market (market hasn't opened yet for the regular session).
   const isPreMarket = meta?.marketState === 'PRE' || meta?.marketState === 'PREPRE';
+
+  // Use the second-to-last non-null candle close as yesterday's close.
+  // This is the unadjusted close price, matching Google Finance's reference price.
+  const closes = (result?.indicators?.quote?.[0]?.close ?? []).filter((c): c is number => c != null);
+  const prevClose: number = closes.length >= 2 ? closes[closes.length - 2] : price;
+
   const todayChangePct = !isPreMarket && prevClose > 0 ? (price / prevClose) - 1 : 0;
   return { price, todayChangePct, isMarketOpen };
 }
