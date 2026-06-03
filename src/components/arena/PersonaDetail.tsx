@@ -293,29 +293,28 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
 
     const RISK_FREE_DAILY = 0.045 / 252;
 
-    // Annualized return
-    const annualizedReturn = daysRunning > 0
-      ? Math.pow(currentValue / startingBalance, 365 / daysRunning) - 1
-      : 0;
-
-    // Volatility
+    // Volatility — sample std dev of daily returns, annualized
     const mean = dailyPortfolio.reduce((s, r) => s + r, 0) / n;
-    const variance = dailyPortfolio.reduce((s, r) => s + (r - mean) ** 2, 0) / (n - 1);
+    const variance = n > 1 ? dailyPortfolio.reduce((s, r) => s + (r - mean) ** 2, 0) / (n - 1) : 0;
     const annualizedVol = Math.sqrt(variance * 252) * 100;
 
-    // Sharpe
-    const excessReturn = annualizedReturn - 0.045;
-    const sharpe = annualizedVol > 0 ? excessReturn / (annualizedVol / 100) : 0;
+    // Sharpe — computed from mean daily excess return, annualized by ×√252.
+    // DO NOT annualize total return geometrically (e.g. 7-day gain^52 = nonsense).
+    const meanDailyExcess = mean - RISK_FREE_DAILY;
+    const dailyStd = Math.sqrt(variance);
+    const sharpe = n >= 5 && dailyStd > 0 ? (meanDailyExcess / dailyStd) * Math.sqrt(252) : null;
 
-    // Sortino (downside only)
-    const downside = dailyPortfolio.filter(r => r < RISK_FREE_DAILY);
-    const downsideVar = downside.length > 0
-      ? downside.reduce((s, r) => s + (r - RISK_FREE_DAILY) ** 2, 0) / downside.length
+    // Sortino — same approach but denominator uses downside deviation only
+    const downsideDays = dailyPortfolio.filter(r => r < RISK_FREE_DAILY);
+    const downsideVar = downsideDays.length > 0
+      ? downsideDays.reduce((s, r) => s + (r - RISK_FREE_DAILY) ** 2, 0) / downsideDays.length
       : 0;
-    const annualizedDownside = Math.sqrt(downsideVar * 252);
-    const sortino = annualizedDownside > 0 ? (annualizedReturn - 0.045) / annualizedDownside : 0;
+    const annualizedDownsideDev = Math.sqrt(downsideVar * 252);
+    const sortino = n >= 5 && annualizedDownsideDev > 0
+      ? (meanDailyExcess * Math.sqrt(252)) / annualizedDownsideDev
+      : null;
 
-    // Max Drawdown
+    // Max Drawdown — valid from day 1
     let peak = Number(chronological[0].portfolio_value);
     let maxDD = 0;
     for (const s of chronological) {
@@ -325,17 +324,16 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
       if (dd > maxDD) maxDD = dd;
     }
 
-    // Beta
-    let beta = 1;
-    if (n > 1) {
+    // Beta — needs at least 5 points for a meaningful covariance estimate
+    let beta: number | null = null;
+    if (n >= 5) {
       const bMean = dailyBenchmark.reduce((s, r) => s + r, 0) / n;
-      const pMean = mean;
-      const cov = dailyPortfolio.reduce((s, r, i) => s + (r - pMean) * (dailyBenchmark[i] - bMean), 0) / n;
+      const cov = dailyPortfolio.reduce((s, r, i) => s + (r - mean) * (dailyBenchmark[i] - bMean), 0) / n;
       const bVar = dailyBenchmark.reduce((s, r) => s + (r - bMean) ** 2, 0) / n;
-      beta = bVar > 0 ? cov / bVar : 1;
+      beta = bVar > 0 ? cov / bVar : null;
     }
 
-    // Win rate vs benchmark
+    // Win rate vs benchmark — valid from day 1
     const wins = dailyPortfolio.filter((r, i) => r > dailyBenchmark[i]).length;
     const winRate = (wins / n) * 100;
 
@@ -475,22 +473,30 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
                 {/* Sharpe */}
                 <div className="bg-white/4 border border-white/6 rounded-xl p-3">
                   <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-1">Sharpe Ratio</p>
-                  <p className={`text-xl font-bold font-mono ${
-                    metrics.sharpe < 0 ? 'text-red-400' :
-                    metrics.sharpe < 1 ? 'text-amber-400' :
-                    metrics.sharpe < 2 ? 'text-emerald-400' : 'text-emerald-300'
-                  }`}>{metrics.sharpe.toFixed(2)}</p>
-                  <p className="text-slate-500 text-[10px] mt-0.5">risk-adj return (4.5% rf)</p>
+                  {metrics.sharpe !== null ? (
+                    <p className={`text-xl font-bold font-mono ${
+                      metrics.sharpe < 0 ? 'text-red-400' :
+                      metrics.sharpe < 1 ? 'text-amber-400' :
+                      metrics.sharpe < 2 ? 'text-emerald-400' : 'text-emerald-300'
+                    }`}>{metrics.sharpe.toFixed(2)}</p>
+                  ) : (
+                    <p className="text-xl font-bold font-mono text-slate-600">—</p>
+                  )}
+                  <p className="text-slate-500 text-[10px] mt-0.5">{metrics.sharpe !== null ? 'risk-adj return (4.5% rf)' : 'need 5+ snapshots'}</p>
                 </div>
                 {/* Sortino */}
                 <div className="bg-white/4 border border-white/6 rounded-xl p-3">
                   <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-1">Sortino Ratio</p>
-                  <p className={`text-xl font-bold font-mono ${
-                    metrics.sortino < 0 ? 'text-red-400' :
-                    metrics.sortino < 1 ? 'text-amber-400' :
-                    metrics.sortino < 2 ? 'text-emerald-400' : 'text-emerald-300'
-                  }`}>{metrics.sortino.toFixed(2)}</p>
-                  <p className="text-slate-500 text-[10px] mt-0.5">downside risk only</p>
+                  {metrics.sortino !== null ? (
+                    <p className={`text-xl font-bold font-mono ${
+                      metrics.sortino < 0 ? 'text-red-400' :
+                      metrics.sortino < 1 ? 'text-amber-400' :
+                      metrics.sortino < 2 ? 'text-emerald-400' : 'text-emerald-300'
+                    }`}>{metrics.sortino.toFixed(2)}</p>
+                  ) : (
+                    <p className="text-xl font-bold font-mono text-slate-600">—</p>
+                  )}
+                  <p className="text-slate-500 text-[10px] mt-0.5">{metrics.sortino !== null ? 'downside risk only' : 'need 5+ snapshots'}</p>
                 </div>
                 {/* Max Drawdown */}
                 <div className="bg-white/4 border border-white/6 rounded-xl p-3">
@@ -504,12 +510,16 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
                 {/* Beta */}
                 <div className="bg-white/4 border border-white/6 rounded-xl p-3">
                   <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-1">Beta</p>
-                  <p className={`text-xl font-bold font-mono ${
-                    metrics.beta < 0.8 ? 'text-blue-400' :
-                    metrics.beta < 1.2 ? 'text-slate-300' :
-                    metrics.beta < 1.6 ? 'text-amber-400' : 'text-red-400'
-                  }`}>{metrics.beta.toFixed(2)}</p>
-                  <p className="text-slate-500 text-[10px] mt-0.5">vs benchmark sensitivity</p>
+                  {metrics.beta !== null ? (
+                    <p className={`text-xl font-bold font-mono ${
+                      metrics.beta < 0.8 ? 'text-blue-400' :
+                      metrics.beta < 1.2 ? 'text-slate-300' :
+                      metrics.beta < 1.6 ? 'text-amber-400' : 'text-red-400'
+                    }`}>{metrics.beta.toFixed(2)}</p>
+                  ) : (
+                    <p className="text-xl font-bold font-mono text-slate-600">—</p>
+                  )}
+                  <p className="text-slate-500 text-[10px] mt-0.5">{metrics.beta !== null ? 'vs benchmark sensitivity' : 'need 5+ snapshots'}</p>
                 </div>
                 {/* Win Rate */}
                 <div className="bg-white/4 border border-white/6 rounded-xl p-3">
