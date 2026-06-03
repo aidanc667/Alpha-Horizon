@@ -6,6 +6,7 @@ import HomeLanding from './HomeLanding';
 import MarketTab from '@/components/market/MarketTab';
 import AdvisorTab from '@/components/advisor/AdvisorTab';
 import ArenaTab from '@/components/arena/ArenaTab';
+import ErrorBoundary from './ErrorBoundary';
 import { useAppContext } from '@/lib/appContext';
 import type { ActiveTab } from '@/types';
 
@@ -17,12 +18,13 @@ interface DashboardLayoutProps {
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [view, setView] = useState<AppView>('home');
-  const { registerAdvisorNav } = useAppContext();
+  const { registerAdvisorNav, registerLabNav } = useAppContext();
 
-  // Register the navigation handler so any tab can call navigateToAdvisor()
+  // Register navigation handlers so any tab can call navigateToAdvisor() / navigateToLab()
   useEffect(() => {
     registerAdvisorNav(() => setView('advisor'));
-  }, [registerAdvisorNav]);
+    registerLabNav(() => setView('lab'));
+  }, [registerAdvisorNav, registerLabNav]);
 
   const activeTab = view === 'home' ? null : view;
 
@@ -40,13 +42,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         {view === 'home' ? (
           <HomeLanding onNavigate={(tab) => setView(tab)} />
         ) : view === 'market-home' ? (
-          <MarketTab key="market-home" initialView="home" onBack={() => setView('home')} onNavigate={(v) => setView(v as ActiveTab)} />
+          <ErrorBoundary label="Market tab failed to load"><MarketTab key="market-home" initialView="home" onBack={() => setView('home')} onNavigate={(v) => setView(v as ActiveTab)} /></ErrorBoundary>
         ) : view === 'market-near' || view === 'market-long' ? (
-          <MarketTab key="market-near" initialView="near-term" onBack={() => setView('market-home')} onNavigate={(v) => setView(v as ActiveTab)} />
+          <ErrorBoundary label="Market tab failed to load"><MarketTab key="market-near" initialView="near-term" onBack={() => setView('market-home')} onNavigate={(v) => setView(v as ActiveTab)} /></ErrorBoundary>
         ) : view === 'advisor' ? (
-          <AdvisorTab />
+          <ErrorBoundary label="Silas failed to load"><AdvisorTab /></ErrorBoundary>
         ) : view === 'arena' ? (
-          <ArenaTab />
+          <ErrorBoundary label="Arena failed to load"><ArenaTab /></ErrorBoundary>
         ) : (
           children(view as ActiveTab)
         )}

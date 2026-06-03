@@ -45,6 +45,10 @@ interface AppContextValue {
   navigateToAdvisor: () => void;
   /** Called by DashboardLayout to register the navigation handler */
   registerAdvisorNav: (fn: () => void) => void;
+  /** Navigate to the Lab tab from any tab — registered by DashboardLayout */
+  navigateToLab: () => void;
+  /** Called by DashboardLayout to register the lab navigation handler */
+  registerLabNav: (fn: () => void) => void;
 }
 
 const AppContext = createContext<AppContextValue>({
@@ -55,6 +59,8 @@ const AppContext = createContext<AppContextValue>({
   buildAdvisorContext: () => '',
   navigateToAdvisor: () => {},
   registerAdvisorNav: () => {},
+  navigateToLab: () => {},
+  registerLabNav: () => {},
 });
 
 // ── Provider ──────────────────────────────────────────────────────────────────
@@ -62,11 +68,14 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
   const [labSnapshot,     setLabSnapshotState]     = useState<LabSnapshot | null>(null);
   const [plannerSnapshot, setPlannerSnapshotState] = useState<PlannerSnapshot | null>(null);
   const advisorNavRef = React.useRef<(() => void) | null>(null);
+  const labNavRef     = React.useRef<(() => void) | null>(null);
 
   const setLabSnapshot     = useCallback((snap: LabSnapshot)     => setLabSnapshotState(snap),     []);
   const setPlannerSnapshot = useCallback((snap: PlannerSnapshot) => setPlannerSnapshotState(snap), []);
   const registerAdvisorNav = useCallback((fn: () => void) => { advisorNavRef.current = fn; },      []);
   const navigateToAdvisor  = useCallback(() => { advisorNavRef.current?.(); },                     []);
+  const registerLabNav     = useCallback((fn: () => void) => { labNavRef.current = fn; },          []);
+  const navigateToLab      = useCallback(() => { labNavRef.current?.(); },                         []);
 
   /** Formats both snapshots into a system-prompt block for the AI. */
   const buildAdvisorContext = useCallback((): string => {
@@ -93,7 +102,7 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
   }, [labSnapshot, plannerSnapshot]);
 
   return (
-    <AppContext.Provider value={{ labSnapshot, plannerSnapshot, setLabSnapshot, setPlannerSnapshot, buildAdvisorContext, navigateToAdvisor, registerAdvisorNav }}>
+    <AppContext.Provider value={{ labSnapshot, plannerSnapshot, setLabSnapshot, setPlannerSnapshot, buildAdvisorContext, navigateToAdvisor, registerAdvisorNav, navigateToLab, registerLabNav }}>
       {children}
     </AppContext.Provider>
   );

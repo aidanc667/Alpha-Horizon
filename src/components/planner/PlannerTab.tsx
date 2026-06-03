@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Sparkles, RotateCcw, ShieldCheck, UserCircle, Search, PieChart, Shield, Calculator, Star } from 'lucide-react';
+import { Sparkles, RotateCcw, ShieldCheck, UserCircle, Search, PieChart, Shield, Calculator, Star, Brain } from 'lucide-react';
 import OnboardingFlow from './OnboardingFlow';
 import AgentStreamPanel from './AgentStreamPanel';
 import PlanResults from './PlanResults';
@@ -22,7 +22,7 @@ export interface BacktestState {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function PlannerTab() {
-  const { setPlannerSnapshot } = useAppContext();
+  const { setPlannerSnapshot, navigateToAdvisor } = useAppContext();
 
   const [view, setView] = useState<ViewState>('welcome');
   const [answers, setAnswers] = useState<IntakeAnswers | null>(null);
@@ -216,6 +216,15 @@ export default function PlannerTab() {
             <div className="flex items-center gap-3">
               {saveStatus === 'saving' && <span className="text-xs text-gray-400 animate-pulse">Saving…</span>}
               {saveStatus === 'saved' && <span className="text-xs text-emerald-600 font-semibold">✓ Saved</span>}
+              {plan && (
+                <button
+                  onClick={navigateToAdvisor}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-lg transition-colors"
+                >
+                  <Brain className="w-3 h-3" />
+                  Monitor with Silas
+                </button>
+              )}
               <button
                 onClick={handleReset}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-gray-600 hover:text-gray-700 bg-gray-100 rounded-lg transition-colors"

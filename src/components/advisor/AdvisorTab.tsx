@@ -4,9 +4,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Brain, MessageSquare, PieChart, Zap, GitCompare, Star,
   Plus, Trash2, Send, Loader2, Activity, AlertTriangle,
-  CalendarDays, Eye, TrendingUp, TrendingDown, RefreshCw, X,
+  CalendarDays, Eye, TrendingUp, TrendingDown, RefreshCw, X, FlaskConical,
 } from 'lucide-react';
 import clsx from 'clsx';
+import ReactMarkdown from 'react-markdown';
 import type { NearTermIntelligence, LiveBriefing } from '@/types/market';
 import { useAppContext } from '@/lib/appContext';
 
@@ -83,7 +84,7 @@ const MODES: { id: AdvisorMode; label: string; Icon: React.ComponentType<{ class
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function AdvisorTab() {
-  const { labSnapshot, plannerSnapshot, buildAdvisorContext } = useAppContext();
+  const { labSnapshot, plannerSnapshot, buildAdvisorContext, navigateToLab } = useAppContext();
 
   // Context
   const [nearTermData, setNearTermData] = useState<NearTermIntelligence | null>(null);
@@ -134,12 +135,33 @@ export default function AdvisorTab() {
     crossTabContext: '',    // snapshot injected from Lab + Planner tabs
   });
 
-  // ── Sync cross-tab snapshots into sessionCtx whenever they update ───────────
+  const [dismissedLab, setDismissedLab] = useState(false);
+  const [dismissedPlanner, setDismissedPlanner] = useState(false);
+
+  // Reset dismissed state when a new snapshot arrives
+  useEffect(() => { setDismissedLab(false); }, [labSnapshot]);
+  useEffect(() => { setDismissedPlanner(false); }, [plannerSnapshot]);
+
+  // ── Sync cross-tab snapshots into sessionCtx, respecting dismissals ─────────
   useEffect(() => {
-    const ctx = buildAdvisorContext();
-    if (!ctx) return;
-    setSessionCtx(prev => ({ ...prev, crossTabContext: ctx }));
-  }, [labSnapshot, plannerSnapshot, buildAdvisorContext]);
+    const parts: string[] = [];
+    if (labSnapshot && !dismissedLab) {
+      parts.push(`[PORTFOLIO GROWTH LAB — last run ${labSnapshot.updatedAt}]`);
+      parts.push(`Holdings: ${labSnapshot.allocations}`);
+      parts.push(`Period: ${labSnapshot.period}`);
+      parts.push(`CAGR: ${labSnapshot.cagr} | Sharpe: ${labSnapshot.sharpe} | Max Drawdown: ${labSnapshot.maxDD} | Alpha vs benchmark: ${labSnapshot.alpha}`);
+      if (labSnapshot.score !== null) parts.push(`AHPS Score: ${labSnapshot.score}/100`);
+    }
+    if (plannerSnapshot && !dismissedPlanner) {
+      if (parts.length) parts.push('');
+      parts.push(`[FINANCIAL PLANNER — last run ${plannerSnapshot.updatedAt}]`);
+      parts.push(`Risk Profile: ${plannerSnapshot.riskProfile} | Timeline: ${plannerSnapshot.timeline} | Goal: ${plannerSnapshot.goal} | Monthly Contribution: ${plannerSnapshot.monthlyContrib}`);
+      parts.push(`Bucket Allocation: ${plannerSnapshot.buckets}`);
+      parts.push(`Top Holdings Recommended: ${plannerSnapshot.topHoldings}`);
+      parts.push(`Tax Brackets: Federal ${plannerSnapshot.marginalFederal} marginal | CA ${plannerSnapshot.marginalCA} marginal`);
+    }
+    setSessionCtx(prev => ({ ...prev, crossTabContext: parts.join('\n') }));
+  }, [labSnapshot, plannerSnapshot, dismissedLab, dismissedPlanner]);
 
   // ── Watchlist helpers ─────────────────────────────────────────────────────
   const fetchWatchlistPrice = async (ticker: string) => {
@@ -382,7 +404,7 @@ export default function AdvisorTab() {
       </header>
 
       {/* ── Cross-tab context banner ────────────────────────────────────────── */}
-      {(labSnapshot || plannerSnapshot) && (
+      {((labSnapshot && !dismissedLab) || (plannerSnapshot && !dismissedPlanner)) && (
         <div className="flex-shrink-0 flex items-start gap-3 px-6 py-2.5 bg-orange-50 border-b border-orange-100">
           <div className="w-4 h-4 rounded-full bg-orange-500 flex items-center justify-center flex-shrink-0 mt-0.5">
             <Activity className="w-2.5 h-2.5 text-white" />
@@ -390,14 +412,16 @@ export default function AdvisorTab() {
           <div className="flex-1 min-w-0">
             <p className="text-xs font-semibold text-orange-800 mb-0.5">Cross-tab context loaded — AI has full awareness of your other sessions</p>
             <div className="flex flex-wrap gap-3">
-              {labSnapshot && (
-                <span className="text-xs text-orange-700 font-mono bg-orange-100 border border-orange-200 px-2 py-0.5 rounded-lg whitespace-nowrap">
+              {labSnapshot && !dismissedLab && (
+                <span className="inline-flex items-center gap-1 text-xs text-orange-700 font-mono bg-orange-100 border border-orange-200 px-2 py-0.5 rounded-lg whitespace-nowrap">
                   📊 Lab: {labSnapshot.allocations.split(', ').slice(0, 3).join(', ')}{labSnapshot.allocations.split(', ').length > 3 ? '…' : ''} · CAGR {labSnapshot.cagr} · Score {labSnapshot.score ?? '—'}/100
+                  <button onClick={() => setDismissedLab(true)} className="ml-0.5 text-orange-400 hover:text-orange-700 transition-colors leading-none">✕</button>
                 </span>
               )}
-              {plannerSnapshot && (
-                <span className="text-xs text-orange-700 font-mono bg-orange-100 border border-orange-200 px-2 py-0.5 rounded-lg whitespace-nowrap">
+              {plannerSnapshot && !dismissedPlanner && (
+                <span className="inline-flex items-center gap-1 text-xs text-orange-700 font-mono bg-orange-100 border border-orange-200 px-2 py-0.5 rounded-lg whitespace-nowrap">
                   🗺 Plan: {plannerSnapshot.goal} goal · {plannerSnapshot.timeline} · {plannerSnapshot.riskProfile} · Fed {plannerSnapshot.marginalFederal}
+                  <button onClick={() => setDismissedPlanner(true)} className="ml-0.5 text-orange-400 hover:text-orange-700 transition-colors leading-none">✕</button>
                 </span>
               )}
             </div>
@@ -432,23 +456,52 @@ export default function AdvisorTab() {
                 </div>
               )}
 
-              {messages.filter(msg => msg.text).map((msg, i) => (
-                <div key={i} className={clsx('flex items-start gap-3', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
-                  {msg.role === 'assistant' && (
-                    <div className="w-7 h-7 rounded-full bg-orange-500 flex items-center justify-center shrink-0 mt-0.5">
-                      <Brain className="w-4 h-4 text-white" />
+              {messages.filter(msg => msg.text).map((msg, i, arr) => {
+                const isLastAssistant = msg.role === 'assistant' && i === arr.length - 1 && !chatLoading;
+                return (
+                  <div key={i} className={clsx('flex items-start gap-3', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
+                    {msg.role === 'assistant' && (
+                      <div className="w-7 h-7 rounded-full bg-orange-500 flex items-center justify-center shrink-0 mt-0.5">
+                        <Brain className="w-4 h-4 text-white" />
+                      </div>
+                    )}
+                    <div className="flex flex-col gap-1.5 max-w-[85%]">
+                      <div className={clsx(
+                        'rounded-2xl px-4 py-3 text-sm leading-relaxed',
+                        msg.role === 'user'
+                          ? 'bg-zinc-900 text-white rounded-tr-sm'
+                          : 'bg-zinc-50 text-zinc-800 border border-zinc-200 rounded-tl-sm'
+                      )}>
+                        {msg.role === 'assistant' ? (
+                          <ReactMarkdown
+                            components={{
+                              p:      ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                              ul:     ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-0.5">{children}</ul>,
+                              ol:     ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-0.5">{children}</ol>,
+                              li:     ({ children }) => <li className="text-sm">{children}</li>,
+                              strong: ({ children }) => <strong className="font-semibold text-zinc-900">{children}</strong>,
+                              h3:     ({ children }) => <h3 className="font-bold text-zinc-900 mt-3 mb-1">{children}</h3>,
+                              h4:     ({ children }) => <h4 className="font-semibold text-zinc-800 mt-2 mb-1">{children}</h4>,
+                              code:   ({ children }) => <code className="font-mono text-xs bg-zinc-200 px-1 py-0.5 rounded">{children}</code>,
+                            }}
+                          >
+                            {msg.text}
+                          </ReactMarkdown>
+                        ) : msg.text}
+                      </div>
+                      {isLastAssistant && (
+                        <button
+                          onClick={navigateToLab}
+                          className="self-start flex items-center gap-1.5 text-[11px] font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg transition-all"
+                        >
+                          <FlaskConical className="w-3 h-3" />
+                          Test in Lab
+                        </button>
+                      )}
                     </div>
-                  )}
-                  <div className={clsx(
-                    'max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed',
-                    msg.role === 'user'
-                      ? 'bg-zinc-900 text-white rounded-tr-sm'
-                      : 'bg-zinc-50 text-zinc-800 border border-zinc-200 rounded-tl-sm whitespace-pre-wrap'
-                  )}>
-                    {msg.text}
                   </div>
-                </div>
-              ))}
+                );
+              })}
 
               {chatLoading && messages[messages.length - 1]?.text === '' && (
                 <div className="flex items-start gap-3 justify-start">
@@ -963,7 +1016,7 @@ const EVENT_LABELS: Record<EventType, string> = {
 // ─── Macro Calendar Panel ─────────────────────────────────────────────────────
 
 function MacroCalendarPanel({ onAskSilas }: { onAskSilas: (prompt: string) => void }) {
-  const today = new Date('2026-05-20');
+  const today = new Date();
 
   const upcomingEvents = MACRO_EVENTS.filter(e => new Date(e.date) >= today).slice(0, 20);
 

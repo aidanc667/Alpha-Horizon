@@ -61,13 +61,11 @@ export default function ArenaTab() {
     }
   }, []);
 
-  // Run migration on first load
+  // Load personas on first mount
   useEffect(() => {
     if (migrated) return;
     setMigrated(true);
-    fetch('/api/arena/migrate', { method: 'POST' })
-      .then(() => loadPersonas(true))
-      .catch(() => loadPersonas(true));
+    loadPersonas(true);
   }, [migrated, loadPersonas]);
 
   // Re-refresh prices when the user comes back to this browser tab, throttled to once per 5 min
