@@ -3,33 +3,31 @@ import { auth } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
 import type { PersonaHolding, PersonaSnapshotHolding, BenchmarkComponent } from '@/types';
 
-interface YahooMeta {
+interface YahooQuoteResult {
   regularMarketPrice: number;
-  chartPreviousClose?: number;
-  previousClose?: number;
-  marketState?: string; // 'REGULAR' | 'CLOSED' | 'PRE' | 'POST'
+  regularMarketChangePercent: number;
+  marketState?: string; // 'REGULAR' | 'CLOSED' | 'PRE' | 'POST' | 'PREPRE'
 }
-interface YahooResult { meta: YahooMeta; }
-interface YahooChart { chart?: { result?: YahooResult[] } }
+interface YahooQuoteResponse { quoteResponse?: { result?: YahooQuoteResult[] } }
 
 async function fetchPrice(ticker: string): Promise<{ price: number; todayChangePct: number; isMarketOpen: boolean }> {
   if (ticker === 'CASH') return { price: 1.0, todayChangePct: 0, isMarketOpen: false };
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=2d`;
+  // Use the quote endpoint — it returns regularMarketChangePercent directly (same source as Google Finance).
+  // The chart endpoint's computed change from adjclose diverges due to dividend adjustments.
+  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(ticker)}&fields=regularMarketPrice,regularMarketChangePercent,marketState`;
   const res = await fetch(url, {
     headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36' },
     cache: 'no-store',
   });
   if (!res.ok) throw new Error(`Yahoo ${res.status} for ${ticker}`);
-  const json = (await res.json()) as YahooChart;
-  const result = json.chart?.result?.[0];
-  const meta = result?.meta;
-  const price: number = meta?.regularMarketPrice ?? 0;
-  const isMarketOpen = meta?.marketState === 'REGULAR';
-  const prevClose: number = meta?.chartPreviousClose ?? meta?.previousClose ?? price;
-  // Zero out today's change only in pre-market (market hasn't moved yet for today's regular session).
-  // Post-market and closed states still reflect today's completed regular-session return.
-  const isPreMarket = meta?.marketState === 'PRE' || meta?.marketState === 'PREPRE';
-  const todayChangePct = !isPreMarket && prevClose > 0 ? (price / prevClose) - 1 : 0;
+  const json = (await res.json()) as YahooQuoteResponse;
+  const result = json.quoteResponse?.result?.[0];
+  if (!result) throw new Error(`No quote data for ${ticker}`);
+  const price: number = result.regularMarketPrice ?? 0;
+  const isMarketOpen = result.marketState === 'REGULAR';
+  // Zero out today's change only in pre-market (market hasn't opened yet for the regular session).
+  const isPreMarket = result.marketState === 'PRE' || result.marketState === 'PREPRE';
+  const todayChangePct = !isPreMarket ? (result.regularMarketChangePercent ?? 0) / 100 : 0;
   return { price, todayChangePct, isMarketOpen };
 }
 
