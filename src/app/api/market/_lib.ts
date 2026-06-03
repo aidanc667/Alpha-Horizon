@@ -136,47 +136,96 @@ export interface FearGreedData {
   previousClose: number;
 }
 
-/** Fetch CNN Fear & Greed. Falls back to last-known value stored in macro_cache. */
+/**
+ * Composite market sentiment score (0–100) built entirely from Yahoo Finance data.
+ * Replaces CNN Fear & Greed (blocked as of 2026 with HTTP 418).
+ *
+ * Four equally-weighted components (0–25 each):
+ *   1. VIX level          — lower VIX → more greed
+ *   2. SPY put/call ratio — lower PCR → more greed
+ *   3. SPY MA position    — above 50MA + 200MA → greed; below both → fear
+ *   4. SPY daily momentum — positive day → greed; negative → fear
+ */
 export async function fetchFearAndGreed(): Promise<FearGreedData | null> {
   const cached = getCached('fearAndGreed') as FearGreedData | null | undefined;
   if (cached !== undefined) return cached;
   try {
-    const res = await fetch('https://production.dataviz.cnn.io/index/fearandgreed/graphdata', {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) throw new Error(`CNN F&G returned ${res.status}`);
-    const data = await res.json();
-    const fg = data?.fear_and_greed;
-    if (!fg?.score) throw new Error('Missing score in CNN F&G response');
-    const score = Math.round(fg.score);
-    const prev  = Math.round(fg.previous_close ?? fg.score);
+    // Fetch VIX + SPY data + put/call in parallel
+    const [vixQuote, spyData, pcRatio] = await Promise.all([
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (yahooFinance as any).quote('^VIX').catch(() => null),
+      fetchSPYData(),
+      fetchSPYPutCallRatio(),
+    ]);
+
+    const vix: number | null = vixQuote?.regularMarketPrice ?? null;
+    const pcr: number | null = pcRatio;
+    const chg: number | null = spyData.changePercent;
+    const above50  = spyData.above50MA;
+    const above200 = spyData.above200MA;
+
+    // ── Component 1: VIX (0–25, lower VIX = more greed) ──────────────────────
+    const vixScore =
+      vix == null ? 13 :  // neutral fallback
+      vix < 12   ? 25 :
+      vix < 15   ? 21 :
+      vix < 18   ? 17 :
+      vix < 22   ? 12 :
+      vix < 28   ?  6 :
+      vix < 35   ?  2 : 0;
+
+    // ── Component 2: Put/Call ratio (0–25, lower PCR = more greed) ───────────
+    const pcrScore =
+      pcr == null ? 13 :  // neutral fallback
+      pcr < 0.50  ? 25 :
+      pcr < 0.65  ? 21 :
+      pcr < 0.75  ? 16 :
+      pcr < 0.85  ? 12 :
+      pcr < 1.00  ?  7 :
+      pcr < 1.20  ?  3 : 0;
+
+    // ── Component 3: SPY vs moving averages (0–25) ────────────────────────────
+    const maScore =
+      above50 == null && above200 == null ? 13 :  // neutral fallback
+      above50 && above200 ? 25 :
+      above200            ? 13 :
+      above50             ? 10 : 0;
+
+    // ── Component 4: SPY daily momentum (0–25) ────────────────────────────────
+    const momScore =
+      chg == null  ? 13 :  // neutral fallback
+      chg >  1.5   ? 25 :
+      chg >  0.5   ? 20 :
+      chg >  0     ? 15 :
+      chg > -0.5   ? 10 :
+      chg > -1.5   ?  4 : 0;
+
+    const score = vixScore + pcrScore + maScore + momScore;
+
     const label: FearGreedData['label'] =
-      score <= 20 ? 'Extreme Fear' : score <= 40 ? 'Fear' :
-      score <= 60 ? 'Neutral' : score <= 80 ? 'Greed' : 'Extreme Greed';
-    const fgResult: FearGreedData = { score, label, delta: score - prev, previousClose: prev };
-    setCache('fearAndGreed', fgResult);
-    // Persist as fallback for future cold starts / CNN outages
+      score <= 20 ? 'Extreme Fear' :
+      score <= 40 ? 'Fear' :
+      score <= 60 ? 'Neutral' :
+      score <= 80 ? 'Greed' : 'Extreme Greed';
+
+    // Delta vs previous score (persisted in macro_cache)
+    let previousClose = score;
     try {
       const sql = db();
+      const rows = await sql`SELECT data FROM macro_cache WHERE cache_key = 'sentiment_score_prev'`;
+      if (rows[0]?.data) previousClose = (rows[0].data as { score: number }).score ?? score;
+      // Persist current score for next call's delta calculation
       await sql`
         INSERT INTO macro_cache (cache_key, data, fetched_at)
-        VALUES ('fear_greed_fallback', ${JSON.stringify(fgResult)}, now())
+        VALUES ('sentiment_score_prev', ${JSON.stringify({ score })}, now())
         ON CONFLICT (cache_key) DO UPDATE SET data = EXCLUDED.data, fetched_at = EXCLUDED.fetched_at
       `;
     } catch { /* non-fatal */ }
-    return fgResult;
+
+    const result: FearGreedData = { score, label, delta: score - previousClose, previousClose };
+    setCache('fearAndGreed', result);
+    return result;
   } catch {
-    // CNN is down or blocked — use last DB-persisted value
-    try {
-      const sql = db();
-      const rows = await sql`SELECT data FROM macro_cache WHERE cache_key = 'fear_greed_fallback'`;
-      if (rows[0]?.data) {
-        const fallback = rows[0].data as FearGreedData;
-        setCache('fearAndGreed', fallback);
-        return fallback;
-      }
-    } catch { /* ignore */ }
     return null;
   }
 }

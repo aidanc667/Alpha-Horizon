@@ -210,7 +210,7 @@ Rules:
     const narrative = JSON.parse(narrativeJson);
 
     const elite6 = {
-      fearGreed: { score: fgScore, label: fgLabel, delta: fgDelta, description: `CNN Fear & Greed: ${fgScore}/100 — ${fgLabel}` },
+      fearGreed: { score: fgScore, label: fgLabel, delta: fgDelta, description: `Market Sentiment: ${fgScore}/100 — ${fgLabel}` },
       spyTrend: {
         direction: spyData.direction,
         changePercent: spyData.changePercent ?? 0,
