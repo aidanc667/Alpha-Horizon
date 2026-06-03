@@ -821,13 +821,13 @@ function TodayCard({
             Live Headlines
           </p>
           <div className="space-y-2">
-            {record.liveHeadlines
-              .filter((h) => h.impactScore >= 6)
+            {[...record.liveHeadlines]
+              .sort((a, b) => b.impactScore - a.impactScore)
               .map((headline, i) => {
                 const impactColor =
-                  headline.impactScore >= 10
+                  headline.impactScore >= 9
                     ? 'bg-red-500/20 text-red-400 border-red-500/30'
-                    : headline.impactScore >= 8
+                    : headline.impactScore >= 7
                     ? 'bg-orange-500/20 text-orange-400 border-orange-500/30'
                     : 'bg-amber-500/20 text-amber-400 border-amber-500/30';
                 return (
@@ -849,17 +849,9 @@ function TodayCard({
                           {headline.category}
                         </span>
                       </div>
-                      {headline.url ? (
-                        <a
-                          href={headline.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-slate-200 text-xs font-medium leading-snug hover:text-white hover:underline underline-offset-2 transition-colors"
-                        >
-                          {headline.headline} ↗
-                        </a>
-                      ) : (
-                        <p className="text-slate-200 text-xs font-medium leading-snug">{headline.headline}</p>
+                      <p className="text-slate-200 text-xs font-medium leading-snug">{headline.headline}</p>
+                      {headline.impact && (
+                        <p className="text-slate-500 text-[10px] leading-snug mt-1">{headline.impact}</p>
                       )}
                     </div>
                   </div>
