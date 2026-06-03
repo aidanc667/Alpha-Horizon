@@ -139,43 +139,20 @@ CRITICAL: allocation weights MUST sum to exactly 100.
 
   const response = await ai.models.generateContent({
     model,
-    contents: prompt,
+    contents: prompt + '\n\nRespond with ONLY a valid JSON object — no markdown, no code fences, no commentary.',
     config: {
       tools: [{ googleSearch: {} }],
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          strategyName: { type: Type.STRING },
-          riskProfile: { type: Type.STRING },
-          expectedReturn: { type: Type.STRING },
-          expectedVolatility: { type: Type.STRING },
-          sharpeEstimate: { type: Type.STRING },
-          macroAlignment: { type: Type.STRING },
-          rebalancingGuidance: { type: Type.STRING },
-          allocations: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                ticker: { type: Type.STRING },
-                name: { type: Type.STRING },
-                weight: { type: Type.NUMBER },
-                category: { type: Type.STRING },
-                rationale: { type: Type.STRING },
-                expenseRatio: { type: Type.STRING },
-              },
-              required: ['ticker', 'name', 'weight', 'category', 'rationale', 'expenseRatio'],
-            },
-          },
-          riskWarnings: { type: Type.ARRAY, items: { type: Type.STRING } },
-        },
-        required: ['strategyName', 'riskProfile', 'expectedReturn', 'expectedVolatility', 'sharpeEstimate', 'macroAlignment', 'rebalancingGuidance', 'allocations', 'riskWarnings'],
-      },
     },
   });
 
-  const result = JSON.parse(response.text || '{}');
+  const raw = response.text || '{}';
+  const jsonStart = raw.indexOf('{');
+  const jsonEnd = raw.lastIndexOf('}');
+  const jsonStr = jsonStart >= 0 && jsonEnd > jsonStart ? raw.slice(jsonStart, jsonEnd + 1) : '{}';
+  const result = JSON.parse(jsonStr);
+  if (!result.allocations?.length) {
+    return NextResponse.json({ error: 'AI did not return a valid portfolio. Please try again.' }, { status: 500 });
+  }
   return NextResponse.json({ success: true, data: result });
 }
 
