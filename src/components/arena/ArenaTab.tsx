@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Swords, TrendingUp, Trophy, Loader2, AlertCircle } from 'lucide-react';
 import PersonaCard from './PersonaCard';
 import PersonaDetail from './PersonaDetail';
@@ -22,6 +22,8 @@ export default function ArenaTab() {
   const [showCreate, setShowCreate] = useState(false);
   const [sortBy, setSortBy] = useState<SortBy>('newest');
   const [migrated, setMigrated] = useState(false);
+  const lastRefreshedAt = useRef<number>(0);
+  const REFRESH_THROTTLE_MS = 5 * 60 * 1000; // 5 minutes
 
   const loadPersonas = useCallback(async (silentRefresh = false) => {
     try {
@@ -32,6 +34,7 @@ export default function ArenaTab() {
       setPersonas(loaded);
 
       if (silentRefresh && loaded.length > 0) {
+        lastRefreshedAt.current = Date.now();
         // Refresh all personas in parallel for live today% — fire-and-forget, update cards when done
         Promise.all(
           loaded.map(p => fetch(`/api/personas/${p.id}/refresh`, { method: 'POST' }).catch(() => null))
@@ -57,6 +60,17 @@ export default function ArenaTab() {
       .then(() => loadPersonas(true))
       .catch(() => loadPersonas(true));
   }, [migrated, loadPersonas]);
+
+  // Re-refresh prices when the user comes back to this browser tab, throttled to once per 5 min
+  useEffect(() => {
+    const handleFocus = () => {
+      if (Date.now() - lastRefreshedAt.current >= REFRESH_THROTTLE_MS) {
+        loadPersonas(true);
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [loadPersonas, REFRESH_THROTTLE_MS]);
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this persona? This cannot be undone.')) return;
