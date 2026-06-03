@@ -1,61 +1,79 @@
 import { NextResponse } from 'next/server';
 import { Type } from '@google/genai';
-import { getCurrentDate, buildSessionBlock, buildMarketStance } from '../_lib';
+import { getCurrentDate, buildSessionBlock, buildMarketStance, getDbCache, setDbCache } from '../_lib';
 import type { HandlerCtx } from '../_lib';
+
+// Cache TTL: 24 hours — picks are strategic, not tactical; same inputs → same output
+const BEST_ASSETS_TTL_MS = 24 * 60 * 60 * 1000;
+const BEST_STRATEGY_TTL_MS = 24 * 60 * 60 * 1000;
+const cacheKey = (prefix: string, riskProfile: string, timeHorizon: string) =>
+  `${prefix}_${riskProfile.toLowerCase().replace(/\s+/g, '_')}_${timeHorizon.toLowerCase().replace(/\s+/g, '_')}_v1`;
 
 export async function handleBestAssets(ctx: HandlerCtx): Promise<NextResponse> {
   const { body, ai, model } = ctx;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { riskProfile, timeHorizon, nearTermContext, liveContext, sessionCtx } = body as Record<string, any>;
 
+  // Cache by risk+horizon — strategic picks should be stable for 24h
+  const key = cacheKey('best_assets', riskProfile ?? 'moderate', timeHorizon ?? '1y');
+  const cached = await getDbCache(key, BEST_ASSETS_TTL_MS);
+  if (cached) return NextResponse.json({ success: true, data: cached, fromCache: true });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const contextStr = nearTermContext ? `
 Current Regime: ${nearTermContext.marketSnapshot?.regime} | Sentiment: ${nearTermContext.marketSnapshot?.sentiment}
-Macro Pillars: ${(nearTermContext.macroPillars || []).map((p: any) => `${p.name}=${p.value}(${p.direction})`).join(', ')} // eslint-disable-line @typescript-eslint/no-explicit-any
-Live Headlines: ${(liveContext?.newsHeadlines || []).slice(0, 5).map((h: any) => h.headline).join(' | ')} // eslint-disable-line @typescript-eslint/no-explicit-any
-` : `Today is ${getCurrentDate()}. No pre-loaded context — use Google Search for current market data.`;
+Macro Pillars: ${(nearTermContext.macroPillars || []).map((p: any) => `${p.name}=${p.value}(${p.direction})`).join(', ')}
+Live Headlines: ${(liveContext?.newsHeadlines || []).slice(0, 5).map((h: any) => h.headline).join(' | ')}
+` : `Today is ${getCurrentDate()}. Use Google Search for current macro conditions.`;
 
   const prompt = `
-You are a world-class institutional portfolio strategist. Today is ${getCurrentDate()}.
+You are a Managing Director-level equity strategist at a top-tier global asset management firm (think BlackRock, Bridgewater, or Baupost). You are in the top 0.1% of investment professionals globally. Today is ${getCurrentDate()}.
 
-MARKET CONTEXT:
+MARKET CONTEXT (use as macro anchor):
 ${contextStr}
 ${buildMarketStance(nearTermContext)}
 ${buildSessionBlock(sessionCtx)}
-TASK: Identify the TOP 8 best INDIVIDUAL STOCKS to own RIGHT NOW for a ${riskProfile} investor with a ${timeHorizon} time horizon.
 
-CRITICAL: Individual stocks ONLY. No ETFs, no index funds, no mutual funds. Every pick must be a single company stock (e.g. NVDA, MSFT, JPM). If you include an ETF, the response is invalid.
+━━━ YOUR MANDATE ━━━
+Identify the TOP 8 highest-conviction INDIVIDUAL STOCKS for a ${riskProfile} investor with a ${timeHorizon} time horizon.
 
-SELECTION CRITERIA:
-- Forward-looking expected returns grounded in current macro regime and company fundamentals
-- Risk-adjusted conviction (earnings visibility, balance sheet strength, sector tailwinds)
-- Current macro regime alignment — explicitly connect each pick to the regime context above
-- Mix of sectors — do not cluster all picks in one sector
-- Diversification across market cap (large, mid)
+CRITICAL RULES:
+- Individual stocks ONLY. Every pick must be a single-company stock (e.g. NVDA, MSFT, JPM). No ETFs, no funds — the response is invalid if any ETF is included.
+- FORWARD-LOOKING ONLY. Base conviction on: (1) forward earnings estimates and revision momentum, (2) free cash flow yield vs. current rates, (3) structural secular tailwinds, (4) balance sheet positioning for the current rate environment. Do NOT cite past 1-year or 3-year returns as a reason to own — that is hindsight bias.
+- STABILITY: This list represents your highest-conviction strategic views. It should be virtually identical if run again tomorrow with the same macro context. Do NOT let minor daily market fluctuations change your core picks.
+- SECTOR DIVERSIFICATION: Maximum 2 picks from any single sector. Cover at least 4 distinct GICS sectors.
+- MACRO ALIGNMENT: Every pick must have an explicit, specific connection to the current macro regime stated above.
 
-For each of the 8 assets:
-- rank (1-8, where 1 is highest conviction)
-- ticker (ETF/stock ticker symbol)
-- name (full name)
-- category (e.g., "US Large Cap Equity", "Short-Duration Fixed Income", "Commodity")
-- suggestedWeight (allocation % — must sum to 100 across all 8)
-- forwardReturn (estimated annualized return range, e.g., "6–9%")
-- rationale (2-3 sentences connecting to current macro conditions)
+USE GOOGLE SEARCH to verify:
+1. Current forward P/E and EPS estimate revision trend for each candidate
+2. Recent earnings quality (beat rate, guidance trajectory)
+3. Any material negative catalysts in the last 30 days (SEC filings, litigation, credit events)
+
+For each of the 8 stocks:
+- rank (1–8, 1 = highest conviction)
+- ticker
+- name (full company name)
+- category (sector/sub-sector, e.g. "Semiconductors", "Money Center Banks")
+- suggestedWeight (%, must sum to exactly 100)
+- forwardReturn (forward expected annualized return estimate, e.g. "11–15%", based on FCF yield + growth + multiple expansion/compression)
+- rationale (3 sentences: (1) why this company wins in the CURRENT macro environment, (2) forward earnings/FCF catalyst, (3) key risk to this thesis)
 - risk ("Low", "Medium", or "High")
-- expenseRatio (e.g., "0.03%", "N/A" for individual stocks)
+- expenseRatio ("N/A" for individual stocks)
 
 Also provide:
-- regime: one-line description of current market regime
-- generatedAt: current date/time string
-- macroAlignment: 2-3 sentences explaining how this portfolio aligns with today's macro environment
+- regime: 1-sentence description of the current macro regime
+- generatedAt: today's date
+- macroAlignment: 3 sentences explaining the portfolio's collective forward-looking thesis and how it is positioned for the next 12 months, not the last 12 months
 
-IMPORTANT: suggestedWeights MUST sum to exactly 100.
-      `;
+WEIGHTS must sum to exactly 100.
+`;
 
   const response = await ai.models.generateContent({
     model,
     contents: prompt,
     config: {
-      thinkingConfig: { thinkingBudget: 0 },
+      temperature: 0,
+      tools: [{ googleSearch: {} }],
       responseMimeType: 'application/json',
       responseSchema: {
         type: Type.OBJECT,
@@ -96,6 +114,7 @@ IMPORTANT: suggestedWeights MUST sum to exactly 100.
   if (!result.assets?.length) {
     return NextResponse.json({ error: 'AI did not return valid stock picks. Please try again.' }, { status: 500 });
   }
+  await setDbCache(key, result);
   return NextResponse.json({ success: true, data: result });
 }
 
@@ -104,69 +123,115 @@ export async function handleBestStrategy(ctx: HandlerCtx): Promise<NextResponse>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { riskProfile, timeHorizon, nearTermContext, liveContext, sessionCtx } = body as Record<string, any>;
 
+  // Cache by risk+horizon — strategic allocations should be stable for 24h
+  const key = cacheKey('best_strategy', riskProfile ?? 'moderate', timeHorizon ?? '1y');
+  const cached = await getDbCache(key, BEST_STRATEGY_TTL_MS);
+  if (cached) return NextResponse.json({ success: true, data: cached, fromCache: true });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const contextStr = nearTermContext ? `
 Current Regime: ${nearTermContext.marketSnapshot?.regime} | Sentiment: ${nearTermContext.marketSnapshot?.sentiment}
-Macro Pillars: ${(nearTermContext.macroPillars || []).map((p: any) => `${p.name}=${p.value}(${p.direction})`).join(', ')} // eslint-disable-line @typescript-eslint/no-explicit-any
-Live Headlines: ${(liveContext?.newsHeadlines || []).slice(0, 5).map((h: any) => h.headline).join(' | ')} // eslint-disable-line @typescript-eslint/no-explicit-any
-` : `Today is ${getCurrentDate()}. No pre-loaded context — use Google Search for current market data.`;
+Macro Pillars: ${(nearTermContext.macroPillars || []).map((p: any) => `${p.name}=${p.value}(${p.direction})`).join(', ')}
+Live Headlines: ${(liveContext?.newsHeadlines || []).slice(0, 5).map((h: any) => h.headline).join(' | ')}
+` : `Today is ${getCurrentDate()}. Use Google Search for current macro conditions.`;
 
   const prompt = `
-You are the world's best portfolio manager. Today is ${getCurrentDate()}.
+You are a Chief Investment Officer at a $50B+ institutional asset manager — the top 0.1% of portfolio construction professionals globally. Today is ${getCurrentDate()}.
 
-MARKET CONTEXT:
+MARKET CONTEXT (use as macro anchor for positioning):
 ${contextStr}
 ${buildMarketStance(nearTermContext)}
 ${buildSessionBlock(sessionCtx)}
-TASK: Construct the OPTIMAL investment portfolio for a ${riskProfile} investor with a ${timeHorizon || '1 year'} time horizon in TODAY'S market environment.
 
-REQUIREMENTS:
-- Modern Portfolio Theory principles: maximize Sharpe ratio for ${riskProfile} risk tolerance
-- Calibrate for ${timeHorizon || '1 year'} time horizon: shorter horizons need more capital preservation and liquidity; longer horizons support higher equity allocation and illiquidity premium capture
-- Weights MUST sum to exactly 100%
-- 6-12 positions for proper diversification
-- Account for expense ratios in expected return calculations
-- Align with current macro regime (explicitly stated in context)
-- Be actionable: use specific ETFs/tickers where possible
-- Consider: US equity, international, fixed income, real assets, cash/alternatives as appropriate
-${buildSessionBlock(sessionCtx)}
+━━━ YOUR MANDATE ━━━
+Construct the OPTIMAL ETF portfolio for a ${riskProfile} investor with a ${timeHorizon || '1 year'} time horizon.
 
-Use Google Search to verify current yields, valuations, and market conditions.
+This portfolio represents your STRATEGIC CONVICTION — the allocation that maximizes risk-adjusted returns (Sharpe ratio) for this risk level and horizon. It should look virtually identical if generated again tomorrow. Do NOT let this week's headlines flip your strategic positioning.
+
+USE GOOGLE SEARCH to verify:
+1. Current 10-Year Treasury yield and real yield (TIPS spread)
+2. Current Fed Funds rate and forward rate market expectations (SOFR futures)
+3. Current S&P 500 forward P/E vs. 10-year average
+4. Current VIX and credit spreads (IG and HY OAS)
+5. Current international equity valuations vs. US (CAPE ratios)
+
+━━━ PORTFOLIO CONSTRUCTION PRINCIPLES ━━━
+1. FORWARD-LOOKING ONLY: Estimate expected returns using current yields, forward earnings, and factor premia. NEVER cite trailing returns as a reason to allocate.
+2. MEAN-VARIANCE OPTIMIZATION: Select weights that explicitly maximize Sharpe ratio. Show your reasoning in macroAlignment.
+3. HORIZON CALIBRATION: ${timeHorizon || '1 year'} horizon — match fixed income duration to this horizon. Short horizon → short duration + cash. Long horizon → capture illiquidity and term premia.
+4. GEOGRAPHIC DIVERSIFICATION: Include international exposure (VXUS, VEA, or AVDV) unless the portfolio is explicitly capital-preservation only.
+5. FACTOR TILTS: For equity sleeves, tilt toward factors with long-term evidence: value (AVUV), quality, momentum where appropriate.
+6. TAX EFFICIENCY: Prefer SGOV/USFR over cash for fixed income safety sleeve — Treasury income is state-tax-exempt.
+
+━━━ REQUIREMENTS ━━━
+- 6–10 positions for proper diversification
+- Weights must sum to EXACTLY 100
+- Use specific, liquid ETF tickers from the approved universe (VTI, VXUS, BND, AVUV, SCHD, QQQ, GLD, SGOV, SCHP, VNQ, etc.)
+- Each position must serve a distinct diversification role — no redundant exposure
 
 Provide:
-- strategyName: creative but professional name for this portfolio
-- riskProfile: confirm the risk profile
-- expectedReturn: annualized expected return range (e.g., "6.5–8.5%")
-- expectedVolatility: annualized volatility estimate (e.g., "10–13%")
-- sharpeEstimate: estimated Sharpe ratio (e.g., "0.65–0.80")
-- macroAlignment: 3-4 sentences explaining WHY this portfolio is optimal for today's conditions
-- rebalancingGuidance: when and how to rebalance (specific trigger conditions)
-- allocations: each with ticker, name, weight (%), category, rationale (2-3 sentences), expenseRatio
-- riskWarnings: 3-5 specific risks to this strategy given current conditions
+- strategyName: professional name for this portfolio
+- riskProfile: confirmed risk profile
+- expectedReturn: forward annualized return estimate (e.g., "6.5–8.5%") — based on current yields + equity risk premium, NOT trailing returns
+- expectedVolatility: annualized vol estimate (e.g., "10–13%")
+- sharpeEstimate: estimated Sharpe ratio
+- macroAlignment: 4 sentences — (1) current macro regime characterization, (2) how positioning captures forward opportunity, (3) what risks are hedged, (4) what would change this allocation
+- rebalancingGuidance: specific trigger conditions (threshold-based, not calendar-based)
+- allocations: each with ticker, name, weight, category, rationale (2 sentences: forward-looking role + macro alignment), expenseRatio
+- riskWarnings: exactly 4 forward-looking risks specific to this portfolio and current conditions
 
-CRITICAL: allocation weights MUST sum to exactly 100.
-      `;
+CRITICAL: weights must sum to exactly 100.
+`;
 
   const response = await ai.models.generateContent({
     model,
-    contents: prompt + '\n\nRespond with ONLY a valid JSON object — no markdown, no code fences, no commentary.',
+    contents: prompt,
     config: {
-      thinkingConfig: { thinkingBudget: 0 },
+      temperature: 0,
+      tools: [{ googleSearch: {} }],
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          strategyName: { type: Type.STRING },
+          riskProfile: { type: Type.STRING },
+          expectedReturn: { type: Type.STRING },
+          expectedVolatility: { type: Type.STRING },
+          sharpeEstimate: { type: Type.STRING },
+          macroAlignment: { type: Type.STRING },
+          rebalancingGuidance: { type: Type.STRING },
+          allocations: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                ticker: { type: Type.STRING },
+                name: { type: Type.STRING },
+                weight: { type: Type.NUMBER },
+                category: { type: Type.STRING },
+                rationale: { type: Type.STRING },
+                expenseRatio: { type: Type.STRING },
+              },
+              required: ['ticker', 'name', 'weight', 'category', 'rationale', 'expenseRatio'],
+            },
+          },
+          riskWarnings: { type: Type.ARRAY, items: { type: Type.STRING } },
+        },
+        required: ['strategyName', 'riskProfile', 'expectedReturn', 'expectedVolatility', 'sharpeEstimate', 'macroAlignment', 'rebalancingGuidance', 'allocations', 'riskWarnings'],
+      },
     },
   });
 
-  const raw = response.text || '{}';
-  const jsonStart = raw.indexOf('{');
-  const jsonEnd = raw.lastIndexOf('}');
-  const jsonStr = jsonStart >= 0 && jsonEnd > jsonStart ? raw.slice(jsonStart, jsonEnd + 1) : '{}';
   let result;
   try {
-    result = JSON.parse(jsonStr);
+    result = JSON.parse(response.text || '{}');
   } catch {
     return NextResponse.json({ error: 'AI returned invalid JSON. Please try again.' }, { status: 500 });
   }
   if (!result.allocations?.length) {
     return NextResponse.json({ error: 'AI did not return a valid portfolio. Please try again.' }, { status: 500 });
   }
+  await setDbCache(key, result);
   return NextResponse.json({ success: true, data: result });
 }
 

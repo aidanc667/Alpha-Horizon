@@ -40,8 +40,8 @@ export default function MarketTab({ initialView = 'home', onBack, onNavigate }: 
           {[
             {
               icon: BarChart2,
-              title: 'Elite 6 Indicators',
-              desc: 'SPY movement, volatility turbulence, institutional flow, market breadth, asset of the day, top sector — on every card.',
+              title: 'Core 4 Indicators',
+              desc: 'Fear & Greed sentiment, SPY direction + MAs, sector rotation leader/lagger, and options put/call lean — tracked and scored daily.',
               color: 'text-purple-400',
               bg: 'bg-purple-500/8 border-purple-500/20',
             },
@@ -75,8 +75,8 @@ export default function MarketTab({ initialView = 'home', onBack, onNavigate }: 
             },
             {
               icon: RefreshCw,
-              title: 'AI Feedback Loop',
-              desc: 'When accuracy drops, the system analyzes what it missed and adjusts its weights — building a genuine trust score over time.',
+              title: 'Adaptive Signal Weights',
+              desc: 'After each scored day, the system auto-adjusts how much it trusts each signal type. Underperforming signals get down-weighted in real-time.',
               color: 'text-cyan-400',
               bg: 'bg-cyan-500/8 border-cyan-500/20',
             },
@@ -97,8 +97,8 @@ export default function MarketTab({ initialView = 'home', onBack, onNavigate }: 
           <p className="font-mono text-[10px] uppercase tracking-[0.18em] mb-5" style={{ color: 'rgba(241,244,248,0.3)' }}>How It Works</p>
           <div className="flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-0">
             {[
-              { step: '① Today', desc: 'Live brief: 5 What/Why/Impact bullets, Elite 6, Edge Board, weather gauge', color: 'text-amber-400' },
-              { step: '② Noon Lock', desc: 'AI predictions for tomorrow\'s Elite 6 sealed at 12 PM ET', color: 'text-blue-400' },
+              { step: '① Today', desc: 'Live brief: 5 What/Why/Impact bullets, Core 4 indicators, Edge Board, weather gauge', color: 'text-amber-400' },
+              { step: '② Noon Lock', desc: 'AI predictions for tomorrow\'s Core 4 sealed at 12 PM ET — self-weighted by past accuracy', color: 'text-blue-400' },
               { step: '③ Yesterday', desc: 'Predictions scored vs actual closes, accuracy ledger updated', color: 'text-purple-400' },
             ].map(({ step, desc, color }, i) => (
               <div key={i} className="flex items-start md:items-center gap-4 flex-1">

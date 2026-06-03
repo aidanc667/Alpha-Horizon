@@ -34,7 +34,7 @@ export default function LabTab() {
 
   // Form
   const [startDate, setStartDate]   = useState('2021-01-01');
-  const [endDate, setEndDate]       = useState('2025-12-31');
+  const [endDate, setEndDate]       = useState(today);
   const [initInvest, setInitInvest] = useState(10000);
   const [monthlyC, setMonthlyC]     = useState(500);
   const [allocs, setAllocs]         = useState<TickerAllocation[]>(DEFAULT_ALLOCS);
@@ -74,7 +74,7 @@ export default function LabTab() {
         allocations: allocStr,
         period:      `${startDate} → ${endDate}`,
         cagr:        `${m.cagr >= 0 ? '+' : ''}${m.cagr.toFixed(2)}%`,
-        sharpe:      m.sortinoRatio.toFixed(2),
+        sharpe:      m.sharpeRatio.toFixed(2),
         maxDD:       `-${m.maxDrawdown.toFixed(2)}%`,
         alpha:       `${m.alpha >= 0 ? '+' : ''}${m.alpha.toFixed(2)}%`,
         score:       _score,
@@ -89,7 +89,7 @@ export default function LabTab() {
           name:        `${allocStr} · ${startDate.slice(0,4)}–${endDate.slice(0,4)}`,
           allocations: allocs,
           config:      { startDate, endDate, initialInvestment: initInvest, monthlyContribution: monthlyC, annualRebalance: rebalance },
-          metrics:     { cagr: m.cagr, sharpe: m.sortinoRatio, maxDD: m.maxDrawdown, alpha: m.alpha, score: _score },
+          metrics:     { cagr: m.cagr, sharpe: m.sharpeRatio, maxDD: m.maxDrawdown, alpha: m.alpha, score: _score },
         }),
       }).catch(() => {}); // silent — user may not be logged in yet
     } catch (e: any) {

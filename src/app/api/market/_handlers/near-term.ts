@@ -1,12 +1,24 @@
 import { NextResponse } from 'next/server';
 import { Type } from '@google/genai';
-import { getCached, setCache, getCurrentDate } from '../_lib';
+import { getCached, setCache, getCurrentDate, getDbCache, setDbCache } from '../_lib';
 import type { HandlerCtx } from '../_lib';
+
+const NEAR_TERM_DB_KEY = 'near_term_v1';
+const NEAR_TERM_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours — survives cold starts
 
 export async function handleNearTerm(ctx: HandlerCtx): Promise<NextResponse> {
   const { ai, model } = ctx;
+
+  // L1: in-process (warm instance, ~0ms)
   const cached = getCached('nearTerm');
   if (cached) return NextResponse.json({ success: true, data: cached });
+
+  // L2: DB cache (survives cold starts, ~80ms)
+  const dbCached = await getDbCache(NEAR_TERM_DB_KEY, NEAR_TERM_TTL_MS);
+  if (dbCached) {
+    setCache('nearTerm', dbCached); // warm L1 for subsequent requests on this instance
+    return NextResponse.json({ success: true, data: dbCached });
+  }
 
   const prompt = `
     You are a professional macro market strategist at a top-tier institutional research firm (e.g., Goldman Sachs, J.P. Morgan, BlackRock).
@@ -218,5 +230,6 @@ export async function handleNearTerm(ctx: HandlerCtx): Promise<NextResponse> {
 
   const result = JSON.parse(response.text || '{}');
   setCache('nearTerm', result);
+  setDbCache(NEAR_TERM_DB_KEY, result); // persist across cold starts
   return NextResponse.json({ success: true, data: result });
 }

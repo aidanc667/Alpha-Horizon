@@ -1,12 +1,23 @@
 import { NextResponse } from 'next/server';
 import { Type } from '@google/genai';
-import { getCached, setCache, getCurrentDate } from '../_lib';
+import { getCached, setCache, getCurrentDate, getDbCache, setDbCache } from '../_lib';
 import type { HandlerCtx } from '../_lib';
+
+const LIVE_UPDATE_DB_KEY = 'live_update_v1';
+const LIVE_UPDATE_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 export async function handleLiveUpdate(ctx: HandlerCtx): Promise<NextResponse> {
   const { ai, model } = ctx;
+  // L1: in-process (~0ms)
   const cached = getCached('liveUpdate');
   if (cached) return NextResponse.json({ success: true, data: cached });
+
+  // L2: DB cache (survives cold starts, ~80ms)
+  const dbCached = await getDbCache(LIVE_UPDATE_DB_KEY, LIVE_UPDATE_TTL_MS);
+  if (dbCached) {
+    setCache('liveUpdate', dbCached);
+    return NextResponse.json({ success: true, data: dbCached });
+  }
 
   const prompt = `
     You are a real-time market intelligence analyst at a top-tier investment bank.
@@ -77,5 +88,6 @@ export async function handleLiveUpdate(ctx: HandlerCtx): Promise<NextResponse> {
 
   const result = JSON.parse(response.text || '{}');
   setCache('liveUpdate', result);
+  setDbCache(LIVE_UPDATE_DB_KEY, result); // persist across cold starts
   return NextResponse.json({ success: true, data: result });
 }

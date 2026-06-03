@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 
 // In-memory cache: ticker → { price, ts }
 const priceCache = new Map<string, { price: number; prevClose: number; ts: number }>();
@@ -37,6 +38,8 @@ async function fetchPrice(ticker: string): Promise<{ price: number; prevClose: n
 
 // GET /api/prices?tickers=VTI,BND,SPY
 export async function GET(req: NextRequest) {
+  const { userId } = await auth();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const tickersParam = req.nextUrl.searchParams.get('tickers');
   if (!tickersParam) return NextResponse.json({ error: 'Missing tickers param' }, { status: 400 });
 

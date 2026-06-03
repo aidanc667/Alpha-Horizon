@@ -20,6 +20,21 @@ export interface LabSnapshot {
   updatedAt: string;     // ISO timestamp
 }
 
+// ── Arena snapshot (from Strategy Arena persona) ─────────────────────────────
+export interface ArenaSnapshot {
+  personaName: string;      // e.g. "Aggressive Growth"
+  riskLabel: string;        // "Conservative" | "Moderate" | "Aggressive"
+  riskScore: number;        // 1–10
+  allocations: string;      // "QQQ 45%, VTI 30%, BND 25%"
+  totalReturn: string;      // "+12.4%"
+  alpha: string;            // "+4.1% vs SPY"
+  todayReturn: string;      // "+0.8%"
+  portfolioValue: string;   // "$125,400"
+  thesis: string | null;
+  daysRunning: number;
+  updatedAt: string;        // ISO timestamp
+}
+
 // ── Planner snapshot (from PlannerTab after plan generation) ─────────────────
 export interface PlannerSnapshot {
   riskProfile: string;      // "Moderate"
@@ -37,8 +52,10 @@ export interface PlannerSnapshot {
 interface AppContextValue {
   labSnapshot: LabSnapshot | null;
   plannerSnapshot: PlannerSnapshot | null;
+  arenaSnapshot: ArenaSnapshot | null;
   setLabSnapshot: (snap: LabSnapshot) => void;
   setPlannerSnapshot: (snap: PlannerSnapshot) => void;
+  setArenaSnapshot: (snap: ArenaSnapshot) => void;
   /** Human-readable context string ready to inject into an AI system prompt */
   buildAdvisorContext: () => string;
   /** Navigate to the Advisor tab from any tab — registered by DashboardLayout */
@@ -54,8 +71,10 @@ interface AppContextValue {
 const AppContext = createContext<AppContextValue>({
   labSnapshot: null,
   plannerSnapshot: null,
+  arenaSnapshot: null,
   setLabSnapshot: () => {},
   setPlannerSnapshot: () => {},
+  setArenaSnapshot: () => {},
   buildAdvisorContext: () => '',
   navigateToAdvisor: () => {},
   registerAdvisorNav: () => {},
@@ -67,17 +86,19 @@ const AppContext = createContext<AppContextValue>({
 export function AppContextProvider({ children }: { children: React.ReactNode }) {
   const [labSnapshot,     setLabSnapshotState]     = useState<LabSnapshot | null>(null);
   const [plannerSnapshot, setPlannerSnapshotState] = useState<PlannerSnapshot | null>(null);
+  const [arenaSnapshot,   setArenaSnapshotState]   = useState<ArenaSnapshot | null>(null);
   const advisorNavRef = React.useRef<(() => void) | null>(null);
   const labNavRef     = React.useRef<(() => void) | null>(null);
 
   const setLabSnapshot     = useCallback((snap: LabSnapshot)     => setLabSnapshotState(snap),     []);
   const setPlannerSnapshot = useCallback((snap: PlannerSnapshot) => setPlannerSnapshotState(snap), []);
+  const setArenaSnapshot   = useCallback((snap: ArenaSnapshot)   => setArenaSnapshotState(snap),   []);
   const registerAdvisorNav = useCallback((fn: () => void) => { advisorNavRef.current = fn; },      []);
   const navigateToAdvisor  = useCallback(() => { advisorNavRef.current?.(); },                     []);
   const registerLabNav     = useCallback((fn: () => void) => { labNavRef.current = fn; },          []);
   const navigateToLab      = useCallback(() => { labNavRef.current?.(); },                         []);
 
-  /** Formats both snapshots into a system-prompt block for the AI. */
+  /** Formats all snapshots into a system-prompt block for the AI. */
   const buildAdvisorContext = useCallback((): string => {
     const parts: string[] = [];
 
@@ -98,11 +119,20 @@ export function AppContextProvider({ children }: { children: React.ReactNode }) 
       parts.push(`Tax Brackets: Federal ${plannerSnapshot.marginalFederal} marginal | CA ${plannerSnapshot.marginalCA} marginal`);
     }
 
+    if (arenaSnapshot) {
+      if (parts.length) parts.push('');
+      parts.push(`[STRATEGY ARENA — persona imported ${arenaSnapshot.updatedAt}]`);
+      parts.push(`Persona: "${arenaSnapshot.personaName}" | Risk: ${arenaSnapshot.riskLabel} (${arenaSnapshot.riskScore}/10) | Running: ${arenaSnapshot.daysRunning} days`);
+      parts.push(`Allocation: ${arenaSnapshot.allocations}`);
+      parts.push(`Performance: ${arenaSnapshot.totalReturn} since inception | ${arenaSnapshot.alpha} | Today: ${arenaSnapshot.todayReturn} | Value: ${arenaSnapshot.portfolioValue}`);
+      if (arenaSnapshot.thesis) parts.push(`Investment Thesis: ${arenaSnapshot.thesis}`);
+    }
+
     return parts.join('\n');
-  }, [labSnapshot, plannerSnapshot]);
+  }, [labSnapshot, plannerSnapshot, arenaSnapshot]);
 
   return (
-    <AppContext.Provider value={{ labSnapshot, plannerSnapshot, setLabSnapshot, setPlannerSnapshot, buildAdvisorContext, navigateToAdvisor, registerAdvisorNav, navigateToLab, registerLabNav }}>
+    <AppContext.Provider value={{ labSnapshot, plannerSnapshot, arenaSnapshot, setLabSnapshot, setPlannerSnapshot, setArenaSnapshot, buildAdvisorContext, navigateToAdvisor, registerAdvisorNav, navigateToLab, registerLabNav }}>
       {children}
     </AppContext.Provider>
   );

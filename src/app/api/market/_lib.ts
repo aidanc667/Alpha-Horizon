@@ -53,8 +53,14 @@ export function getTodayET(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
 }
 export function getYesterdayET(): string {
-  const d = new Date(); d.setDate(d.getDate() - 1);
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(d);
+  const todayET = getTodayET(); // YYYY-MM-DD in ET timezone
+  // Parse as noon UTC so getDay() is stable regardless of local machine timezone
+  const d = new Date(todayET + 'T12:00:00Z');
+  // Skip back to the last trading day: Monday → Friday (−3), Sunday → Friday (−2), else −1
+  const dow = d.getDay(); // 0=Sun, 1=Mon
+  const daysBack = dow === 1 ? 3 : dow === 0 ? 2 : 1;
+  d.setUTCDate(d.getUTCDate() - daysBack);
+  return d.toISOString().slice(0, 10);
 }
 export function isAfterNoonET(): boolean {
   const etHour = parseInt(
@@ -78,7 +84,9 @@ export async function fetchSPYPutCallRatio(): Promise<number | null> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = await (yahooFinance as any).options('SPY');
     let totalPuts = 0, totalCalls = 0;
-    const cutoff = Date.now() + 7 * 24 * 60 * 60 * 1000;
+    // Use expirations within the next 30 days — captures broader market hedging sentiment,
+    // not just short-term weekly traders (7-day window was too noisy)
+    const cutoff = Date.now() + 30 * 24 * 60 * 60 * 1000;
     for (const exp of (result.options ?? [])) {
       const expDate = exp.expirationDate instanceof Date
         ? exp.expirationDate.getTime()
@@ -208,18 +216,26 @@ export async function fetchFearAndGreed(): Promise<FearGreedData | null> {
       score <= 60 ? 'Neutral' :
       score <= 80 ? 'Greed' : 'Extreme Greed';
 
-    // Delta vs previous score (persisted in macro_cache)
+    // Delta vs yesterday's close (keyed by date so intra-day refreshes don't reset delta)
+    // Use getTodayET/getYesterdayET to avoid midnight-UTC timezone bug
+    const todayKey = getTodayET();
+    const yesterdayKey = getYesterdayET();
     let previousClose = score;
     try {
       const sql = db();
-      const rows = await sql`SELECT data FROM macro_cache WHERE cache_key = 'sentiment_score_prev'`;
-      if (rows[0]?.data) previousClose = (rows[0].data as { score: number }).score ?? score;
-      // Persist current score for next call's delta calculation
-      await sql`
-        INSERT INTO macro_cache (cache_key, data, fetched_at)
-        VALUES ('sentiment_score_prev', ${JSON.stringify({ score })}, now())
-        ON CONFLICT (cache_key) DO UPDATE SET data = EXCLUDED.data, fetched_at = EXCLUDED.fetched_at
-      `;
+      // Read yesterday's stored close; fall back to today's if missing (first-ever run)
+      const rows = await sql`SELECT data FROM macro_cache WHERE cache_key = ${'sentiment_prev_' + yesterdayKey} OR cache_key = ${'sentiment_prev_' + todayKey} ORDER BY fetched_at DESC LIMIT 2`;
+      const yesterday = rows.find((r: Record<string, unknown>) => (r as { cache_key: string }).cache_key === 'sentiment_prev_' + yesterdayKey);
+      if (yesterday?.data) previousClose = (yesterday.data as { score: number }).score ?? score;
+      // Only write today's score once per calendar day (first write wins — intra-day stable delta)
+      const todayExists = rows.find((r: Record<string, unknown>) => (r as { cache_key: string }).cache_key === 'sentiment_prev_' + todayKey);
+      if (!todayExists) {
+        await sql`
+          INSERT INTO macro_cache (cache_key, data, fetched_at)
+          VALUES (${'sentiment_prev_' + todayKey}, ${JSON.stringify({ score })}, now())
+          ON CONFLICT (cache_key) DO NOTHING
+        `;
+      }
     } catch { /* non-fatal */ }
 
     const result: FearGreedData = { score, label, delta: score - previousClose, previousClose };
@@ -313,6 +329,56 @@ AUTHORITATIVE MARKET STANCE:
 - Overweight NOW: ${(ctx.positioning?.overweight || []).map((p: any) => p.idea).join(', ') || 'none'}
 - Underweight NOW: ${(ctx.positioning?.underweight || []).map((p: any) => p.idea).join(', ') || 'none'}
 `;
+}
+
+// ─── DB-backed cache (survives cold starts) ───────────────────────────────────
+// Unlike the in-process Map, these persist in Neon across serverless cold starts.
+// Use for expensive Gemini calls (nearTerm, liveUpdate) that shouldn't re-run every request.
+
+export async function getDbCache(key: string, maxAgeMs: number): Promise<unknown | null> {
+  try {
+    const sql = db();
+    const rows = await sql`
+      SELECT data, fetched_at FROM macro_cache
+      WHERE cache_key = ${key}
+        AND fetched_at > now() - (${maxAgeMs} * interval '1 millisecond')
+      LIMIT 1
+    `;
+    return rows[0]?.data ?? null;
+  } catch { return null; }
+}
+
+export async function setDbCache(key: string, data: unknown): Promise<void> {
+  try {
+    const sql = db();
+    await sql`
+      INSERT INTO macro_cache (cache_key, data, fetched_at)
+      VALUES (${key}, ${JSON.stringify(data)}, now())
+      ON CONFLICT (cache_key) DO UPDATE SET data = EXCLUDED.data, fetched_at = EXCLUDED.fetched_at
+    `;
+  } catch { /* non-fatal */ }
+}
+
+// ─── Adaptive signal weight persistence ──────────────────────────────────────
+import type { SignalWeights } from '@/lib/market/scoring';
+import { DEFAULT_SIGNAL_WEIGHTS } from '@/lib/market/scoring';
+
+export async function loadSignalWeights(sql: ReturnType<typeof db>): Promise<SignalWeights> {
+  try {
+    const rows = await sql`SELECT data FROM macro_cache WHERE cache_key = 'signal_weights'`;
+    if (rows[0]?.data) return rows[0].data as SignalWeights;
+  } catch { /* non-fatal */ }
+  return DEFAULT_SIGNAL_WEIGHTS;
+}
+
+export async function saveSignalWeights(sql: ReturnType<typeof db>, weights: SignalWeights): Promise<void> {
+  try {
+    await sql`
+      INSERT INTO macro_cache (cache_key, data, fetched_at)
+      VALUES ('signal_weights', ${JSON.stringify(weights)}, now())
+      ON CONFLICT (cache_key) DO UPDATE SET data = EXCLUDED.data, fetched_at = EXCLUDED.fetched_at
+    `;
+  } catch { /* non-fatal */ }
 }
 
 // ─── Shared rolling accuracy calculator (deduplicates tripleCard + refreshLive) ──

@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { scoreAccuracy, buildWeather, computePredictionSignals } from '@/lib/market/scoring';
+import { scoreAccuracy, buildWeather, computePredictionSignals, computeWeightAdjustment } from '@/lib/market/scoring';
 import { rowToRecord } from '@/lib/market/scoring';
 import {
   fetchSPYPutCallRatio, fetchSPYData, fetchFearAndGreed, fetchSectorData, fetchMarketMovers,
   getTodayET, getYesterdayET, isAfterNoonET, getCurrentDate,
-  computeRollingAccuracy, buildEdgeBoard,
+  computeRollingAccuracy, buildEdgeBoard, loadSignalWeights, saveSignalWeights,
 } from '../_lib';
 import type { HandlerCtx } from '../_lib';
 
@@ -18,9 +18,12 @@ async function runAccuracyCalc(
 ) {
   if (!yesterdayRow?.tomorrow_predictions || yesterdayRow.accuracy_score != null || !todayRow?.elite6_actual) return;
   try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const predConfidence = (yesterdayRow.tomorrow_predictions as any)?.confidence as 'High' | 'Moderate' | 'Low' | undefined;
     const { score, breakdown } = scoreAccuracy(
       yesterdayRow.tomorrow_predictions as Record<string, unknown>,
       todayRow.elite6_actual as Record<string, unknown>,
+      predConfidence,
     );
     await sql`
       UPDATE market_daily_records
@@ -35,6 +38,16 @@ async function runAccuracyCalc(
       const userCorrect = yesterdayRow.user_spy_prediction === actualDirection;
       await sql`UPDATE market_daily_records SET user_accuracy_correct = ${userCorrect} WHERE record_date = ${yesterdayET}`;
     }
+
+    // Recompute rolling accuracy and update adaptive signal weights
+    const hist7 = await sql`
+      SELECT accuracy_breakdown FROM market_daily_records
+      WHERE accuracy_breakdown IS NOT NULL AND record_date <= ${yesterdayET}
+      ORDER BY record_date DESC LIMIT 7
+    `;
+    const rolling7 = computeRollingAccuracy(hist7 as Array<{ accuracy_breakdown: unknown; user_accuracy_correct: unknown }>);
+    const newWeights = computeWeightAdjustment(rolling7.rollingAccuracy);
+    await saveSignalWeights(sql, newWeights);
   } catch (err) {
     console.error('[tripleCard] Accuracy calc error:', err);
   }
@@ -49,11 +62,14 @@ async function runNoonLock(
   model: string,
 ): Promise<Record<string, unknown> | null> {
   try {
-    const recentScores = await sql`
-      SELECT accuracy_breakdown FROM market_daily_records
-      WHERE accuracy_breakdown IS NOT NULL
-      ORDER BY record_date DESC LIMIT 7
-    `;
+    const [recentScores, currentWeights] = await Promise.all([
+      sql`
+        SELECT accuracy_breakdown FROM market_daily_records
+        WHERE accuracy_breakdown IS NOT NULL
+        ORDER BY record_date DESC LIMIT 7
+      `,
+      loadSignalWeights(sql),
+    ]);
     const avgBreakdown: Record<string, number[]> = { fearGreed: [], spyTrend: [], sectorRotation: [], optionsPulse: [] };
     for (const r of recentScores) {
       const ab = r.accuracy_breakdown as Record<string, number> | null;
@@ -64,14 +80,14 @@ async function runNoonLock(
     }
     const avg = (arr: number[]) => arr.length ? Math.round(arr.reduce((a, b) => a + b) / arr.length) : null;
     const calibration = recentScores.length >= 3
-      ? `\nCALIBRATION (your recent 7-day accuracy — self-correct for known biases):\n- Fear & Greed: ${avg(avgBreakdown.fearGreed) ?? 'N/A'}% accurate\n- SPY Trend: ${avg(avgBreakdown.spyTrend) ?? 'N/A'}% accurate\n- Sector: ${avg(avgBreakdown.sectorRotation) ?? 'N/A'}% accurate\n- Options Pulse: ${avg(avgBreakdown.optionsPulse) ?? 'N/A'}% accurate\nAdjust your predictions to compensate for any indicator where accuracy is below 60%.\n`
+      ? `\nCALIBRATION (your recent 7-day accuracy — self-correct for known biases):\n- Fear & Greed: ${avg(avgBreakdown.fearGreed) ?? 'N/A'}% accurate\n- SPY Trend: ${avg(avgBreakdown.spyTrend) ?? 'N/A'}% accurate\n- Sector: ${avg(avgBreakdown.sectorRotation) ?? 'N/A'}% accurate\n- Options Pulse: ${avg(avgBreakdown.optionsPulse) ?? 'N/A'}% accurate\nAdjust your predictions to compensate for any indicator where accuracy is below 60%.\nADAPTIVE WEIGHTS (system-computed from accuracy history):\n- Fear & Greed signals: ${(currentWeights.fearGreed * 100).toFixed(0)}% weight\n- SPY Trend signals: ${(currentWeights.spyTrend * 100).toFixed(0)}% weight\n- Options Flow signals: ${(currentWeights.optionsPulse * 100).toFixed(0)}% weight\nSignals below 80% weight are underperforming historically — be more skeptical of them.\n`
       : '';
 
     const predSpyData = await fetchSPYData();
     const predFgData = await fetchFearAndGreed();
     const predPcRatio = await fetchSPYPutCallRatio() ?? 0.74;
     const predSectors = await fetchSectorData();
-    const predSignals = computePredictionSignals(predSpyData, predFgData?.score ?? 50, predFgData?.delta ?? 0, predPcRatio);
+    const predSignals = computePredictionSignals(predSpyData, predFgData?.score ?? 50, predFgData?.delta ?? 0, predPcRatio, new Date(), currentWeights);
 
     const predPrompt = `You are a market prediction engine. Today is ${getCurrentDate()}.
 
@@ -170,10 +186,10 @@ Using this real data as your foundation, search for today's market news and gene
   "briefBullets": [
     { "what": "Short headline naming the specific event (5-8 words, include actual ticker/number if relevant)", "why": "The precise data/catalyst that caused it with real numbers", "impact": "2-3 sentences: which sectors/ETFs win or lose, what this changes for Fed/earnings outlooks, what a practical investor should watch" }
   ],
-  "outlier": "One genuinely surprising or counter-intuitive data point from today — must cite a real ticker or real number from the data above",
-  "catalyst": "The single most important event to watch in next 24 hours — be specific with timing and why it matters",
+  "outlier": "One genuinely surprising or counter-intuitive data point NOT already covered in briefBullets — must reference a specific ticker with a real number (e.g. a stock moving 10%+ with no obvious catalyst, or a sector move that contradicts the macro narrative). Do NOT repeat the SPY move or volume observation already in the brief.",
+  "catalyst": "The single most important event to watch in next 24 hours — include: exact time (e.g. '8:30 AM ET'), event name, consensus estimate vs prior reading, and a one-sentence stake (what a beat/miss means for the market)",
   "liveHeadlines": [
-    { "headline": "exact headline from today", "source": "Bloomberg/Reuters/WSJ/etc", "impactScore": 7, "category": "Macro", "timestamp": "${new Date().toISOString()}" }
+    { "headline": "exact headline from today", "source": "Bloomberg/Reuters/WSJ/FT/CNBC/Reuters/AP/Fed/Treasury", "impactScore": 7, "category": "Macro|Fed/Rates|Earnings|Geopolitical|Sector|Crypto", "url": "https://direct-link-to-article-from-your-search-results-or-null-if-not-found", "timestamp": "approximate publish time if known, else omit — do NOT fabricate times" }
   ],
   "bigStory": {
     "ticker": "${topMover?.ticker ?? 'SPY'}",
@@ -194,11 +210,11 @@ Using this real data as your foundation, search for today's market news and gene
 Rules:
 - briefBullets: exactly 5 bullets — use the real numbers from the data above, search for additional context
 - outlier: must reference a real ticker or real number, not generic commentary
-- liveHeadlines: 5-8 headlines, only impactScore >= 6, use real headlines from today
+- liveHeadlines: 5-8 headlines, only impactScore >= 6, use EXACT headlines from tier-1 sources (Bloomberg, Reuters, WSJ, FT, CNBC, AP, Fed, Treasury). STRICTLY AVOID PR Newswire, Stock Titan, GuruFocus, or any company press releases — those are single-stock noise, not market news. Prioritize macro/systemic stories above single-stock stories. Impact score rubric: 9-10 = market-wide systemic event (Fed decision, CPI/jobs data, major geopolitical), 7-8 = sector-wide or major index constituent earnings (S&P 500 company), 5-6 = individual stock or small-cap move. A small/mid-cap company press release CANNOT score above 6. For each headline, include the direct article URL from your search result — set url to null if you cannot confirm the exact URL
 - bigStory: the ticker is already set above — write only the reason field by searching for news
 - nextCatalyst: check economic calendar for the next 24 hours
 - positioning: 1-3 items per category, grounded in the real sector data above
-- edgeBoardReasons: for EVERY ticker in today's top gainers and top losers, search and write a specific ~10-word catalyst
+- edgeBoardReasons: for EVERY ticker in today's top gainers and top losers, you MUST search "[TICKER] stock news today" before writing a reason. Write a specific ~10-word catalyst with a real number or event name. Only use "No public catalyst found" if you searched and found nothing — never skip the search step
 - DO NOT invent prices, percentages, or market levels — use only the real data provided above`;
 
     const narrativeResp = await ai.models.generateContent({
@@ -229,7 +245,7 @@ Rules:
       nextCatalyst: narrative.nextCatalyst ?? null,
     };
 
-    const weather = buildWeather(spyData.changePercent, fgScore, leaderSector, laggerSector);
+    const weather = buildWeather(spyData.changePercent, fgScore, leaderSector, laggerSector, spyData.volumeRatio);
 
     if (elite6.spyTrend) {
       await sql`

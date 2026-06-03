@@ -371,6 +371,7 @@ export interface LiveHeadline {
   impactScore: number;    // 1-10
   category: string;       // 'Fed/Rates' | 'Earnings' | 'Macro' | 'Geopolitical' | 'Sector' | 'Crypto'
   timestamp: string;
+  url?: string | null;    // direct article URL from search results, if found
 }
 
 export interface AccuracyBreakdown {

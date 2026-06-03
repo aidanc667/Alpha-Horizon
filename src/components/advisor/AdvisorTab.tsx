@@ -8,7 +8,15 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import ReactMarkdown from 'react-markdown';
-import type { NearTermIntelligence, LiveBriefing } from '@/types/market';
+import type { NearTermIntelligence, LiveBriefing, DailyIndicators, MacroWeather } from '@/types/market';
+
+interface MarketCore4 {
+  fearGreed: DailyIndicators['fearGreed'];
+  spyTrend: Pick<DailyIndicators['spyTrend'], 'direction' | 'changePercent'>;
+  optionsPulse: DailyIndicators['optionsPulse'];
+  sectorLeader: DailyIndicators['sectorRotation']['leader'];
+  weather: MacroWeather;
+}
 import { useAppContext } from '@/lib/appContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -105,11 +113,13 @@ const MODES: { id: AdvisorMode; label: string; Icon: React.ComponentType<{ class
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function AdvisorTab() {
-  const { labSnapshot, plannerSnapshot, buildAdvisorContext } = useAppContext();
+  const { labSnapshot, plannerSnapshot, arenaSnapshot, buildAdvisorContext } = useAppContext();
 
   // Context
   const [nearTermData, setNearTermData] = useState<NearTermIntelligence | null>(null);
   const [liveData, setLiveData]         = useState<LiveBriefing | null>(null);
+  const [marketCore4, setMarketCore4]   = useState<MarketCore4 | null>(null);
+  const [dismissedMarket, setDismissedMarket] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [polygonCtx, setPolygonCtx]     = useState<any | null>(null);
   const [contextStatus, setContextStatus] = useState<ContextStatus>('loading');
@@ -165,10 +175,12 @@ export default function AdvisorTab() {
 
   const [dismissedLab, setDismissedLab] = useState(false);
   const [dismissedPlanner, setDismissedPlanner] = useState(false);
+  const [dismissedArena, setDismissedArena] = useState(false);
 
   // Reset dismissed state when a new snapshot arrives
   useEffect(() => { setDismissedLab(false); }, [labSnapshot]);
   useEffect(() => { setDismissedPlanner(false); }, [plannerSnapshot]);
+  useEffect(() => { setDismissedArena(false); }, [arenaSnapshot]);
 
   // ── Sync cross-tab snapshots into sessionCtx, respecting dismissals ─────────
   useEffect(() => {
@@ -188,8 +200,16 @@ export default function AdvisorTab() {
       parts.push(`Top Holdings Recommended: ${plannerSnapshot.topHoldings}`);
       parts.push(`Tax Brackets: Federal ${plannerSnapshot.marginalFederal} marginal | CA ${plannerSnapshot.marginalCA} marginal`);
     }
+    if (arenaSnapshot && !dismissedArena) {
+      if (parts.length) parts.push('');
+      parts.push(`[STRATEGY ARENA — persona imported ${arenaSnapshot.updatedAt}]`);
+      parts.push(`Persona: "${arenaSnapshot.personaName}" | Risk: ${arenaSnapshot.riskLabel} (${arenaSnapshot.riskScore}/10) | Running: ${arenaSnapshot.daysRunning} days`);
+      parts.push(`Allocation: ${arenaSnapshot.allocations}`);
+      parts.push(`Performance: ${arenaSnapshot.totalReturn} since inception | ${arenaSnapshot.alpha} | Today: ${arenaSnapshot.todayReturn} | Value: ${arenaSnapshot.portfolioValue}`);
+      if (arenaSnapshot.thesis) parts.push(`Investment Thesis: ${arenaSnapshot.thesis}`);
+    }
     setSessionCtx(prev => ({ ...prev, crossTabContext: parts.join('\n') }));
-  }, [labSnapshot, plannerSnapshot, dismissedLab, dismissedPlanner]);
+  }, [labSnapshot, plannerSnapshot, arenaSnapshot, dismissedLab, dismissedPlanner, dismissedArena]);
 
   // ── Watchlist helpers ─────────────────────────────────────────────────────
   const fetchWatchlistPrice = async (ticker: string) => {
@@ -258,7 +278,7 @@ export default function AdvisorTab() {
   // ── Load market context + chat history on mount ───────────────────────────
   useEffect(() => {
     const CACHE_KEY = 'silas_mkt_ctx';
-    const CACHE_TTL = 60_000;
+    const CACHE_TTL = 20 * 60 * 1000; // 20 minutes
 
     const load = async () => {
       // Use sessionStorage cache to avoid re-fetching market context on tab switches
@@ -276,12 +296,13 @@ export default function AdvisorTab() {
         } catch { /* stale/corrupt cache, refetch */ }
       }
 
-      const [nearRes, liveRes, polygonRes, historyRes, wRes] = await Promise.allSettled([
+      const [nearRes, liveRes, polygonRes, historyRes, wRes, tripleRes] = await Promise.allSettled([
         fetch('/api/market', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'nearTerm' }) }),
         fetch('/api/market', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'liveUpdate' }) }),
         fetch('/api/market', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'polygonContext' }) }),
         fetch('/api/silas/messages'),
         fetch('/api/silas/watchlist'),
+        fetch('/api/market', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'tripleCard' }) }),
       ]);
 
       let near = null, live = null, polygon = null;
@@ -309,6 +330,25 @@ export default function AdvisorTab() {
           wd.tickers.forEach((t: string) => fetchWatchlistPrice(t));
         }
       }
+      // Extract Core 4 + weather from triple card (fire-and-forget, non-blocking)
+      if (tripleRes.status === 'fulfilled' && tripleRes.value.ok) {
+        try {
+          const td = await tripleRes.value.json();
+          const today = td.data?.today;
+          const ind: DailyIndicators | null = today?.elite6Actual ?? null;
+          const wx: MacroWeather | null = today?.weather ?? null;
+          if (ind && wx) {
+            setMarketCore4({
+              fearGreed: ind.fearGreed,
+              spyTrend: { direction: ind.spyTrend.direction, changePercent: ind.spyTrend.changePercent },
+              optionsPulse: ind.optionsPulse,
+              sectorLeader: ind.sectorRotation.leader,
+              weather: wx,
+            });
+          }
+        } catch { /* non-blocking */ }
+      }
+
       setContextStatus(nearOk && liveOk ? 'ready' : nearOk || liveOk ? 'partial' : 'failed');
       if (near || live || polygon) {
         sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), near, live, polygon }));
@@ -510,7 +550,7 @@ export default function AdvisorTab() {
       </header>
 
       {/* ── Cross-tab context banner ────────────────────────────────────────── */}
-      {((labSnapshot && !dismissedLab) || (plannerSnapshot && !dismissedPlanner)) && (
+      {((labSnapshot && !dismissedLab) || (plannerSnapshot && !dismissedPlanner) || (arenaSnapshot && !dismissedArena) || (marketCore4 && !dismissedMarket)) && (
         <div className="flex-shrink-0 flex items-start gap-3 px-6 py-2.5 bg-orange-50 border-b border-orange-100">
           <div className="w-4 h-4 rounded-full bg-orange-500 flex items-center justify-center flex-shrink-0 mt-0.5">
             <Activity className="w-2.5 h-2.5 text-white" />
@@ -518,6 +558,12 @@ export default function AdvisorTab() {
           <div className="flex-1 min-w-0">
             <p className="text-xs font-semibold text-orange-800 mb-0.5">Cross-tab context loaded — AI has full awareness of your other sessions</p>
             <div className="flex flex-wrap gap-3">
+              {marketCore4 && !dismissedMarket && (
+                <span className="inline-flex items-center gap-1 text-xs text-orange-700 font-mono bg-orange-100 border border-orange-200 px-2 py-0.5 rounded-lg whitespace-nowrap">
+                  {marketCore4.weather.emoji} Market: F&amp;G {marketCore4.fearGreed.score} ({marketCore4.fearGreed.delta >= 0 ? '+' : ''}{marketCore4.fearGreed.delta}) · SPY {marketCore4.spyTrend.changePercent >= 0 ? '+' : ''}{marketCore4.spyTrend.changePercent}% · {marketCore4.optionsPulse.lean} · {marketCore4.sectorLeader.ticker} leads
+                  <button onClick={() => setDismissedMarket(true)} className="ml-0.5 text-orange-400 hover:text-orange-700 transition-colors leading-none">✕</button>
+                </span>
+              )}
               {labSnapshot && !dismissedLab && (
                 <span className="inline-flex items-center gap-1 text-xs text-orange-700 font-mono bg-orange-100 border border-orange-200 px-2 py-0.5 rounded-lg whitespace-nowrap">
                   📊 Lab: {labSnapshot.allocations.split(', ').slice(0, 3).join(', ')}{labSnapshot.allocations.split(', ').length > 3 ? '…' : ''} · CAGR {labSnapshot.cagr} · Score {labSnapshot.score ?? '—'}/100
@@ -528,6 +574,12 @@ export default function AdvisorTab() {
                 <span className="inline-flex items-center gap-1 text-xs text-orange-700 font-mono bg-orange-100 border border-orange-200 px-2 py-0.5 rounded-lg whitespace-nowrap">
                   🗺 Plan: {plannerSnapshot.goal} goal · {plannerSnapshot.timeline} · {plannerSnapshot.riskProfile} · Fed {plannerSnapshot.marginalFederal}
                   <button onClick={() => setDismissedPlanner(true)} className="ml-0.5 text-orange-400 hover:text-orange-700 transition-colors leading-none">✕</button>
+                </span>
+              )}
+              {arenaSnapshot && !dismissedArena && (
+                <span className="inline-flex items-center gap-1 text-xs text-orange-700 font-mono bg-orange-100 border border-orange-200 px-2 py-0.5 rounded-lg whitespace-nowrap">
+                  ⚔️ Arena: {arenaSnapshot.personaName} · {arenaSnapshot.allocations.split(', ').slice(0, 3).join(', ')}{arenaSnapshot.allocations.split(', ').length > 3 ? '…' : ''} · {arenaSnapshot.totalReturn}
+                  <button onClick={() => setDismissedArena(true)} className="ml-0.5 text-orange-400 hover:text-orange-700 transition-colors leading-none">✕</button>
                 </span>
               )}
             </div>
@@ -543,22 +595,71 @@ export default function AdvisorTab() {
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5 min-h-0">
               {messages.length === 0 && (
                 <div className="pt-6">
-                  <p className="text-center text-zinc-400 text-sm mb-6 leading-relaxed">
-                    {contextStatus === 'ready'
-                      ? 'Market context loaded — ask me anything about investments, markets, and portfolio strategy.'
-                      : contextStatus === 'loading'
-                      ? 'Loading real-time market context in the background...'
-                      : 'Ask me anything — I have expert investment knowledge'}
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-2xl mx-auto">
-                    {SUGGESTED_PROMPTS.map(p => (
-                      <button key={p} onClick={() => sendChat(p)}
-                        className="text-left text-xs text-zinc-600 bg-zinc-50 hover:bg-orange-50 hover:text-orange-700 hover:border-orange-200 border border-zinc-200 rounded-xl px-4 py-3 transition-all leading-relaxed"
-                      >
-                        {p}
-                      </button>
-                    ))}
-                  </div>
+                  {arenaSnapshot && !dismissedArena ? (
+                    /* ── Arena persona imported — show persona-specific greeting ── */
+                    <div className="max-w-2xl mx-auto space-y-4">
+                      <div className="flex items-start gap-3">
+                        <div className="w-7 h-7 rounded-full bg-orange-500 flex items-center justify-center shrink-0 mt-0.5">
+                          <Brain className="w-4 h-4 text-white" />
+                        </div>
+                        <div className="bg-zinc-50 border border-zinc-200 rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-zinc-800 leading-relaxed">
+                          <p className="font-semibold text-zinc-900 mb-2">I&apos;ve loaded your <span className="text-orange-600">{arenaSnapshot.personaName}</span> persona from Strategy Arena.</p>
+                          <p className="text-zinc-600 mb-3">Here&apos;s what I&apos;m working with:</p>
+                          <div className="bg-white border border-zinc-100 rounded-xl px-3 py-2.5 mb-3 space-y-1">
+                            {arenaSnapshot.allocations.split(', ').map((holding) => {
+                              const [ticker, weight] = holding.split(' ');
+                              return (
+                                <div key={ticker} className="flex items-center justify-between text-xs">
+                                  <span className="font-mono font-bold text-zinc-800">{ticker}</span>
+                                  <span className="text-zinc-500">{weight}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500 mb-3">
+                            <span>Total return: <span className={arenaSnapshot.totalReturn.startsWith('+') ? 'text-emerald-600 font-semibold' : 'text-red-500 font-semibold'}>{arenaSnapshot.totalReturn}</span></span>
+                            <span>vs benchmark: <span className={arenaSnapshot.alpha.startsWith('+') ? 'text-emerald-600 font-semibold' : 'text-red-500 font-semibold'}>{arenaSnapshot.alpha}</span></span>
+                            <span>Today: <span className={arenaSnapshot.todayReturn.startsWith('+') ? 'text-emerald-600 font-semibold' : 'text-red-500 font-semibold'}>{arenaSnapshot.todayReturn}</span></span>
+                          </div>
+                          <p className="text-zinc-600 text-xs">What do you want to know — critique this allocation, stress-test it, compare it to your plan, or run a what-if?</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 ml-10">
+                        {[
+                          `Critique the ${arenaSnapshot.personaName} allocation — what would you change?`,
+                          `How does this hold up in a 2022-style rate shock?`,
+                          `Is this the right mix for ${arenaSnapshot.riskLabel.toLowerCase()} risk right now?`,
+                          `Which holding is the weakest link in today's macro environment?`,
+                        ].map(p => (
+                          <button key={p} onClick={() => sendChat(p)}
+                            className="text-left text-xs text-zinc-600 bg-zinc-50 hover:bg-orange-50 hover:text-orange-700 hover:border-orange-200 border border-zinc-200 rounded-xl px-4 py-3 transition-all leading-relaxed"
+                          >
+                            {p}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    /* ── Default empty state ── */
+                    <>
+                      <p className="text-center text-zinc-400 text-sm mb-6 leading-relaxed">
+                        {contextStatus === 'ready'
+                          ? 'Market context loaded — ask me anything about investments, markets, and portfolio strategy.'
+                          : contextStatus === 'loading'
+                          ? 'Loading real-time market context in the background...'
+                          : 'Ask me anything — I have expert investment knowledge'}
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-2xl mx-auto">
+                        {SUGGESTED_PROMPTS.map(p => (
+                          <button key={p} onClick={() => sendChat(p)}
+                            className="text-left text-xs text-zinc-600 bg-zinc-50 hover:bg-orange-50 hover:text-orange-700 hover:border-orange-200 border border-zinc-200 rounded-xl px-4 py-3 transition-all leading-relaxed"
+                          >
+                            {p}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 

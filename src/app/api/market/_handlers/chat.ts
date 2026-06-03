@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getCurrentDate, buildSessionBlock, buildMarketStance } from '../_lib';
+import { getCurrentDate, buildSessionBlock } from '../_lib';
 import type { HandlerCtx } from '../_lib';
 
 export async function handleAdvisorChat(ctx: HandlerCtx): Promise<Response> {
@@ -42,7 +42,9 @@ LIVE MARKET CONTEXT (${getCurrentDate()}):
 - Upcoming Catalysts: ${(nearTermContext.catalysts || []).slice(0, 3).map((c: any) => `${c.event} (${c.date})`).join(', ')} // eslint-disable-line @typescript-eslint/no-explicit-any
 ` : 'No pre-loaded macro context — rely on Google Search for current data.';
 
-  const liveSummary = liveContext ? `
+  // Only inject headlines when the question is news/market-related — saves ~250 tokens per non-news message
+  const NEWS_PATTERN = /\b(news|headline|today|happening|market|latest|what('?s| is) going on|moving|catalyst|earnings|fed|fomc|cpi|jobs|gdp|report)\b/i;
+  const liveSummary = liveContext && NEWS_PATTERN.test(lastUserMsg) ? `
 LIVE HEADLINES (${getCurrentDate()}):
 ${(liveContext.newsHeadlines || []).map((h: any) => `• [${h.source}] ${h.headline} — ${h.impact}`).join('\n')} // eslint-disable-line @typescript-eslint/no-explicit-any
 Summary: ${liveContext.summary}
@@ -87,7 +89,6 @@ ${macroSummary}
 ${polygonSummary}
 ${liveTickerContext}
 ${liveSummary}
-${buildMarketStance(nearTermContext)}
 ${buildSessionBlock(sessionCtx)}
 
 YOUR COMMUNICATION STYLE:

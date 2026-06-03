@@ -19,12 +19,12 @@ describe('scoreAccuracy', () => {
     expect(breakdown.fearGreed).toBe(100);
   });
 
-  it('gives 90 on F&G when prediction is off by 10', () => {
+  it('gives 80 on F&G when prediction is off by 10 (tiered scoring)', () => {
     const { breakdown } = scoreAccuracy(
       { fearGreed: { score: 50 } },
       { fearGreed: { score: 60 } },
     );
-    expect(breakdown.fearGreed).toBe(90);
+    expect(breakdown.fearGreed).toBe(80); // diff=10, within ≤10 band → 80
   });
 
   it('clamps F&G score to 0 when difference exceeds 100', () => {
@@ -351,8 +351,8 @@ describe('computePredictionSignals', () => {
     expect(confidence).toBe('High'); // bull=4, diff=4 >= 3
   });
 
-  it('returns Moderate confidence when |diff| is exactly 2', () => {
-    // above both MAs (+1 bull), low put/call (+1 bull), everything else neutral
+  it('returns High confidence when weighted |diff| is exactly 2.0', () => {
+    // above both MAs (+1.0) + low put/call (+1.0) with default weights → score=2.0 → High
     const { confidence } = computePredictionSignals(
       { changePercent: 0, above200MA: true, above50MA: true },
       50,   // neutral
@@ -360,11 +360,11 @@ describe('computePredictionSignals', () => {
       0.55, // < 0.65 → +1 bull
       WEDNESDAY,
     );
-    expect(confidence).toBe('Moderate'); // bull=2, bear=0, diff=2
+    expect(confidence).toBe('High'); // bullScore=2.0 >= 2.0 threshold
   });
 
-  it('returns Low confidence when |diff| is 1', () => {
-    // only put/call signal fires
+  it('returns Moderate confidence when weighted |diff| is 1.0', () => {
+    // only put/call signal fires at default weight 1.0 → score=1.0 → Moderate (≥0.9)
     const { confidence } = computePredictionSignals(
       { changePercent: 0, above200MA: null, above50MA: null },
       50,
@@ -372,7 +372,7 @@ describe('computePredictionSignals', () => {
       0.5, // +1 bull
       WEDNESDAY,
     );
-    expect(confidence).toBe('Low'); // diff=1
+    expect(confidence).toBe('Moderate'); // bullScore=1.0 >= 0.9 threshold
   });
 
   // ── Individual signal triggers ──────────────────────────────────────────────

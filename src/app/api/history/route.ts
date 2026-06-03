@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 
 // GET /api/history?ticker=SPY&from=2020-01-01&to=2024-12-31
 export async function GET(req: NextRequest) {
+  const { userId } = await auth();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const { searchParams } = new URL(req.url);
   const ticker = searchParams.get('ticker');
   const from   = searchParams.get('from');
@@ -34,10 +38,9 @@ export async function GET(req: NextRequest) {
     });
 
     if (!response.ok) {
-      const text = await response.text();
       console.error(`[/api/history] Yahoo Finance error for ${ticker}: ${response.status}`);
       return NextResponse.json(
-        { error: `Yahoo Finance returned ${response.status}`, ticker, details: text.substring(0, 200) },
+        { error: `Yahoo Finance returned ${response.status}`, ticker },
         { status: response.status }
       );
     }

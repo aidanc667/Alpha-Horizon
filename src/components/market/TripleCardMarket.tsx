@@ -291,7 +291,13 @@ function LoadingState() {
 
 // ─── Accuracy Calendar Heatmap ───────────────────────────────────────────────
 
-interface HistoryDay { date: string; score: number; userCorrect: boolean | null }
+interface HistoryDay {
+  date: string;
+  score: number;
+  userCorrect: boolean | null;
+  confidence?: string | null;
+  isMisfire?: boolean;
+}
 
 function AccuracyCalendar({ days }: { days: HistoryDay[] }) {
   const [tooltip, setTooltip] = React.useState<HistoryDay | null>(null);
@@ -339,6 +345,10 @@ function AccuracyCalendar({ days }: { days: HistoryDay[] }) {
     return 'bg-red-500/60 border-red-400/50';
   }
 
+  function isMisfireDay(iso: string) {
+    return map[iso]?.isMisfire === true;
+  }
+
   return (
     <div className="mt-4 pt-3 border-t border-white/6">
       <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-3">
@@ -364,9 +374,13 @@ function AccuracyCalendar({ days }: { days: HistoryDay[] }) {
               return (
                 <div
                   key={di}
-                  className={`w-5 h-5 rounded-sm border cursor-default transition-opacity hover:opacity-80 ${cellColor(cell.iso)}`}
+                  className={`relative w-5 h-5 rounded-sm border cursor-default transition-opacity hover:opacity-80 ${cellColor(cell.iso)}`}
                   onMouseEnter={() => setTooltip(d ?? null)}
-                />
+                >
+                  {isMisfireDay(cell.iso) && (
+                    <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-orange-400 border border-black text-[6px] flex items-center justify-center font-bold text-black leading-none">!</span>
+                  )}
+                </div>
               );
             })}
           </div>
@@ -377,19 +391,19 @@ function AccuracyCalendar({ days }: { days: HistoryDay[] }) {
       {tooltip && (
         <div className="mt-2 bg-slate-800 border border-white/10 rounded-lg p-2 text-xs">
           <p className="text-slate-300 font-semibold">{tooltip.date}</p>
-          <p className="text-slate-400 mt-0.5">
-            Model: <span className={tooltip.score >= 75 ? 'text-emerald-400' : tooltip.score >= 55 ? 'text-amber-400' : 'text-red-400'}>
-              {tooltip.score}%
-            </span>
+          <p className="text-slate-400 mt-0.5 flex items-center gap-2 flex-wrap">
+            <span>Model: <span className={tooltip.score >= 75 ? 'text-emerald-400' : tooltip.score >= 55 ? 'text-amber-400' : 'text-red-400'}>{tooltip.score}%</span></span>
+            {tooltip.confidence && <span className="text-slate-500">{tooltip.confidence} Conviction</span>}
+            {tooltip.isMisfire && <span className="text-orange-400 font-bold">⚠ Misfire</span>}
             {tooltip.userCorrect != null && (
-              <span className="ml-2">You: {tooltip.userCorrect ? <span className="text-emerald-400">✓</span> : <span className="text-red-400">✗</span>}</span>
+              <span>You: {tooltip.userCorrect ? <span className="text-emerald-400">✓</span> : <span className="text-red-400">✗</span>}</span>
             )}
           </p>
         </div>
       )}
 
       {/* Legend */}
-      <div className="flex items-center gap-3 mt-2">
+      <div className="flex items-center gap-3 mt-2 flex-wrap">
         {[
           { color: 'bg-emerald-500/70', label: '≥75%' },
           { color: 'bg-amber-500/60', label: '55–74%' },
@@ -401,7 +415,94 @@ function AccuracyCalendar({ days }: { days: HistoryDay[] }) {
             <span className="text-[9px] text-slate-600">{label}</span>
           </div>
         ))}
+        <div className="flex items-center gap-1">
+          <span className="w-3 h-3 rounded-full bg-orange-400 flex items-center justify-center text-[6px] font-bold text-black">!</span>
+          <span className="text-[9px] text-slate-600">High Conviction Misfire</span>
+        </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Weekly Accuracy Sparkline ────────────────────────────────────────────────
+
+function WeeklySparkline({ days }: { days: HistoryDay[] }) {
+  const weeks = React.useMemo(() => {
+    if (days.length === 0) return [];
+    // Sort ascending
+    const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
+    const buckets: number[][] = [];
+    let current: number[] = [];
+    let weekStart = new Date(sorted[0].date + 'T12:00:00Z');
+    weekStart.setUTCDate(weekStart.getUTCDate() - weekStart.getUTCDay()); // back to Sunday
+
+    for (const d of sorted) {
+      const dt = new Date(d.date + 'T12:00:00Z');
+      const diffDays = Math.floor((dt.getTime() - weekStart.getTime()) / 86400000);
+      if (diffDays >= 7) {
+        if (current.length > 0) buckets.push(current);
+        current = [];
+        weekStart = new Date(dt);
+        weekStart.setUTCDate(weekStart.getUTCDate() - weekStart.getUTCDay());
+      }
+      current.push(d.score);
+    }
+    if (current.length > 0) buckets.push(current);
+    return buckets.map(b => Math.round(b.reduce((a, c) => a + c, 0) / b.length));
+  }, [days]);
+
+  if (weeks.length < 2) return null;
+
+  const W = 140, H = 36, PAD = 4;
+  const innerW = W - PAD * 2;
+  const innerH = H - PAD * 2;
+  const min = Math.min(...weeks, 30);
+  const max = Math.max(...weeks, 70);
+  const range = max - min || 1;
+
+  const pts = weeks.map((v, i) => {
+    const x = PAD + (i / (weeks.length - 1)) * innerW;
+    const y = PAD + (1 - (v - min) / range) * innerH;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+
+  const lastVal = weeks[weeks.length - 1];
+  const prevVal = weeks[weeks.length - 2];
+  const trend = lastVal > prevVal ? 'up' : lastVal < prevVal ? 'down' : 'flat';
+  const trendColor = trend === 'up' ? '#34d399' : trend === 'down' ? '#f87171' : '#94a3b8';
+
+  return (
+    <div className="mt-4 pt-3 border-t border-white/6">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Weekly Accuracy Trend</p>
+        <span className="text-[10px] font-mono font-bold" style={{ color: trendColor }}>
+          {lastVal}% {trend === 'up' ? '↑' : trend === 'down' ? '↓' : '→'}
+        </span>
+      </div>
+      <svg width={W} height={H} className="overflow-visible">
+        {/* 50% reference line */}
+        {(() => {
+          const refY = PAD + (1 - (50 - min) / range) * innerH;
+          return refY >= PAD && refY <= H - PAD ? (
+            <line x1={PAD} y1={refY} x2={W - PAD} y2={refY} stroke="rgba(148,163,184,0.2)" strokeWidth="1" strokeDasharray="3,3" />
+          ) : null;
+        })()}
+        <polyline
+          points={pts.join(' ')}
+          fill="none"
+          stroke={trendColor}
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+        {/* Dots */}
+        {weeks.map((v, i) => {
+          const x = PAD + (i / (weeks.length - 1)) * innerW;
+          const y = PAD + (1 - (v - min) / range) * innerH;
+          return <circle key={i} cx={x} cy={y} r="2" fill={trendColor} opacity={0.8} />;
+        })}
+      </svg>
+      <p className="text-[9px] text-slate-600 mt-1">{weeks.length} weeks of data</p>
     </div>
   );
 }
@@ -583,7 +684,10 @@ function YesterdayCard({
         )}
 
         {historyDays && historyDays.length > 0 && (
-          <AccuracyCalendar days={historyDays} />
+          <>
+            <WeeklySparkline days={historyDays} />
+            <AccuracyCalendar days={historyDays} />
+          </>
         )}
       </div>
 
@@ -745,10 +849,18 @@ function TodayCard({
                           {headline.category}
                         </span>
                       </div>
-                      <p className="text-slate-200 text-xs font-medium leading-snug">
-                        {headline.headline}
-                      </p>
-                      <p className="text-[10px] text-slate-600 mt-0.5">{headline.timestamp}</p>
+                      {headline.url ? (
+                        <a
+                          href={headline.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-slate-200 text-xs font-medium leading-snug hover:text-white hover:underline underline-offset-2 transition-colors"
+                        >
+                          {headline.headline} ↗
+                        </a>
+                      ) : (
+                        <p className="text-slate-200 text-xs font-medium leading-snug">{headline.headline}</p>
+                      )}
                     </div>
                   </div>
                 );

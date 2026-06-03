@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, RefreshCw, TrendingUp, TrendingDown, Target, Sparkles, Loader2, ChevronDown, ChevronUp, Plus, X, AlertCircle, Trash2, Scale, Activity } from 'lucide-react';
+import { ArrowLeft, RefreshCw, TrendingUp, TrendingDown, Target, Sparkles, Loader2, ChevronDown, ChevronUp, Plus, X, AlertCircle, Trash2, Scale, Activity, MessageSquare } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import type { Persona, PersonaSnapshot } from '@/types';
+import { useAppContext } from '@/lib/appContext';
 
 interface PersonaDetailProps {
   personaId: string;
@@ -14,6 +15,7 @@ interface PersonaDetailProps {
 type Period = '6m' | '1w' | '1m' | 'all';
 
 export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDetailProps) {
+  const { setArenaSnapshot, navigateToAdvisor } = useAppContext();
   const [persona, setPersona] = useState<Persona | null>(null);
   const [snapshots, setSnapshots] = useState<PersonaSnapshot[]>([]);
   const [loading, setLoading] = useState(true);
@@ -133,7 +135,11 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
   const handleDelete = async () => {
     if (!confirm(`Delete "${persona?.name}"? This cannot be undone.`)) return;
     try {
-      await fetch(`/api/personas/${personaId}`, { method: 'DELETE' });
+      const res = await fetch(`/api/personas/${personaId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error((d as { error?: string }).error || `Delete failed (${res.status})`);
+      }
       if (onDelete) onDelete(personaId);
       onBack();
     } catch (e: unknown) {
@@ -341,6 +347,40 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
   };
   const metrics = computeMetrics();
 
+  const handleAnalyzeInSilas = () => {
+    if (!persona) return;
+    const latestSnap = snapshots[snapshots.length - 1] ?? null;
+    const currentValue = latestSnap ? Number(latestSnap.portfolio_value) : Number(persona.starting_balance);
+    const benchmarkValue = latestSnap ? Number(latestSnap.benchmark_value) : Number(persona.starting_balance);
+    const totalReturn = (currentValue / Number(persona.starting_balance) - 1) * 100;
+    const benchReturn = (benchmarkValue / Number(persona.starting_balance) - 1) * 100;
+    const alpha = totalReturn - benchReturn;
+    const todayReturn = latestSnap?.holdings_detail_json
+      ? latestSnap.holdings_detail_json.reduce((sum, h) => sum + (h.todayChangePct * h.weightCurrent), 0) * 100
+      : 0;
+    const inceptionDate = new Date(persona.inception_date);
+    const daysRunning = Math.floor((Date.now() - inceptionDate.getTime()) / 86400000);
+    const riskLabel = persona.risk_score <= 3 ? 'Conservative' : persona.risk_score <= 6 ? 'Moderate' : 'Aggressive';
+    const allocations = persona.allocation_json
+      .map(h => `${h.ticker} ${(h.weight * 100).toFixed(0)}%`)
+      .join(', ');
+
+    setArenaSnapshot({
+      personaName: persona.name,
+      riskLabel,
+      riskScore: persona.risk_score,
+      allocations,
+      totalReturn: `${totalReturn >= 0 ? '+' : ''}${totalReturn.toFixed(2)}%`,
+      alpha: `${alpha >= 0 ? '+' : ''}${alpha.toFixed(2)}% vs ${persona.benchmark_ticker}`,
+      todayReturn: `${todayReturn >= 0 ? '+' : ''}${todayReturn.toFixed(2)}%`,
+      portfolioValue: `$${currentValue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
+      thesis: persona.thesis ?? null,
+      daysRunning,
+      updatedAt: new Date().toISOString(),
+    });
+    navigateToAdvisor();
+  };
+
   return (
     <>
     <div className="h-full overflow-y-auto" style={{ background: 'linear-gradient(135deg, #0a0f1e 0%, #0f172a 50%, #111827 100%)' }}>
@@ -355,6 +395,13 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
             {!isMarketHours && (
               <span className="text-xs text-slate-500 px-2 py-1 bg-white/4 rounded-lg">Market Closed</span>
             )}
+            <button
+              onClick={handleAnalyzeInSilas}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-500/15 hover:bg-violet-500/25 border border-violet-500/30 rounded-lg text-violet-400 text-xs font-semibold transition-all"
+              title="Import this persona into Silas for AI analysis"
+            >
+              <MessageSquare className="w-3.5 h-3.5" />Analyze in Silas
+            </button>
             <button
               onClick={() => { setShowAddPosition(true); setAddError(''); }}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 rounded-lg text-emerald-400 text-xs font-semibold transition-all"
