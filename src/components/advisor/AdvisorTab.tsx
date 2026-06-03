@@ -105,7 +105,7 @@ const MODES: { id: AdvisorMode; label: string; Icon: React.ComponentType<{ class
   { id: 'thesis',        label: 'Stress Test',         Icon: Zap },
   { id: 'compare',       label: 'Compare Assets',      Icon: GitCompare },
   { id: 'best-assets',   label: 'Best Stocks',         Icon: Star },
-  { id: 'best-strategy', label: 'Optimal Portfolio',   Icon: BarChart3 },
+  { id: 'best-strategy', label: 'Quick Portfolio',   Icon: BarChart3 },
   { id: 'macro-calendar', label: 'Macro Calendar',     Icon: CalendarDays },
   { id: 'watchlist',     label: 'Watchlist',           Icon: Eye },
 ];

@@ -118,75 +118,71 @@ Live Headlines: ${(liveContext?.newsHeadlines || []).slice(0, 5).map((h: any) =>
 ` : `Today is ${getCurrentDate()}. Use Google Search for current macro conditions.`;
 
   const prompt = `
-You are a Chief Investment Officer at a $50B+ institutional asset manager — the top 0.1% of portfolio construction professionals globally. Today is ${getCurrentDate()}.
+You are a Chief Investment Officer at a $50B+ institutional asset manager. Today is ${getCurrentDate()}.
 
-MARKET CONTEXT (use as macro anchor for positioning):
+MARKET CONTEXT:
 ${contextStr}
 ${buildMarketStance(nearTermContext)}
 ${buildSessionBlock(sessionCtx)}
 
-━━━ YOUR MANDATE ━━━
-Construct the OPTIMAL ETF portfolio for a ${riskProfile} investor with a ${timeHorizon || '1 year'} time horizon.
+Construct the optimal ETF portfolio for a ${riskProfile} investor with a ${timeHorizon || '1 year'} time horizon.
+Maximize risk-adjusted returns (Sharpe ratio). Weights must sum to EXACTLY 100.
 
-This portfolio represents your STRATEGIC CONVICTION — the allocation that maximizes risk-adjusted returns (Sharpe ratio) for this risk level and horizon. It should look virtually identical if generated again tomorrow. Do NOT let this week's headlines flip your strategic positioning.
+PRINCIPLES:
+- FORWARD-LOOKING: Use current yields + equity risk premium for return estimates, not trailing returns.
+- HORIZON: Match bond duration to ${timeHorizon || '1 year'}. Short → SGOV/SHY. Long → BND/SCHP.
+- DIVERSIFICATION: US equity, international (VXUS/AVDV), fixed income, real assets. Max 65% any single class.
+- FACTOR TILTS: Value (AVUV), quality, momentum where appropriate for the risk level.
+- TAX EFFICIENCY: Prefer SGOV/USFR over cash — Treasury income is state-tax-exempt.
+- 6–10 positions, each serving a distinct diversification role.
 
-USE GOOGLE SEARCH to verify:
-1. Current 10-Year Treasury yield and real yield (TIPS spread)
-2. Current Fed Funds rate and forward rate market expectations (SOFR futures)
-3. Current S&P 500 forward P/E vs. 10-year average
-4. Current VIX and credit spreads (IG and HY OAS)
-5. Current international equity valuations vs. US (CAPE ratios)
+ETF UNIVERSE: VTI, VXUS, BND, AVUV, AVDV, SCHD, QQQM, GLD, SGOV, SCHP, VNQ, SHY, VWO, SCHG, VYM, MUB
 
-━━━ PORTFOLIO CONSTRUCTION PRINCIPLES ━━━
-1. FORWARD-LOOKING ONLY: Estimate expected returns using current yields, forward earnings, and factor premia. NEVER cite trailing returns as a reason to allocate.
-2. MEAN-VARIANCE OPTIMIZATION: Select weights that explicitly maximize Sharpe ratio. Show your reasoning in macroAlignment.
-3. HORIZON CALIBRATION: ${timeHorizon || '1 year'} horizon — match fixed income duration to this horizon. Short horizon → short duration + cash. Long horizon → capture illiquidity and term premia.
-4. GEOGRAPHIC DIVERSIFICATION: Include international exposure (VXUS, VEA, or AVDV) unless the portfolio is explicitly capital-preservation only.
-5. FACTOR TILTS: For equity sleeves, tilt toward factors with long-term evidence: value (AVUV), quality, momentum where appropriate.
-6. TAX EFFICIENCY: Prefer SGOV/USFR over cash for fixed income safety sleeve — Treasury income is state-tax-exempt.
-
-━━━ REQUIREMENTS ━━━
-- 6–10 positions for proper diversification
-- Weights must sum to EXACTLY 100
-- Use specific, liquid ETF tickers from the approved universe (VTI, VXUS, BND, AVUV, SCHD, QQQ, GLD, SGOV, SCHP, VNQ, etc.)
-- Each position must serve a distinct diversification role — no redundant exposure
-
-Provide:
-- strategyName: professional name for this portfolio
-- riskProfile: confirmed risk profile
-- expectedReturn: forward annualized return estimate (e.g., "6.5–8.5%") — based on current yields + equity risk premium, NOT trailing returns
-- expectedVolatility: annualized vol estimate (e.g., "10–13%")
-- sharpeEstimate: estimated Sharpe ratio
-- macroAlignment: 4 sentences — (1) current macro regime characterization, (2) how positioning captures forward opportunity, (3) what risks are hedged, (4) what would change this allocation
-- rebalancingGuidance: specific trigger conditions (threshold-based, not calendar-based)
-- allocations: each with ticker, name, weight, category, rationale (2 sentences: forward-looking role + macro alignment), expenseRatio
-- riskWarnings: exactly 4 forward-looking risks specific to this portfolio and current conditions
-
-CRITICAL: weights must sum to exactly 100.
+Provide: strategyName, riskProfile, expectedReturn (e.g. "6.5–8.5%"), expectedVolatility, sharpeEstimate, macroAlignment (4 sentences), rebalancingGuidance, allocations (ticker/name/weight/category/rationale/expenseRatio), riskWarnings (4 items).
 `;
 
-  // NOTE: Google Search grounding is incompatible with responseSchema/responseMimeType.
-  // We instruct via prompt and extract JSON from the text response instead.
-  const fullPrompt2 = prompt + `
-
-Return ONLY a valid JSON object — no markdown, no explanation, no code fences. Format:
-{"strategyName":"...","riskProfile":"...","expectedReturn":"6.5-8.5%","expectedVolatility":"10-13%","sharpeEstimate":"0.65","macroAlignment":"...","rebalancingGuidance":"...","allocations":[{"ticker":"VTI","name":"Vanguard Total Stock Market ETF","weight":40,"category":"US Equity","rationale":"...","expenseRatio":"0.03%"}],"riskWarnings":["risk 1","risk 2","risk 3","risk 4"]}`;
-
+  // No Google Search here — macro context already injected above, responseSchema gives fast structured output
   const response = await ai.models.generateContent({
     model,
-    contents: fullPrompt2,
+    contents: prompt,
     config: {
       temperature: 0,
-      tools: [{ googleSearch: {} }],
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          strategyName: { type: Type.STRING },
+          riskProfile: { type: Type.STRING },
+          expectedReturn: { type: Type.STRING },
+          expectedVolatility: { type: Type.STRING },
+          sharpeEstimate: { type: Type.STRING },
+          macroAlignment: { type: Type.STRING },
+          rebalancingGuidance: { type: Type.STRING },
+          allocations: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                ticker: { type: Type.STRING },
+                name: { type: Type.STRING },
+                weight: { type: Type.NUMBER },
+                category: { type: Type.STRING },
+                rationale: { type: Type.STRING },
+                expenseRatio: { type: Type.STRING },
+              },
+              required: ['ticker', 'name', 'weight', 'category', 'rationale', 'expenseRatio'],
+            },
+          },
+          riskWarnings: { type: Type.ARRAY, items: { type: Type.STRING } },
+        },
+        required: ['strategyName', 'riskProfile', 'expectedReturn', 'expectedVolatility', 'sharpeEstimate', 'macroAlignment', 'rebalancingGuidance', 'allocations', 'riskWarnings'],
+      },
     },
   });
 
-  const raw2 = response.text ?? '';
-  const start2 = raw2.indexOf('{');
-  const end2 = raw2.lastIndexOf('}');
   let result;
   try {
-    result = JSON.parse(start2 >= 0 && end2 > start2 ? raw2.slice(start2, end2 + 1) : '{}');
+    result = JSON.parse(response.text || '{}');
   } catch {
     return NextResponse.json({ error: 'AI returned invalid JSON. Please try again.' }, { status: 500 });
   }
