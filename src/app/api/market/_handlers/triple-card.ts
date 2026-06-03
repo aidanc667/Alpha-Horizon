@@ -210,7 +210,7 @@ Using this real data as your foundation, search for today's market news and gene
 Rules:
 - briefBullets: exactly 5 bullets — use the real numbers from the data above, search for additional context
 - outlier: must reference a real ticker or real number, not generic commentary
-- liveHeadlines: YOU MUST RETURN EXACTLY 6-8 HEADLINES — this is a hard requirement, not a suggestion. Never return fewer than 6. Use EXACT headlines from tier-1 sources (Bloomberg, Reuters, WSJ, FT, CNBC, AP, Fed, Treasury). STRICTLY AVOID PR Newswire, Stock Titan, GuruFocus, or company press releases. Prioritize macro/systemic stories above single-stock stories. Impact score rubric: 9-10 = market-wide systemic event (Fed decision, CPI print, jobs report, major geopolitical shock); 7-8 = significant macro data, major sector catalyst, S&P 500 large-cap earnings or guidance; 5-6 = individual stock news, mid-cap earnings, sector-specific data. Do NOT filter by impactScore — include all 6-8 headlines you find and sort them by impactScore descending. For each, write a one-sentence "impact" field explaining what it means for investors. Do NOT include a url field
+- liveHeadlines: HARD MINIMUM 6, TARGET 8. Search broadly for today's top market and investment news. Accept any reputable financial source — Bloomberg, Reuters, WSJ, FT, CNBC, AP, MarketWatch, Yahoo Finance, Barron's, Forbes, Seeking Alpha, The Economist, NPR Markets, etc. ONLY exclude obvious spam/PR: PR Newswire, Stock Titan, GuruFocus, GlobeNewsWire company press releases. Impact score — be GENEROUS, most real market news scores 6+: 9-10 = Fed decision, CPI/jobs/GDP print, major geopolitical shock affecting markets; 7-8 = earnings from any S&P 500 company, macro economic data, sector-wide catalyst, rate/yield move, commodity shock; 5-6 = notable individual stock move, mid-cap earnings, analyst upgrade/downgrade on major name. Score 5 minimum for any headline that would appear in a morning market briefing. DO NOT self-filter — return all 6-8 sorted by impactScore descending. Each must have a one-sentence "impact" field. No url field
 - bigStory: the ticker is already set above — write only the reason field by searching for news
 - nextCatalyst: check economic calendar for the next 24 hours
 - positioning: 1-3 items per category, grounded in the real sector data above
@@ -290,6 +290,12 @@ export async function handleTripleCard(ctx: HandlerCtx): Promise<NextResponse> {
   if (todayRow.tomorrow_predictions && !(todayRow.tomorrow_predictions as Record<string, unknown>).spyTrend) {
     await sql`UPDATE market_daily_records SET tomorrow_predictions = NULL, is_noon_locked = false, noon_locked_at = NULL WHERE record_date = ${todayET}`;
     todayRow = { ...todayRow, tomorrow_predictions: null, is_noon_locked: false, noon_locked_at: null };
+  }
+  // Force refresh if headlines are missing or fewer than 5 (bad prior generation)
+  const storedHeadlines = todayRow.live_headlines as unknown[] | null;
+  if (todayRow.elite6_actual && (!storedHeadlines || storedHeadlines.length < 5)) {
+    await sql`UPDATE market_daily_records SET updated_at = NULL WHERE record_date = ${todayET}`;
+    todayRow = { ...todayRow, updated_at: null };
   }
 
   const updatedAt = todayRow.updated_at ? new Date(todayRow.updated_at).getTime() : 0;
@@ -387,6 +393,12 @@ export async function handleRefreshLive(ctx: HandlerCtx): Promise<NextResponse> 
   if (todayRow.tomorrow_predictions && !(todayRow.tomorrow_predictions as Record<string, unknown>).spyTrend) {
     await sql`UPDATE market_daily_records SET tomorrow_predictions = NULL, is_noon_locked = false, noon_locked_at = NULL WHERE record_date = ${todayET}`;
     todayRow = { ...todayRow, tomorrow_predictions: null, is_noon_locked: false, noon_locked_at: null };
+  }
+  // Force refresh if headlines are missing or fewer than 5 (bad prior generation)
+  const storedHeadlines2 = todayRow.live_headlines as unknown[] | null;
+  if (todayRow.elite6_actual && (!storedHeadlines2 || storedHeadlines2.length < 5)) {
+    await sql`UPDATE market_daily_records SET updated_at = NULL WHERE record_date = ${todayET}`;
+    todayRow = { ...todayRow, updated_at: null };
   }
 
   await runAccuracyCalc(sql, yesterdayRow, todayRow, yesterdayET);
