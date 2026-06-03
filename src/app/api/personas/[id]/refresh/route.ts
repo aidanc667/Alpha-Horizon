@@ -3,31 +3,34 @@ import { auth } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
 import type { PersonaHolding, PersonaSnapshotHolding, BenchmarkComponent } from '@/types';
 
-interface YahooQuoteResult {
+interface YahooMeta {
   regularMarketPrice: number;
-  regularMarketChangePercent: number;
-  marketState?: string; // 'REGULAR' | 'CLOSED' | 'PRE' | 'POST' | 'PREPRE'
+  chartPreviousClose?: number;
+  previousClose?: number;
+  marketState?: string; // 'REGULAR' | 'CLOSED' | 'PRE' | 'POST'
 }
-interface YahooQuoteResponse { quoteResponse?: { result?: YahooQuoteResult[] } }
+interface YahooResult { meta: YahooMeta; }
+interface YahooChart { chart?: { result?: YahooResult[] } }
 
 async function fetchPrice(ticker: string): Promise<{ price: number; todayChangePct: number; isMarketOpen: boolean }> {
   if (ticker === 'CASH') return { price: 1.0, todayChangePct: 0, isMarketOpen: false };
-  // Use the quote endpoint — it returns regularMarketChangePercent directly (same source as Google Finance).
-  // The chart endpoint's computed change from adjclose diverges due to dividend adjustments.
-  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(ticker)}&fields=regularMarketPrice,regularMarketChangePercent,marketState`;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=2d`;
   const res = await fetch(url, {
     headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36' },
     cache: 'no-store',
   });
   if (!res.ok) throw new Error(`Yahoo ${res.status} for ${ticker}`);
-  const json = (await res.json()) as YahooQuoteResponse;
-  const result = json.quoteResponse?.result?.[0];
-  if (!result) throw new Error(`No quote data for ${ticker}`);
-  const price: number = result.regularMarketPrice ?? 0;
-  const isMarketOpen = result.marketState === 'REGULAR';
+  const json = (await res.json()) as YahooChart;
+  const result = json.chart?.result?.[0];
+  const meta = result?.meta;
+  const price: number = meta?.regularMarketPrice ?? 0;
+  const isMarketOpen = meta?.marketState === 'REGULAR';
+  // chartPreviousClose is the unadjusted previous session close — matches Google Finance's reference price.
+  // We avoid adjclose here because dividend adjustments cause it to diverge from the actual daily % change.
+  const prevClose: number = meta?.chartPreviousClose ?? meta?.previousClose ?? price;
   // Zero out today's change only in pre-market (market hasn't opened yet for the regular session).
-  const isPreMarket = result.marketState === 'PRE' || result.marketState === 'PREPRE';
-  const todayChangePct = !isPreMarket ? (result.regularMarketChangePercent ?? 0) / 100 : 0;
+  const isPreMarket = meta?.marketState === 'PRE' || meta?.marketState === 'PREPRE';
+  const todayChangePct = !isPreMarket && prevClose > 0 ? (price / prevClose) - 1 : 0;
   return { price, todayChangePct, isMarketOpen };
 }
 
