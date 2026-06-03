@@ -359,4 +359,5 @@ export interface PersonaSnapshot {
   ai_briefing: string | null;
   ai_briefing_generated_at: string | null;
   created_at: string;
+  updated_at: string;
 }

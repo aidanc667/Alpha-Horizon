@@ -200,4 +200,5 @@ export async function runArenaMigrations() {
     )
   `;
   await sql`CREATE INDEX IF NOT EXISTS persona_snapshots_persona_id_idx ON persona_snapshots(persona_id)`;
+  await sql`ALTER TABLE persona_snapshots ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`;
 }

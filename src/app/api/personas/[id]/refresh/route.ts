@@ -120,19 +120,20 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     if (existing.length > 0) {
       const updated = await sql`
         UPDATE persona_snapshots
-        SET portfolio_value = ${totalValue}, benchmark_value = ${benchmarkValue}, holdings_detail_json = ${JSON.stringify(holdings)}
+        SET portfolio_value = ${totalValue}, benchmark_value = ${benchmarkValue}, holdings_detail_json = ${JSON.stringify(holdings)}, updated_at = NOW()
         WHERE persona_id = ${id} AND snapshot_date = ${today}
         RETURNING *
       `;
       snapshot = updated[0];
     } else {
       const inserted = await sql`
-        INSERT INTO persona_snapshots (persona_id, snapshot_date, portfolio_value, benchmark_value, holdings_detail_json)
-        VALUES (${id}, ${today}, ${totalValue}, ${benchmarkValue}, ${JSON.stringify(holdings)})
+        INSERT INTO persona_snapshots (persona_id, snapshot_date, portfolio_value, benchmark_value, holdings_detail_json, updated_at)
+        VALUES (${id}, ${today}, ${totalValue}, ${benchmarkValue}, ${JSON.stringify(holdings)}, NOW())
         ON CONFLICT (persona_id, snapshot_date) DO UPDATE
           SET portfolio_value = EXCLUDED.portfolio_value,
               benchmark_value = EXCLUDED.benchmark_value,
-              holdings_detail_json = EXCLUDED.holdings_detail_json
+              holdings_detail_json = EXCLUDED.holdings_detail_json,
+              updated_at = NOW()
         RETURNING *
       `;
       snapshot = inserted[0];

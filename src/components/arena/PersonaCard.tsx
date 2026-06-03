@@ -34,9 +34,9 @@ export default function PersonaCard({ persona, snapshot, onClick, onDelete }: Pe
   const today = new Date().toISOString().split('T')[0];
   const refreshedLabel = !snapshot
     ? 'Never refreshed'
-    : snapshot.snapshot_date === today
-    ? 'Updated today'
-    : `Updated ${new Date(snapshot.snapshot_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+    : snapshot.updated_at
+    ? `${snapshot.snapshot_date === today ? 'Today' : new Date(snapshot.snapshot_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${new Date(snapshot.updated_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' })} ET`
+    : snapshot.snapshot_date === today ? 'Updated today' : `Updated ${new Date(snapshot.snapshot_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
 
   return (
     <div
