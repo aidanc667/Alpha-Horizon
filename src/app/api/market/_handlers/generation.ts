@@ -68,46 +68,28 @@ Also provide:
 WEIGHTS must sum to exactly 100.
 `;
 
+  // NOTE: Google Search grounding is incompatible with responseSchema/responseMimeType.
+  // We instruct via prompt and extract JSON from the text response instead.
+  const fullPrompt = prompt + `
+
+Return ONLY a valid JSON object — no markdown, no explanation, no code fences. Format:
+{"regime":"...","generatedAt":"...","macroAlignment":"...","assets":[{"rank":1,"ticker":"...","name":"...","category":"...","suggestedWeight":15,"forwardReturn":"10-13%","rationale":"...","risk":"Medium","expenseRatio":"N/A"}]}`;
+
   const response = await ai.models.generateContent({
     model,
-    contents: prompt,
+    contents: fullPrompt,
     config: {
       temperature: 0,
       tools: [{ googleSearch: {} }],
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          regime: { type: Type.STRING },
-          generatedAt: { type: Type.STRING },
-          macroAlignment: { type: Type.STRING },
-          assets: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                rank: { type: Type.NUMBER },
-                ticker: { type: Type.STRING },
-                name: { type: Type.STRING },
-                category: { type: Type.STRING },
-                suggestedWeight: { type: Type.NUMBER },
-                forwardReturn: { type: Type.STRING },
-                rationale: { type: Type.STRING },
-                risk: { type: Type.STRING, enum: ['Low', 'Medium', 'High'] },
-                expenseRatio: { type: Type.STRING },
-              },
-              required: ['rank', 'ticker', 'name', 'category', 'suggestedWeight', 'forwardReturn', 'rationale', 'risk', 'expenseRatio'],
-            },
-          },
-        },
-        required: ['regime', 'generatedAt', 'macroAlignment', 'assets'],
-      },
     },
   });
 
+  const raw = response.text ?? '';
+  const start = raw.indexOf('{');
+  const end = raw.lastIndexOf('}');
   let result;
   try {
-    result = JSON.parse(response.text || '{}');
+    result = JSON.parse(start >= 0 && end > start ? raw.slice(start, end + 1) : '{}');
   } catch {
     return NextResponse.json({ error: 'AI returned invalid JSON. Please try again.' }, { status: 500 });
   }
@@ -183,48 +165,28 @@ Provide:
 CRITICAL: weights must sum to exactly 100.
 `;
 
+  // NOTE: Google Search grounding is incompatible with responseSchema/responseMimeType.
+  // We instruct via prompt and extract JSON from the text response instead.
+  const fullPrompt2 = prompt + `
+
+Return ONLY a valid JSON object — no markdown, no explanation, no code fences. Format:
+{"strategyName":"...","riskProfile":"...","expectedReturn":"6.5-8.5%","expectedVolatility":"10-13%","sharpeEstimate":"0.65","macroAlignment":"...","rebalancingGuidance":"...","allocations":[{"ticker":"VTI","name":"Vanguard Total Stock Market ETF","weight":40,"category":"US Equity","rationale":"...","expenseRatio":"0.03%"}],"riskWarnings":["risk 1","risk 2","risk 3","risk 4"]}`;
+
   const response = await ai.models.generateContent({
     model,
-    contents: prompt,
+    contents: fullPrompt2,
     config: {
       temperature: 0,
       tools: [{ googleSearch: {} }],
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          strategyName: { type: Type.STRING },
-          riskProfile: { type: Type.STRING },
-          expectedReturn: { type: Type.STRING },
-          expectedVolatility: { type: Type.STRING },
-          sharpeEstimate: { type: Type.STRING },
-          macroAlignment: { type: Type.STRING },
-          rebalancingGuidance: { type: Type.STRING },
-          allocations: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                ticker: { type: Type.STRING },
-                name: { type: Type.STRING },
-                weight: { type: Type.NUMBER },
-                category: { type: Type.STRING },
-                rationale: { type: Type.STRING },
-                expenseRatio: { type: Type.STRING },
-              },
-              required: ['ticker', 'name', 'weight', 'category', 'rationale', 'expenseRatio'],
-            },
-          },
-          riskWarnings: { type: Type.ARRAY, items: { type: Type.STRING } },
-        },
-        required: ['strategyName', 'riskProfile', 'expectedReturn', 'expectedVolatility', 'sharpeEstimate', 'macroAlignment', 'rebalancingGuidance', 'allocations', 'riskWarnings'],
-      },
     },
   });
 
+  const raw2 = response.text ?? '';
+  const start2 = raw2.indexOf('{');
+  const end2 = raw2.lastIndexOf('}');
   let result;
   try {
-    result = JSON.parse(response.text || '{}');
+    result = JSON.parse(start2 >= 0 && end2 > start2 ? raw2.slice(start2, end2 + 1) : '{}');
   } catch {
     return NextResponse.json({ error: 'AI returned invalid JSON. Please try again.' }, { status: 500 });
   }
