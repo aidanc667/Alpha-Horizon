@@ -302,7 +302,7 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
     // DO NOT annualize total return geometrically (e.g. 7-day gain^52 = nonsense).
     const meanDailyExcess = mean - RISK_FREE_DAILY;
     const dailyStd = Math.sqrt(variance);
-    const sharpe = n >= 10 && dailyStd > 0 ? (meanDailyExcess / dailyStd) * Math.sqrt(252) : null;
+    const sharpe = n >= 5 && dailyStd > 0 ? (meanDailyExcess / dailyStd) * Math.sqrt(252) : null;
 
     // Sortino — same approach but denominator uses downside deviation only
     const downsideDays = dailyPortfolio.filter(r => r < RISK_FREE_DAILY);
@@ -310,7 +310,7 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
       ? downsideDays.reduce((s, r) => s + (r - RISK_FREE_DAILY) ** 2, 0) / downsideDays.length
       : 0;
     const annualizedDownsideDev = Math.sqrt(downsideVar * 252);
-    const sortino = n >= 10 && annualizedDownsideDev > 0
+    const sortino = n >= 5 && annualizedDownsideDev > 0
       ? (meanDailyExcess * Math.sqrt(252)) / annualizedDownsideDev
       : null;
 
@@ -326,7 +326,7 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
 
     // Beta — needs at least 5 points for a meaningful covariance estimate
     let beta: number | null = null;
-    if (n >= 10) {
+    if (n >= 5) {
       const bMean = dailyBenchmark.reduce((s, r) => s + r, 0) / n;
       const cov = dailyPortfolio.reduce((s, r, i) => s + (r - mean) * (dailyBenchmark[i] - bMean), 0) / n;
       const bVar = dailyBenchmark.reduce((s, r) => s + (r - bMean) ** 2, 0) / n;
@@ -482,7 +482,7 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
                   ) : (
                     <p className="text-xl font-bold font-mono text-slate-600">—</p>
                   )}
-                  <p className="text-slate-500 text-[10px] mt-0.5">{metrics.sharpe !== null ? 'risk-adj return (4.5% rf)' : 'need 10+ snapshots'}</p>
+                  <p className="text-slate-500 text-[10px] mt-0.5">{metrics.sharpe !== null ? 'risk-adj return (4.5% rf)' : 'need 5+ snapshots'}</p>
                 </div>
                 {/* Sortino */}
                 <div className="bg-white/4 border border-white/6 rounded-xl p-3">
@@ -496,7 +496,7 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
                   ) : (
                     <p className="text-xl font-bold font-mono text-slate-600">—</p>
                   )}
-                  <p className="text-slate-500 text-[10px] mt-0.5">{metrics.sortino !== null ? 'downside risk only' : 'need 10+ snapshots'}</p>
+                  <p className="text-slate-500 text-[10px] mt-0.5">{metrics.sortino !== null ? 'downside risk only' : 'need 5+ snapshots'}</p>
                 </div>
                 {/* Max Drawdown */}
                 <div className="bg-white/4 border border-white/6 rounded-xl p-3">
@@ -519,7 +519,7 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
                   ) : (
                     <p className="text-xl font-bold font-mono text-slate-600">—</p>
                   )}
-                  <p className="text-slate-500 text-[10px] mt-0.5">{metrics.beta !== null ? 'vs benchmark sensitivity' : 'need 10+ snapshots'}</p>
+                  <p className="text-slate-500 text-[10px] mt-0.5">{metrics.beta !== null ? 'vs benchmark sensitivity' : 'need 5+ snapshots'}</p>
                 </div>
                 {/* Win Rate */}
                 <div className="bg-white/4 border border-white/6 rounded-xl p-3">
