@@ -55,6 +55,7 @@ IMPORTANT: suggestedWeights MUST sum to exactly 100.
     model,
     contents: prompt,
     config: {
+      thinkingConfig: { thinkingBudget: 0 },
       responseMimeType: 'application/json',
       responseSchema: {
         type: Type.OBJECT,
@@ -141,7 +142,7 @@ CRITICAL: allocation weights MUST sum to exactly 100.
     model,
     contents: prompt + '\n\nRespond with ONLY a valid JSON object — no markdown, no code fences, no commentary.',
     config: {
-      tools: [{ googleSearch: {} }],
+      thinkingConfig: { thinkingBudget: 0 },
     },
   });
 

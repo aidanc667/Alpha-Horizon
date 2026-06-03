@@ -71,6 +71,7 @@ Summary: ${liveContext.summary}
   const chat = ai.chats.create({
     model,
     config: {
+      thinkingConfig: { thinkingBudget: 0 },
       ...(useSearch ? { tools: [{ googleSearch: {} }] } : {}),
       systemInstruction: `You are Silas. Former Goldman Sachs macro strategist, Tiger Global PM, Bridgewater researcher. Now a private wealth advisor to ultra-high-net-worth clients. You've seen every cycle, every crash, every bubble. You have deep knowledge of individual stocks, ETFs, macro, options, private credit — everything.
 
