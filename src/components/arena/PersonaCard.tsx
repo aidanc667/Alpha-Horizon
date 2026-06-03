@@ -31,6 +31,13 @@ export default function PersonaCard({ persona, snapshot, onClick, onDelete }: Pe
   const riskLabel = persona.risk_score <= 3 ? 'Conservative' : persona.risk_score <= 6 ? 'Moderate' : 'Aggressive';
   const riskColor = persona.risk_score <= 3 ? 'text-emerald-400' : persona.risk_score <= 6 ? 'text-amber-400' : 'text-red-400';
 
+  const today = new Date().toISOString().split('T')[0];
+  const refreshedLabel = !snapshot
+    ? 'Never refreshed'
+    : snapshot.snapshot_date === today
+    ? 'Updated today'
+    : `Updated ${new Date(snapshot.snapshot_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+
   return (
     <div
       onClick={onClick}
@@ -58,6 +65,8 @@ export default function PersonaCard({ persona, snapshot, onClick, onDelete }: Pe
             <span className="text-slate-500 text-xs">vs {benchLabel(persona.benchmark_ticker)}</span>
             <span className="text-slate-600">·</span>
             <span className="text-slate-500 text-xs">{daysRunning}d</span>
+            <span className="text-slate-600">·</span>
+            <span className={`text-xs ${snapshot?.snapshot_date === today ? 'text-emerald-600' : 'text-slate-600'}`}>{refreshedLabel}</span>
           </div>
         </div>
       </div>

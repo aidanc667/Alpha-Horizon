@@ -63,15 +63,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Calculate new shares
     const newShares = dollarAmount / tickerPrice;
 
-    // Update allocation_json — add new lot entry
+    // Update allocation_json — merge into existing lot if ticker already held
     const allocation: PersonaHolding[] = persona.allocation_json;
-    const newLot: PersonaHolding = {
-      ticker: cleanTicker,
-      weight: 0, // recalculated dynamically on display
-      shares: newShares,
-      inceptionPrice: tickerPrice,
-    };
-    const updatedAllocation = [...allocation, newLot];
+    const existing = allocation.find((h: PersonaHolding) => h.ticker === cleanTicker);
+    let updatedAllocation: PersonaHolding[];
+    if (existing) {
+      // Weighted-average the inception price across the combined position
+      const existingValue = existing.shares * existing.inceptionPrice;
+      const newValue = newShares * tickerPrice;
+      const mergedInceptionPrice = (existingValue + newValue) / (existing.shares + newShares);
+      updatedAllocation = allocation.map((h: PersonaHolding) =>
+        h.ticker === cleanTicker
+          ? { ...h, shares: h.shares + newShares, inceptionPrice: mergedInceptionPrice }
+          : h
+      );
+    } else {
+      updatedAllocation = [...allocation, { ticker: cleanTicker, weight: 0, shares: newShares, inceptionPrice: tickerPrice }];
+    }
 
     // Update starting_balance (total invested)
     const newStartingBalance = Number(persona.starting_balance) + dollarAmount;
