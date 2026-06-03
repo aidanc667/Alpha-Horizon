@@ -598,7 +598,7 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-white/6">
-                    {['Ticker', 'Shares', 'Inception Price', 'Current Price', 'Today', 'Current Value', 'Total Return', '% of Portfolio', 'Action'].map(h => (
+                    {['Ticker', 'Inception Price', 'Current Price', 'Today', 'Started With', 'Current Value', 'Total Return', '% of Portfolio', 'Action'].map(h => (
                       <th key={h} className="px-4 py-2.5 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
                     ))}
                   </tr>
@@ -607,12 +607,12 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
                   {latestSnapshot.holdings_detail_json.map((h, i) => (
                     <tr key={i} className="border-b border-white/4 hover:bg-white/2 transition-colors">
                       <td className="px-4 py-3 font-mono font-bold text-white text-sm">{h.ticker}</td>
-                      <td className="px-4 py-3 text-slate-300 text-sm font-mono">{h.shares.toFixed(4)}</td>
                       <td className="px-4 py-3 text-slate-400 text-sm font-mono">${h.inceptionPrice.toFixed(2)}</td>
                       <td className="px-4 py-3 text-white text-sm font-mono font-semibold">${h.currentPrice.toFixed(2)}</td>
                       <td className={`px-4 py-3 text-sm font-bold font-mono ${h.todayChangePct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                         {h.todayChangePct >= 0 ? '+' : ''}{(h.todayChangePct * 100).toFixed(2)}%
                       </td>
+                      <td className="px-4 py-3 text-slate-300 text-sm font-mono">${(h.shares * h.inceptionPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       <td className="px-4 py-3 text-white text-sm font-mono">${h.currentValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       <td className={`px-4 py-3 text-sm font-bold font-mono ${h.gainLossPct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                         {h.gainLossPct >= 0 ? '+' : ''}{(h.gainLossPct * 100).toFixed(2)}%
