@@ -239,7 +239,8 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
 
   // Chart data — both indexed to starting_balance
   const chartData = [...snapshots].reverse().map(s => ({
-    date: new Date(s.snapshot_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    // Append T12:00:00 so the date parses in local time, not UTC midnight (which shifts the label back one day in US timezones)
+    date: new Date(s.snapshot_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
     portfolio: Number(s.portfolio_value),
     benchmark: Number(s.benchmark_value),
   }));
@@ -296,7 +297,7 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
 
     // Volatility
     const mean = dailyPortfolio.reduce((s, r) => s + r, 0) / n;
-    const variance = dailyPortfolio.reduce((s, r) => s + (r - mean) ** 2, 0) / n;
+    const variance = dailyPortfolio.reduce((s, r) => s + (r - mean) ** 2, 0) / (n - 1);
     const annualizedVol = Math.sqrt(variance * 252) * 100;
 
     // Sharpe
