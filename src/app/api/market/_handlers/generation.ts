@@ -87,7 +87,15 @@ IMPORTANT: suggestedWeights MUST sum to exactly 100.
     },
   });
 
-  const result = JSON.parse(response.text || '{}');
+  let result;
+  try {
+    result = JSON.parse(response.text || '{}');
+  } catch {
+    return NextResponse.json({ error: 'AI returned invalid JSON. Please try again.' }, { status: 500 });
+  }
+  if (!result.assets?.length) {
+    return NextResponse.json({ error: 'AI did not return valid stock picks. Please try again.' }, { status: 500 });
+  }
   return NextResponse.json({ success: true, data: result });
 }
 
@@ -150,7 +158,12 @@ CRITICAL: allocation weights MUST sum to exactly 100.
   const jsonStart = raw.indexOf('{');
   const jsonEnd = raw.lastIndexOf('}');
   const jsonStr = jsonStart >= 0 && jsonEnd > jsonStart ? raw.slice(jsonStart, jsonEnd + 1) : '{}';
-  const result = JSON.parse(jsonStr);
+  let result;
+  try {
+    result = JSON.parse(jsonStr);
+  } catch {
+    return NextResponse.json({ error: 'AI returned invalid JSON. Please try again.' }, { status: 500 });
+  }
   if (!result.allocations?.length) {
     return NextResponse.json({ error: 'AI did not return a valid portfolio. Please try again.' }, { status: 500 });
   }

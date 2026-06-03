@@ -214,15 +214,30 @@ export default function AdvisorTab() {
     tickers.forEach(t => fetchWatchlistPrice(t));
   };
 
+  const [watchlistError, setWatchlistError] = useState<string | null>(null);
+
   const addToWatchlist = async () => {
     const t = watchlistInput.trim().toUpperCase();
-    if (!t || watchlistTickers.includes(t) || watchlistTickers.length >= 20) return;
+    if (!t || watchlistTickers.length >= 20) return;
     setWatchlistAdding(true);
-    await fetch('/api/silas/watchlist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticker: t }) });
-    setWatchlistTickers(prev => [...prev, t]);
-    fetchWatchlistPrice(t);
-    setWatchlistInput('');
-    setWatchlistAdding(false);
+    setWatchlistError(null);
+    try {
+      const res = await fetch('/api/silas/watchlist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticker: t }) });
+      if (res.status === 409) {
+        setWatchlistError(`${t} is already in your watchlist`);
+        return;
+      }
+      if (!res.ok) {
+        const d = await res.json();
+        setWatchlistError(d.error || 'Failed to add ticker');
+        return;
+      }
+      setWatchlistTickers(prev => [...prev, t]);
+      fetchWatchlistPrice(t);
+      setWatchlistInput('');
+    } finally {
+      setWatchlistAdding(false);
+    }
   };
 
   const removeFromWatchlist = async (ticker: string) => {
@@ -231,49 +246,72 @@ export default function AdvisorTab() {
     setWatchlistPrices(prev => { const n = { ...prev }; delete n[ticker]; return n; });
   };
 
-  // ── Auto-refresh watchlist prices every 60s when on watchlist tab ──────────
+  // ── Auto-refresh watchlist prices every 60s when on watchlist tab and visible ─
   useEffect(() => {
     if (mode !== 'watchlist' || watchlistTickers.length === 0) return;
-    const interval = setInterval(() => fetchAllWatchlistPrices(watchlistTickers), 60_000);
+    const tick = () => { if (!document.hidden) fetchAllWatchlistPrices(watchlistTickers); };
+    const interval = setInterval(tick, 60_000);
     return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, watchlistTickers]);
 
   // ── Load market context + chat history on mount ───────────────────────────
   useEffect(() => {
+    const CACHE_KEY = 'silas_mkt_ctx';
+    const CACHE_TTL = 60_000;
+
     const load = async () => {
-      const [nearRes, liveRes, polygonRes, historyRes] = await Promise.allSettled([
+      // Use sessionStorage cache to avoid re-fetching market context on tab switches
+      let nearOk = false, liveOk = false;
+      const cached = sessionStorage.getItem(CACHE_KEY);
+      if (cached) {
+        try {
+          const { ts, near, live, polygon } = JSON.parse(cached);
+          if (Date.now() - ts < CACHE_TTL) {
+            if (near)    { setNearTermData(near); nearOk = true; }
+            if (live)    { setLiveData(live); liveOk = true; }
+            if (polygon) setPolygonCtx(polygon);
+            setContextStatus(nearOk && liveOk ? 'ready' : nearOk || liveOk ? 'partial' : 'failed');
+          }
+        } catch { /* stale/corrupt cache, refetch */ }
+      }
+
+      const [nearRes, liveRes, polygonRes, historyRes, wRes] = await Promise.allSettled([
         fetch('/api/market', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'nearTerm' }) }),
         fetch('/api/market', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'liveUpdate' }) }),
         fetch('/api/market', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'polygonContext' }) }),
         fetch('/api/silas/messages'),
+        fetch('/api/silas/watchlist'),
       ]);
-      let nearOk = false, liveOk = false;
+
+      let near = null, live = null, polygon = null;
+      nearOk = false; liveOk = false;
       if (nearRes.status === 'fulfilled' && nearRes.value.ok) {
         const d = await nearRes.value.json();
-        if (d.success) { setNearTermData(d.data); nearOk = true; }
+        if (d.success) { setNearTermData(d.data); near = d.data; nearOk = true; }
       }
       if (liveRes.status === 'fulfilled' && liveRes.value.ok) {
         const d = await liveRes.value.json();
-        if (d.success) { setLiveData(d.data); liveOk = true; }
+        if (d.success) { setLiveData(d.data); live = d.data; liveOk = true; }
       }
       if (polygonRes.status === 'fulfilled' && polygonRes.value.ok) {
         const d = await polygonRes.value.json();
-        if (d.success) setPolygonCtx(d.data);
+        if (d.success) { setPolygonCtx(d.data); polygon = d.data; }
       }
       if (historyRes.status === 'fulfilled' && historyRes.value.ok) {
         const d = await historyRes.value.json();
         if (d.messages?.length) setMessages(d.messages);
       }
-      setContextStatus(nearOk && liveOk ? 'ready' : nearOk || liveOk ? 'partial' : 'failed');
-
-      const wRes = await fetch('/api/silas/watchlist');
-      if (wRes.ok) {
-        const wd = await wRes.json();
+      if (wRes.status === 'fulfilled' && wRes.value.ok) {
+        const wd = await wRes.value.json();
         if (wd.tickers?.length) {
           setWatchlistTickers(wd.tickers);
           wd.tickers.forEach((t: string) => fetchWatchlistPrice(t));
         }
+      }
+      setContextStatus(nearOk && liveOk ? 'ready' : nearOk || liveOk ? 'partial' : 'failed');
+      if (near || live || polygon) {
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), near, live, polygon }));
       }
     };
     load();
@@ -557,7 +595,7 @@ export default function AdvisorTab() {
                 </div>
               ))}
 
-              {chatLoading && messages[messages.length - 1]?.text === '' && (
+              {chatLoading && !messages[messages.length - 1]?.text && (
                 <div className="flex items-start gap-3 justify-start">
                   <div className="w-7 h-7 rounded-full bg-orange-500 flex items-center justify-center shrink-0">
                     <Brain className="w-4 h-4 text-white" />
@@ -669,6 +707,8 @@ export default function AdvisorTab() {
             input={watchlistInput}
             setInput={setWatchlistInput}
             adding={watchlistAdding}
+            addError={watchlistError}
+            onClearError={() => setWatchlistError(null)}
             onAdd={addToWatchlist}
             onRemove={removeFromWatchlist}
             onRefresh={fetchWatchlistPrice}
@@ -1033,6 +1073,11 @@ function BestStrategyPanel({ riskProfile, setRiskProfile, timeHorizon, setTimeHo
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <BarChart3 className="w-4 h-4" />}
             {loading ? 'Building...' : 'Build Optimal Portfolio'}
           </button>
+          {loading && (
+            <p className="text-xs text-zinc-400 mt-2 animate-pulse">
+              Analyzing market regime · Optimizing allocations · Calculating risk metrics…
+            </p>
+          )}
         </div>
         {contextStatus === 'loading' && (
           <p className="text-xs text-amber-600 mt-3 flex items-center gap-1.5">
@@ -1288,13 +1333,15 @@ function MacroCalendarPanel({ onAskSilas }: { onAskSilas: (prompt: string) => vo
 // ─── Watchlist Panel ──────────────────────────────────────────────────────────
 
 function WatchlistPanel({
-  tickers, prices, input, setInput, adding, onAdd, onRemove, onRefresh, onAskSilas,
+  tickers, prices, input, setInput, adding, addError, onClearError, onAdd, onRemove, onRefresh, onAskSilas,
 }: {
   tickers: string[];
   prices: Record<string, { price: number | null; changePct: number | null; loading: boolean }>;
   input: string;
   setInput: (s: string) => void;
   adding: boolean;
+  addError: string | null;
+  onClearError: () => void;
   onAdd: () => void;
   onRemove: (t: string) => void;
   onRefresh: (t: string) => void;
@@ -1310,11 +1357,13 @@ function WatchlistPanel({
         </div>
         <p className="text-xs text-zinc-500 leading-relaxed mb-3">Track your favorite tickers with live prices and daily change. Hit &quot;Ask Silas&quot; on any position to get a real-time read.</p>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 flex-1 bg-white border border-zinc-200 rounded-xl px-4 py-2.5 focus-within:border-orange-400 focus-within:ring-2 focus-within:ring-orange-100 transition-all">
+          <div className={clsx('flex items-center gap-2 flex-1 bg-white border rounded-xl px-4 py-2.5 focus-within:ring-2 focus-within:ring-orange-100 transition-all',
+            addError ? 'border-red-300 focus-within:border-red-400' : 'border-zinc-200 focus-within:border-orange-400'
+          )}>
             <Eye className="w-4 h-4 text-zinc-400 flex-shrink-0" />
             <input
               value={input}
-              onChange={e => setInput(e.target.value.toUpperCase())}
+              onChange={e => { setInput(e.target.value.toUpperCase()); onClearError(); }}
               onKeyDown={e => { if (e.key === 'Enter') onAdd(); }}
               placeholder="Add ticker (e.g. AAPL, NVDA, SPY)"
               className="flex-1 bg-transparent text-sm text-zinc-900 placeholder-zinc-400 outline-none uppercase font-mono"
@@ -1330,7 +1379,8 @@ function WatchlistPanel({
             Add
           </button>
         </div>
-        {tickers.length >= 20 && <p className="text-xs text-zinc-400 mt-2">Maximum 20 tickers reached.</p>}
+        {addError && <p className="text-xs text-red-500 mt-1.5">{addError}</p>}
+        {!addError && tickers.length >= 20 && <p className="text-xs text-zinc-400 mt-2">Maximum 20 tickers reached.</p>}
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-5 min-h-0">

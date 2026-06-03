@@ -41,10 +41,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Maximum 20 tickers reached' }, { status: 400 });
   }
 
+  const [existing] = await sql`
+    SELECT 1 FROM silas_watchlist WHERE user_id = ${userId} AND ticker = ${t}
+  `;
+  if (existing) {
+    return NextResponse.json({ error: 'Ticker already in watchlist', duplicate: true }, { status: 409 });
+  }
+
   await sql`
-    INSERT INTO silas_watchlist (user_id, ticker)
-    VALUES (${userId}, ${t})
-    ON CONFLICT (user_id, ticker) DO NOTHING
+    INSERT INTO silas_watchlist (user_id, ticker) VALUES (${userId}, ${t})
   `;
 
   return NextResponse.json({ success: true });
