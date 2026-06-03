@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
 import { yahooFinance, getCached, setCache, fetchSPYData, fetchSectorData, fetchMarketMovers, fetchFearAndGreed, fetchSPYPutCallRatio } from '../_lib';
 import type { HandlerCtx } from '../_lib';
 
