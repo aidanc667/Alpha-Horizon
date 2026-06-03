@@ -1,0 +1,26 @@
+name: Market Noon Lock
+
+# Fires at 12:10 PM ET (16:10 UTC) every weekday — 10 minutes after market midday
+# so live data has settled. This guarantees Yesterday's Call is populated even
+# if no user opens the app that afternoon.
+on:
+  schedule:
+    - cron: '10 16 * * 1-5'
+  workflow_dispatch: # allow manual trigger from GitHub Actions tab
+
+jobs:
+  noon-lock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Trigger noon lock
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/market/cron")
+          echo "Response status: $STATUS"
+          if [ "$STATUS" -ge 500 ]; then
+            echo "Noon lock failed with status $STATUS"
+            exit 1
+          fi
+          echo "Noon lock triggered successfully"
