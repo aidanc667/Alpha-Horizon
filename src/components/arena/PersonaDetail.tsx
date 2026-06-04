@@ -400,15 +400,12 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
             <ArrowLeft className="w-4 h-4" />Back to Arena
           </button>
           <div className="flex items-center gap-3">
-            {!isMarketHours && (
-              <span className="text-xs text-slate-500 px-2 py-1 bg-white/4 rounded-lg">Market Closed</span>
-            )}
             <button
               onClick={handleAnalyzeInSilas}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-500/15 hover:bg-violet-500/25 border border-violet-500/30 rounded-lg text-violet-400 text-xs font-semibold transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500/15 hover:bg-orange-500/25 border border-orange-500/30 rounded-lg text-orange-400 text-xs font-semibold transition-all"
               title="Import this persona into Silas for AI analysis"
             >
-              <MessageSquare className="w-3.5 h-3.5" />Analyze in Silas
+              <MessageSquare className="w-3.5 h-3.5" />Analyze with Silas
             </button>
             <button
               onClick={() => { setShowAddPosition(true); setAddError(''); }}
@@ -432,7 +429,7 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
             <button
               onClick={handleRefresh}
               disabled={refreshing}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 rounded-lg text-amber-400 text-xs font-semibold transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-500/15 hover:bg-violet-500/25 border border-violet-500/30 rounded-lg text-violet-400 text-xs font-semibold transition-all"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
               {refreshing ? 'Refreshing...' : 'Refresh Prices'}
