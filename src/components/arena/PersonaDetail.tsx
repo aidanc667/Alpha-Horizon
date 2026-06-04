@@ -27,7 +27,7 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
   const [period, setPeriod] = useState<Period>('all');
   const [failedTickers, setFailedTickers] = useState<string[]>([]);
   const [showThesis, setShowThesis] = useState(false);
-  const [isMarketHours, setIsMarketHours] = useState(false);
+  const [_isMarketHours, setIsMarketHours] = useState(false);
   const [showAddPosition, setShowAddPosition] = useState(false);
   const [addTicker, setAddTicker] = useState('');
   const [addAmount, setAddAmount] = useState('');
