@@ -17,10 +17,10 @@ describe('erfApprox', () => {
   });
 
   it('negative inputs match negated positive values from reference table', () => {
-    expect(erfApprox(-1)).toBeCloseTo(-0.8427007929, 4);
-    expect(erfApprox(-0.5)).toBeCloseTo(-0.5204998778, 4);
-    expect(erfApprox(-2)).toBeCloseTo(-0.9953222650, 4);
-    expect(erfApprox(-3)).toBeCloseTo(-0.9999779095, 4);
+    expect(Math.abs(erfApprox(-1) - (-0.8427007929))).toBeLessThan(1e-6);
+    expect(Math.abs(erfApprox(-0.5) - (-0.5204998778))).toBeLessThan(1e-6);
+    expect(Math.abs(erfApprox(-2) - (-0.9953222650))).toBeLessThan(1e-6);
+    expect(Math.abs(erfApprox(-3) - (-0.9999779095))).toBeLessThan(1e-6);
   });
 
   it('erfApprox(0) ≈ 0', () => {
