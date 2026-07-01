@@ -230,7 +230,6 @@ export default function AdvisorTab() {
       }
     };
     load();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Scroll chat to bottom ──────────────────────────────────────────────────
