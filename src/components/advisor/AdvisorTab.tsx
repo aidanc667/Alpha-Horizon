@@ -9,6 +9,10 @@ import {
 import clsx from 'clsx';
 import ReactMarkdown from 'react-markdown';
 import type { NearTermIntelligence, LiveBriefing, DailyIndicators, MacroWeather } from '@/types/market';
+import { useChatMessages } from './hooks/useChatMessages';
+import { WatchlistPanel } from './panels/WatchlistPanel';
+import { BestAssetsPanel } from './panels/BestAssetsPanel';
+import { BestStrategyPanel } from './panels/BestStrategyPanel';
 
 interface MarketCore4 {
   fearGreed: DailyIndicators['fearGreed'];
@@ -22,8 +26,6 @@ import { useAppContext } from '@/lib/appContext';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type AdvisorMode = 'chat' | 'portfolio' | 'thesis' | 'compare' | 'best-assets' | 'best-strategy' | 'macro-calendar' | 'watchlist';
-type RiskProfile = 'Conservative' | 'Moderate' | 'Aggressive';
-type TimeHorizon = '6 months' | '1 year' | '3-5 years' | '10 years';
 type ContextStatus = 'loading' | 'ready' | 'partial' | 'failed';
 
 interface Message {
@@ -36,46 +38,6 @@ interface PortfolioRow {
   asset: string;
   amount: string;
   accountType: string;
-}
-
-interface BestAsset {
-  rank: number;
-  ticker: string;
-  name: string;
-  category: string;
-  suggestedWeight: number;
-  forwardReturn: string;
-  rationale: string;
-  risk: 'Low' | 'Medium' | 'High';
-  expenseRatio: string;
-}
-
-interface BestAssetsResult {
-  regime: string;
-  generatedAt: string;
-  assets: BestAsset[];
-  macroAlignment: string;
-}
-
-interface StrategyAllocation {
-  ticker: string;
-  name: string;
-  weight: number;
-  category: string;
-  rationale: string;
-  expenseRatio: string;
-}
-
-interface BestStrategyResult {
-  strategyName: string;
-  riskProfile: string;
-  expectedReturn: string;
-  expectedVolatility: string;
-  sharpeEstimate: string;
-  macroAlignment: string;
-  rebalancingGuidance: string;
-  allocations: StrategyAllocation[];
-  riskWarnings: string[];
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -128,9 +90,6 @@ export default function AdvisorTab() {
   const [mode, setMode] = useState<AdvisorMode>('chat');
 
   // Chat (shared across chat/portfolio/thesis/compare modes)
-  const [messages, setMessages]   = useState<Message[]>([]);
-  const [chatInput, setChatInput] = useState('');
-  const [chatLoading, setChatLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // Portfolio builder
@@ -144,25 +103,6 @@ export default function AdvisorTab() {
   // Compare
   const [compareItems, setCompareItems] = useState<string[]>(['', '']);
 
-  // Best Stocks
-  const [riskProfile, setRiskProfile] = useState<RiskProfile>('Moderate');
-  const [timeHorizon, setTimeHorizon] = useState<TimeHorizon>('1 year');
-  const [bestAssetsResult, setBestAssetsResult] = useState<BestAssetsResult | null>(null);
-  const [genLoading, setGenLoading] = useState(false);
-  const [genError, setGenError]     = useState<string | null>(null);
-
-  // Optimal Portfolio
-  const [strategyRiskProfile, setStrategyRiskProfile] = useState<RiskProfile>('Moderate');
-  const [strategyHorizon, setStrategyHorizon]         = useState<TimeHorizon>('1 year');
-  const [bestStrategyResult, setBestStrategyResult]   = useState<BestStrategyResult | null>(null);
-  const [strategyLoading, setStrategyLoading]         = useState(false);
-  const [strategyError, setStrategyError]             = useState<string | null>(null);
-
-  // Watchlist
-  const [watchlistTickers, setWatchlistTickers] = useState<string[]>([]);
-  const [watchlistPrices, setWatchlistPrices] = useState<Record<string, { price: number | null; changePct: number | null; loading: boolean }>>({});
-  const [watchlistInput, setWatchlistInput] = useState('');
-  const [watchlistAdding, setWatchlistAdding] = useState(false);
 
   // Session context — accumulates across tool uses so all modes stay consistent
   const [sessionCtx, setSessionCtx] = useState({
@@ -171,6 +111,13 @@ export default function AdvisorTab() {
     thesis: '',
     bestTickers: '',
     crossTabContext: '',
+  });
+
+  const { messages, setMessages, chatInput, setChatInput, chatLoading, sendChat } = useChatMessages({
+    nearTermData,
+    liveData,
+    polygonCtx,
+    sessionCtx,
   });
 
   const [dismissedLab, setDismissedLab] = useState(false);
@@ -211,70 +158,6 @@ export default function AdvisorTab() {
     setSessionCtx(prev => ({ ...prev, crossTabContext: parts.join('\n') }));
   }, [labSnapshot, plannerSnapshot, arenaSnapshot, dismissedLab, dismissedPlanner, dismissedArena]);
 
-  // ── Watchlist helpers ─────────────────────────────────────────────────────
-  const fetchWatchlistPrice = async (ticker: string) => {
-    setWatchlistPrices(prev => ({ ...prev, [ticker]: { price: null, changePct: null, loading: true } }));
-    try {
-      const res = await fetch('/api/market', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'polygonTicker', ticker }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setWatchlistPrices(prev => ({ ...prev, [ticker]: { price: data.data.price, changePct: data.data.changePct, loading: false } }));
-      } else {
-        setWatchlistPrices(prev => ({ ...prev, [ticker]: { price: null, changePct: null, loading: false } }));
-      }
-    } catch {
-      setWatchlistPrices(prev => ({ ...prev, [ticker]: { price: null, changePct: null, loading: false } }));
-    }
-  };
-
-  const fetchAllWatchlistPrices = (tickers: string[]) => {
-    tickers.forEach(t => fetchWatchlistPrice(t));
-  };
-
-  const [watchlistError, setWatchlistError] = useState<string | null>(null);
-
-  const addToWatchlist = async () => {
-    const t = watchlistInput.trim().toUpperCase();
-    if (!t || watchlistTickers.length >= 20) return;
-    setWatchlistAdding(true);
-    setWatchlistError(null);
-    try {
-      const res = await fetch('/api/silas/watchlist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticker: t }) });
-      if (res.status === 409) {
-        setWatchlistError(`${t} is already in your watchlist`);
-        return;
-      }
-      if (!res.ok) {
-        const d = await res.json();
-        setWatchlistError(d.error || 'Failed to add ticker');
-        return;
-      }
-      setWatchlistTickers(prev => [...prev, t]);
-      fetchWatchlistPrice(t);
-      setWatchlistInput('');
-    } finally {
-      setWatchlistAdding(false);
-    }
-  };
-
-  const removeFromWatchlist = async (ticker: string) => {
-    await fetch('/api/silas/watchlist', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticker }) });
-    setWatchlistTickers(prev => prev.filter(t => t !== ticker));
-    setWatchlistPrices(prev => { const n = { ...prev }; delete n[ticker]; return n; });
-  };
-
-  // ── Auto-refresh watchlist prices every 60s when on watchlist tab and visible ─
-  useEffect(() => {
-    if (mode !== 'watchlist' || watchlistTickers.length === 0) return;
-    const tick = () => { if (!document.hidden) fetchAllWatchlistPrices(watchlistTickers); };
-    const interval = setInterval(tick, 60_000);
-    return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, watchlistTickers]);
-
   // ── Load market context + chat history on mount ───────────────────────────
   useEffect(() => {
     const CACHE_KEY = 'silas_mkt_ctx';
@@ -296,12 +179,11 @@ export default function AdvisorTab() {
         } catch { /* stale/corrupt cache, refetch */ }
       }
 
-      const [nearRes, liveRes, polygonRes, historyRes, wRes, tripleRes] = await Promise.allSettled([
+      const [nearRes, liveRes, polygonRes, historyRes, tripleRes] = await Promise.allSettled([
         fetch('/api/market', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'nearTerm' }) }),
         fetch('/api/market', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'liveUpdate' }) }),
         fetch('/api/market', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'polygonContext' }) }),
         fetch('/api/silas/messages'),
-        fetch('/api/silas/watchlist'),
         fetch('/api/market', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'tripleCard' }) }),
       ]);
 
@@ -322,13 +204,6 @@ export default function AdvisorTab() {
       if (historyRes.status === 'fulfilled' && historyRes.value.ok) {
         const d = await historyRes.value.json();
         if (d.messages?.length) setMessages(d.messages);
-      }
-      if (wRes.status === 'fulfilled' && wRes.value.ok) {
-        const wd = await wRes.value.json();
-        if (wd.tickers?.length) {
-          setWatchlistTickers(wd.tickers);
-          wd.tickers.forEach((t: string) => fetchWatchlistPrice(t));
-        }
       }
       // Extract Core 4 + weather from triple card (fire-and-forget, non-blocking)
       if (tripleRes.status === 'fulfilled' && tripleRes.value.ok) {
@@ -363,57 +238,6 @@ export default function AdvisorTab() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, chatLoading]);
 
-  // ── Send chat message (streaming) ─────────────────────────────────────────
-  const sendChat = async (text: string) => {
-    if (!text.trim() || chatLoading) return;
-    const userMsg: Message = { role: 'user', text };
-    setMessages(prev => [...prev, userMsg]);
-    setChatInput('');
-    setChatLoading(true);
-    setMessages(prev => [...prev, { role: 'assistant', text: '' }]);
-
-    try {
-      const historyForAPI = [...messages, userMsg].map(m => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        text: m.text,
-      }));
-      const res = await fetch('/api/market', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'advisorChat', history: historyForAPI, nearTermContext: nearTermData, liveContext: liveData, polygonCtx, sessionCtx }),
-      });
-
-      if (!res.body) throw new Error('No response body');
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let fullText = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        fullText += decoder.decode(value, { stream: true });
-        setMessages(prev => {
-          const updated = [...prev];
-          updated[updated.length - 1] = { role: 'assistant', text: fullText };
-          return updated;
-        });
-      }
-
-      // Persist sequentially to avoid race with clear-history
-      await fetch('/api/silas/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'user', content: text }) });
-      await fetch('/api/silas/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'assistant', content: fullText }) });
-    } catch {
-      setMessages(prev => {
-        const updated = [...prev];
-        updated[updated.length - 1] = { role: 'assistant', text: 'Error getting response. Please try again.' };
-        return updated;
-      });
-    } finally {
-      setChatLoading(false);
-    }
-  };
-
   // ── Analyze portfolio ──────────────────────────────────────────────────────
   const analyzePortfolio = () => {
     const valid = portfolioRows.filter(r => r.asset.trim() && r.amount.trim());
@@ -439,58 +263,6 @@ export default function AdvisorTab() {
     if (valid.length < 2) return;
     setMode('chat');
     sendChat(`Compare ${valid.join(' vs ')} right now. Which do you own in this macro regime and why?`);
-  };
-
-  // ── Generate Best Stocks ───────────────────────────────────────────────────
-  const generateBestAssets = async () => {
-    setGenLoading(true); setGenError(null); setBestAssetsResult(null);
-    try {
-      const res = await fetch('/api/market', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'bestAssets', riskProfile, timeHorizon, nearTermContext: nearTermData, liveContext: liveData, sessionCtx }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setBestAssetsResult(data.data);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const tickers = ((data.data?.assets || []) as any[]).slice(0, 5)
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .map((a: any) => `${a.ticker}(${a.suggestedWeight}%)`).join(', ');
-        if (tickers) setSessionCtx(prev => ({ ...prev, bestTickers: tickers }));
-      } else {
-        setGenError(data.error || 'Generation failed');
-      }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (e: any) {
-      setGenError(e.message || 'Error generating best assets');
-    } finally {
-      setGenLoading(false);
-    }
-  };
-
-  // ── Generate Optimal Portfolio ─────────────────────────────────────────────
-  const generateBestStrategy = async () => {
-    setStrategyLoading(true); setStrategyError(null); setBestStrategyResult(null);
-    try {
-      const res = await fetch('/api/market', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'bestStrategy', riskProfile: strategyRiskProfile, timeHorizon: strategyHorizon, nearTermContext: nearTermData, liveContext: liveData, sessionCtx }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setBestStrategyResult(data.data);
-        const tickers = ((data.data?.allocations || []) as StrategyAllocation[]).slice(0, 5)
-          .map(a => `${a.ticker}(${a.weight}%)`).join(', ');
-        if (tickers) setSessionCtx(prev => ({ ...prev, bestTickers: tickers }));
-      } else {
-        setStrategyError(data.error || 'Generation failed');
-      }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (e: any) {
-      setStrategyError(e.message || 'Error generating portfolio');
-    } finally {
-      setStrategyLoading(false);
-    }
   };
 
   // Suppress unused warning — buildAdvisorContext used by other tabs via context
@@ -777,42 +549,24 @@ export default function AdvisorTab() {
           </div>
         ) : mode === 'best-assets' ? (
           <BestAssetsPanel
-            riskProfile={riskProfile}
-            setRiskProfile={setRiskProfile}
-            timeHorizon={timeHorizon}
-            setTimeHorizon={setTimeHorizon}
-            onGenerate={generateBestAssets}
-            loading={genLoading}
-            error={genError}
-            result={bestAssetsResult}
+            nearTermData={nearTermData}
+            liveData={liveData}
+            sessionCtx={sessionCtx}
             contextStatus={contextStatus}
+            onSessionCtxUpdate={(bestTickers) => setSessionCtx(prev => ({ ...prev, bestTickers }))}
           />
         ) : mode === 'best-strategy' ? (
           <BestStrategyPanel
-            riskProfile={strategyRiskProfile}
-            setRiskProfile={setStrategyRiskProfile}
-            timeHorizon={strategyHorizon}
-            setTimeHorizon={setStrategyHorizon}
-            onGenerate={generateBestStrategy}
-            loading={strategyLoading}
-            error={strategyError}
-            result={bestStrategyResult}
+            nearTermData={nearTermData}
+            liveData={liveData}
+            sessionCtx={sessionCtx}
             contextStatus={contextStatus}
+            onSessionCtxUpdate={(bestTickers) => setSessionCtx(prev => ({ ...prev, bestTickers }))}
           />
         ) : mode === 'macro-calendar' ? (
           <MacroCalendarPanel onAskSilas={(prompt) => { setMode('chat'); sendChat(prompt); }} />
         ) : (
           <WatchlistPanel
-            tickers={watchlistTickers}
-            prices={watchlistPrices}
-            input={watchlistInput}
-            setInput={setWatchlistInput}
-            adding={watchlistAdding}
-            addError={watchlistError}
-            onClearError={() => setWatchlistError(null)}
-            onAdd={addToWatchlist}
-            onRemove={removeFromWatchlist}
-            onRefresh={fetchWatchlistPrice}
             onAskSilas={(prompt) => { setMode('chat'); sendChat(prompt); }}
           />
         )}
@@ -1035,245 +789,6 @@ function ComparePanel({ items, setItems, onCompare, loading }: {
   );
 }
 
-// ─── Shared controls (risk + horizon selectors) ───────────────────────────────
-
-function RiskHorizonControls({ riskProfile, setRiskProfile, timeHorizon, setTimeHorizon }: {
-  riskProfile: RiskProfile; setRiskProfile: (r: RiskProfile) => void;
-  timeHorizon: TimeHorizon; setTimeHorizon: (h: TimeHorizon) => void;
-}) {
-  return (
-    <div className="flex flex-wrap items-end gap-6">
-      <div>
-        <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Risk Profile</p>
-        <div className="flex gap-2">
-          {(['Conservative', 'Moderate', 'Aggressive'] as RiskProfile[]).map(r => (
-            <button key={r} onClick={() => setRiskProfile(r)}
-              className={clsx('px-4 py-2 rounded-xl text-xs font-semibold border transition-all',
-                riskProfile === r ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-zinc-600 border-zinc-200 hover:border-orange-300'
-              )}
-            >{r}</button>
-          ))}
-        </div>
-      </div>
-      <div>
-        <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Time Horizon</p>
-        <div className="flex gap-2">
-          {(['6 months', '1 year', '3-5 years', '10 years'] as TimeHorizon[]).map(h => (
-            <button key={h} onClick={() => setTimeHorizon(h)}
-              className={clsx('px-3 py-2 rounded-xl text-xs font-semibold border transition-all',
-                timeHorizon === h ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-zinc-600 border-zinc-200 hover:border-orange-300'
-              )}
-            >{h}</button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Best Stocks Panel ────────────────────────────────────────────────────────
-
-function BestAssetsPanel({ riskProfile, setRiskProfile, timeHorizon, setTimeHorizon, onGenerate, loading, error, result, contextStatus }: {
-  riskProfile: RiskProfile; setRiskProfile: (r: RiskProfile) => void;
-  timeHorizon: TimeHorizon; setTimeHorizon: (h: TimeHorizon) => void;
-  onGenerate: () => void; loading: boolean; error: string | null;
-  result: BestAssetsResult | null; contextStatus: ContextStatus;
-}) {
-  return (
-    <div className="flex-1 overflow-y-auto px-6 py-6 min-h-0">
-      <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-6 mb-6">
-        <div className="flex flex-wrap items-end gap-6">
-          <RiskHorizonControls riskProfile={riskProfile} setRiskProfile={setRiskProfile} timeHorizon={timeHorizon} setTimeHorizon={setTimeHorizon} />
-          <button
-            onClick={onGenerate}
-            disabled={loading}
-            className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-200 text-white disabled:text-zinc-400 px-6 py-2.5 rounded-xl text-sm font-bold transition-colors"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Star className="w-4 h-4" />}
-            {loading ? 'Generating...' : 'Generate Best Stocks'}
-          </button>
-        </div>
-        {contextStatus === 'loading' && (
-          <p className="text-xs text-amber-600 mt-3 flex items-center gap-1.5">
-            <AlertTriangle className="w-3 h-3" />
-            Market context still loading — results will improve once ready.
-          </p>
-        )}
-      </div>
-
-      {error && <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 text-sm text-red-700">{error}</div>}
-
-      {result ? (
-        <div className="space-y-5">
-          <div>
-            <h2 className="text-xl font-bold text-zinc-900">Top Stocks Right Now</h2>
-            <p className="text-sm text-zinc-500 mt-0.5">{result.generatedAt} · Regime: <span className="font-medium text-zinc-700">{result.regime}</span></p>
-          </div>
-          <div className="bg-orange-50 border border-orange-200 rounded-xl px-5 py-4 text-sm text-orange-900 leading-relaxed">
-            <span className="font-bold">Macro Alignment: </span>{result.macroAlignment}
-          </div>
-          <div className="space-y-3">
-            {(result.assets || []).map((asset, i) => (
-              <div key={i} className="bg-white border border-zinc-200 rounded-xl p-5 flex items-start gap-4 hover:border-orange-200 transition-colors">
-                <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 font-bold text-sm flex items-center justify-center shrink-0">{asset.rank}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <span className="text-base font-bold text-zinc-900 font-mono">{asset.ticker}</span>
-                    <span className="text-sm text-zinc-600">{asset.name}</span>
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600">{asset.category}</span>
-                    <span className={clsx('text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full',
-                      asset.risk === 'Low' ? 'bg-emerald-100 text-emerald-700' :
-                      asset.risk === 'Medium' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
-                    )}>{asset.risk} Risk</span>
-                  </div>
-                  <p className="text-sm text-zinc-600 leading-relaxed mb-3">{asset.rationale}</p>
-                  <div className="flex items-center gap-6 text-xs text-zinc-500 flex-wrap">
-                    <span><strong className="text-zinc-700">Weight:</strong> {asset.suggestedWeight}%</span>
-                    <span><strong className="text-zinc-700">Fwd Return:</strong> {asset.forwardReturn}</span>
-                    <span><strong className="text-zinc-700">ER:</strong> {asset.expenseRatio}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-          <p className="text-[10px] text-zinc-400 leading-relaxed">For informational and educational purposes only. Not financial advice. © 2026 Alpha Horizon</p>
-        </div>
-      ) : !loading && !error && (
-        <div className="text-center py-16 text-zinc-400">
-          <div className="w-16 h-16 rounded-2xl bg-orange-50 flex items-center justify-center mx-auto mb-4">
-            <Star className="w-8 h-8 text-orange-300" />
-          </div>
-          <p className="font-semibold text-zinc-500 mb-2 text-base">Best Stocks</p>
-          <p className="text-sm max-w-sm mx-auto leading-relaxed">
-            Select your risk profile and time horizon, then generate forward-looking top stock picks grounded in today&apos;s market conditions.
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Optimal Portfolio Panel ──────────────────────────────────────────────────
-
-function BestStrategyPanel({ riskProfile, setRiskProfile, timeHorizon, setTimeHorizon, onGenerate, loading, error, result, contextStatus }: {
-  riskProfile: RiskProfile; setRiskProfile: (r: RiskProfile) => void;
-  timeHorizon: TimeHorizon; setTimeHorizon: (h: TimeHorizon) => void;
-  onGenerate: () => void; loading: boolean; error: string | null;
-  result: BestStrategyResult | null; contextStatus: ContextStatus;
-}) {
-  return (
-    <div className="flex-1 overflow-y-auto px-6 py-6 min-h-0">
-      <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-6 mb-6">
-        <div className="flex flex-wrap items-end gap-6">
-          <RiskHorizonControls riskProfile={riskProfile} setRiskProfile={setRiskProfile} timeHorizon={timeHorizon} setTimeHorizon={setTimeHorizon} />
-          <button
-            onClick={onGenerate}
-            disabled={loading}
-            className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-200 text-white disabled:text-zinc-400 px-6 py-2.5 rounded-xl text-sm font-bold transition-colors"
-          >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <BarChart3 className="w-4 h-4" />}
-            {loading ? 'Building...' : 'Build Optimal Portfolio'}
-          </button>
-          {loading && (
-            <p className="text-xs text-zinc-400 mt-2 animate-pulse">
-              Analyzing market regime · Optimizing allocations · Calculating risk metrics…
-            </p>
-          )}
-        </div>
-        {contextStatus === 'loading' && (
-          <p className="text-xs text-amber-600 mt-3 flex items-center gap-1.5">
-            <AlertTriangle className="w-3 h-3" />
-            Market context still loading — results will improve once ready.
-          </p>
-        )}
-      </div>
-
-      {error && <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 text-sm text-red-700">{error}</div>}
-
-      {result ? (
-        <div className="space-y-5">
-          {/* Header */}
-          <div>
-            <h2 className="text-xl font-bold text-zinc-900">{result.strategyName}</h2>
-            <div className="flex flex-wrap gap-3 mt-2">
-              {[
-                { label: 'Expected Return', value: result.expectedReturn },
-                { label: 'Volatility', value: result.expectedVolatility },
-                { label: 'Sharpe', value: result.sharpeEstimate },
-              ].map(({ label, value }) => (
-                <div key={label} className="bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2.5 text-center">
-                  <p className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">{label}</p>
-                  <p className="text-sm font-bold text-zinc-900 mt-0.5">{value}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Macro alignment */}
-          <div className="bg-orange-50 border border-orange-200 rounded-xl px-5 py-4 text-sm text-orange-900 leading-relaxed">
-            <span className="font-bold">Macro Alignment: </span>{result.macroAlignment}
-          </div>
-
-          {/* Allocations */}
-          <div>
-            <h3 className="text-sm font-bold text-zinc-700 uppercase tracking-wider mb-3">Allocations</h3>
-            <div className="space-y-2">
-              {(result.allocations || []).map((alloc, i) => (
-                <div key={i} className="bg-white border border-zinc-200 rounded-xl p-4 flex items-start gap-4 hover:border-orange-200 transition-colors">
-                  <div className="w-12 text-center shrink-0">
-                    <p className="text-lg font-bold text-orange-600">{alloc.weight}%</p>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1 flex-wrap">
-                      <span className="text-sm font-bold text-zinc-900 font-mono">{alloc.ticker}</span>
-                      <span className="text-sm text-zinc-600">{alloc.name}</span>
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600">{alloc.category}</span>
-                    </div>
-                    <p className="text-xs text-zinc-600 leading-relaxed">{alloc.rationale}</p>
-                    <p className="text-[10px] text-zinc-400 mt-1">ER: {alloc.expenseRatio}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Rebalancing */}
-          <div className="bg-blue-50 border border-blue-200 rounded-xl px-5 py-4 text-sm text-blue-900 leading-relaxed">
-            <span className="font-bold">Rebalancing: </span>{result.rebalancingGuidance}
-          </div>
-
-          {/* Risk warnings */}
-          {result.riskWarnings?.length > 0 && (
-            <div>
-              <h3 className="text-sm font-bold text-zinc-700 uppercase tracking-wider mb-2">Risk Warnings</h3>
-              <ul className="space-y-1.5">
-                {result.riskWarnings.map((w, i) => (
-                  <li key={i} className="flex items-start gap-2 text-xs text-zinc-600">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
-                    {w}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          <p className="text-[10px] text-zinc-400 leading-relaxed">For informational and educational purposes only. Not financial advice. © 2026 Alpha Horizon</p>
-        </div>
-      ) : !loading && !error && (
-        <div className="text-center py-16 text-zinc-400">
-          <div className="w-16 h-16 rounded-2xl bg-orange-50 flex items-center justify-center mx-auto mb-4">
-            <BarChart3 className="w-8 h-8 text-orange-300" />
-          </div>
-          <p className="font-semibold text-zinc-500 mb-2 text-base">Optimal Portfolio</p>
-          <p className="text-sm max-w-sm mx-auto leading-relaxed">
-            Sharpe-optimized ETF portfolio built for your risk profile and time horizon. Uses MPT principles calibrated to today&apos;s macro regime.
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── Macro Calendar Data ──────────────────────────────────────────────────────
 
 const MACRO_EVENTS = [
@@ -1426,127 +941,6 @@ function MacroCalendarPanel({ onAskSilas }: { onAskSilas: (prompt: string) => vo
             </div>
           );
         })}
-      </div>
-    </div>
-  );
-}
-
-// ─── Watchlist Panel ──────────────────────────────────────────────────────────
-
-function WatchlistPanel({
-  tickers, prices, input, setInput, adding, addError, onClearError, onAdd, onRemove, onRefresh, onAskSilas,
-}: {
-  tickers: string[];
-  prices: Record<string, { price: number | null; changePct: number | null; loading: boolean }>;
-  input: string;
-  setInput: (s: string) => void;
-  adding: boolean;
-  addError: string | null;
-  onClearError: () => void;
-  onAdd: () => void;
-  onRemove: (t: string) => void;
-  onRefresh: (t: string) => void;
-  onAskSilas: (prompt: string) => void;
-}) {
-  return (
-    <div className="flex flex-col flex-1 min-h-0">
-      <div className="flex-shrink-0 border-b border-zinc-200 px-6 py-4 bg-zinc-50">
-        <div className="flex items-center gap-2 mb-1">
-          <Eye className="w-4 h-4 text-orange-500" />
-          <span className="text-sm font-bold text-zinc-900">Watchlist</span>
-          <span className="text-[10px] text-zinc-400 font-medium ml-1">Auto-refreshes every 60s</span>
-        </div>
-        <p className="text-xs text-zinc-500 leading-relaxed mb-3">Track your favorite tickers with live prices and daily change. Hit &quot;Ask Silas&quot; on any position to get a real-time read.</p>
-        <div className="flex items-center gap-3">
-          <div className={clsx('flex items-center gap-2 flex-1 bg-white border rounded-xl px-4 py-2.5 focus-within:ring-2 focus-within:ring-orange-100 transition-all',
-            addError ? 'border-red-300 focus-within:border-red-400' : 'border-zinc-200 focus-within:border-orange-400'
-          )}>
-            <Eye className="w-4 h-4 text-zinc-400 flex-shrink-0" />
-            <input
-              value={input}
-              onChange={e => { setInput(e.target.value.toUpperCase()); onClearError(); }}
-              onKeyDown={e => { if (e.key === 'Enter') onAdd(); }}
-              placeholder="Add ticker (e.g. AAPL, NVDA, SPY)"
-              className="flex-1 bg-transparent text-sm text-zinc-900 placeholder-zinc-400 outline-none uppercase font-mono"
-              disabled={adding || tickers.length >= 20}
-            />
-          </div>
-          <button
-            onClick={onAdd}
-            disabled={adding || !input.trim() || tickers.length >= 20}
-            className="bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-200 text-white disabled:text-zinc-400 text-xs font-bold px-4 py-2.5 rounded-xl transition-colors flex items-center gap-2 whitespace-nowrap"
-          >
-            {adding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-            Add
-          </button>
-        </div>
-        {addError && <p className="text-xs text-red-500 mt-1.5">{addError}</p>}
-        {!addError && tickers.length >= 20 && <p className="text-xs text-zinc-400 mt-2">Maximum 20 tickers reached.</p>}
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-6 py-5 min-h-0">
-        {tickers.length === 0 ? (
-          <div className="text-center py-16">
-            <Eye className="w-12 h-12 text-zinc-200 mx-auto mb-4" />
-            <p className="text-sm font-semibold text-zinc-500 mb-2">Your watchlist is empty</p>
-            <p className="text-xs text-zinc-400 max-w-xs mx-auto leading-relaxed">Add tickers above to track live prices and get Silas&apos;s take on any position.</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {tickers.map(ticker => {
-              const p = prices[ticker];
-              const isUp = p?.changePct != null && p.changePct >= 0;
-              return (
-                <div key={ticker} className="flex items-center gap-4 bg-white border border-zinc-200 hover:border-zinc-300 rounded-xl px-4 py-3.5 transition-all group">
-                  <div className="w-20 flex-shrink-0">
-                    <p className="text-sm font-bold text-zinc-900 font-mono">{ticker}</p>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    {p?.loading ? (
-                      <p className="text-xs text-zinc-400">Loading…</p>
-                    ) : p?.price != null ? (
-                      <div className="flex items-center gap-3">
-                        <span className="text-base font-bold text-zinc-900">${p.price.toFixed(2)}</span>
-                        {p.changePct != null && (
-                          <span className={clsx(
-                            'flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full',
-                            isUp ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
-                          )}>
-                            {isUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                            {isUp ? '+' : ''}{p.changePct.toFixed(2)}%
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-zinc-400">Price unavailable</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => onRefresh(ticker)}
-                      className="p-1.5 text-zinc-400 hover:text-zinc-600 transition-colors"
-                      title="Refresh price"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => onAskSilas(`Give me your read on ${ticker} right now — current price action, what I should know, and whether you'd be adding, holding, or trimming at these levels.`)}
-                      className="text-[11px] font-semibold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 px-3 py-1.5 rounded-lg transition-all whitespace-nowrap"
-                    >
-                      Ask Silas
-                    </button>
-                    <button
-                      onClick={() => onRemove(ticker)}
-                      className="p-1.5 text-zinc-300 hover:text-red-500 transition-colors"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
     </div>
   );
