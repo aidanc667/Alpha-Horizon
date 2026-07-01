@@ -4,6 +4,67 @@ import { auth } from '@clerk/nextjs/server';
 import { CURATED_ASSETS } from '@/lib/assets';
 import { checkRateLimit } from '@/lib/rateLimit';
 
+// ─── Typed interfaces for Gemini plan responses ───────────────────────────────
+interface BucketRates {
+  rate: number;
+  volatility: number;
+}
+
+interface GeminiMarketRates {
+  shortTerm: BucketRates;
+  longTerm: BucketRates;
+  retirement: BucketRates;
+}
+
+interface BucketSize {
+  percent: number;
+  dollar: number;
+}
+
+interface GeminiPlanSummary {
+  bucketSizes: {
+    shortTerm: BucketSize;
+    longTerm: BucketSize;
+    retirement: BucketSize;
+  };
+  projectedOutcome?: number;
+  successProbability?: number;
+  monteCarlo?: {
+    paths: number;
+    p10: number;
+    p50: number;
+    p90: number;
+    successProbability: number;
+  };
+  keyTakeaways?: string[];
+}
+
+interface BucketAsset {
+  ticker: string;
+  [key: string]: unknown;
+}
+
+interface BucketStrategy {
+  assets: BucketAsset[];
+  [key: string]: unknown;
+}
+
+interface RetirementStrategy {
+  allocation: BucketStrategy;
+  [key: string]: unknown;
+}
+
+interface GeminiPlanResponse {
+  summary: GeminiPlanSummary;
+  marketGroundedRates: GeminiMarketRates;
+  shortTermStrategy?: BucketStrategy;
+  longTermStrategy?: BucketStrategy;
+  retirementStrategy?: RetirementStrategy;
+  [key: string]: unknown;
+}
+
+type GeminiResponses = Record<string, unknown>;
+
 // ─── API key lives ONLY on the server ────────────────────────────────────────
 function getApiKey(): string {
   const key = process.env.GEMINI_API_KEY || process.env.API_KEY;
@@ -139,6 +200,9 @@ export async function POST(req: NextRequest) {
       const formatCurrency = (v: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v);
       const formatPct = (v: number) => v.toFixed(2) + '%';
 
+      if (!body.simResult?.dailyData?.length) {
+        return NextResponse.json({ error: 'simResult.dailyData is empty or missing' }, { status: 400 });
+      }
       const benchmarkPerformance = simResult.dailyData[simResult.dailyData.length - 1].benchmarkValue;
       const diff = simResult.metrics.endingValue - benchmarkPerformance;
       const benchmarkName = startDate >= '2010-09-07' ? 'VOO/BND (60/40)' : 'VFINX/VBMFX (60/40)';
@@ -189,7 +253,7 @@ Write in confident analytical prose. Each paragraph 3–4 sentences. No markdown
 }
 
 // ─── Prompt builders ──────────────────────────────────────────────────────────
-function buildCoreAllocationPrompt(responses: any): string {
+function buildCoreAllocationPrompt(responses: GeminiResponses): string {
   return `You are a World-Class Institutional Portfolio Strategist — CFA charterholder, quantitative researcher, and tax expert. Generate the OPTIMAL 3-Bucket Allocation Plan for this specific user that maximizes RISK-ADJUSTED AFTER-TAX RETURNS.
 
 FOCUS: This call generates ONLY the core asset allocation. Be precise, fast, and personalized.
@@ -500,7 +564,7 @@ FORWARD-LOOKING: ALL CAGR/volatility are 2026 CMA estimates from Vanguard/BlackR
 TASK: Return JSON matching schema exactly. Every number realistic and non-zero. Be SPECIFIC to this user's profile — no generic defaults.`;
 }
 
-function buildTaxEnrichmentPrompt(plan: any, responses: any): string {
+function buildTaxEnrichmentPrompt(plan: GeminiPlanResponse, responses: GeminiResponses): string {
   const hasRoth = responses.rothOption === 'Yes' || (Array.isArray(responses.taxAdvantagedAccounts) && responses.taxAdvantagedAccounts.some((a: string) => a.toLowerCase().includes('roth')));
   const has401k = Array.isArray(responses.taxAdvantagedAccounts) && responses.taxAdvantagedAccounts.some((a: string) => a.toLowerCase().includes('401'));
   const hasHSA = Array.isArray(responses.taxAdvantagedAccounts) && responses.taxAdvantagedAccounts.some((a: string) => a.toLowerCase().includes('hsa'));
@@ -645,7 +709,7 @@ GENERATE THE FOLLOWING (return as JSON matching the taxAlphaData schema):
 Return ONLY valid JSON with a top-level "taxAlphaData" key containing all the above fields.`;
 }
 
-function buildReportPrompt(plan: any, responses: any): string {
+function buildReportPrompt(plan: GeminiPlanResponse, responses: GeminiResponses): string {
   return `You are a Senior Institutional Portfolio Manager. Generate a concise, high-impact Investment Strategy Report.
 
 CRITICAL: Use the GOOGLE SEARCH tool to verify the latest "2026 Capital Market Assumptions" from Vanguard, BlackRock, J.P. Morgan, and Schwab.
@@ -717,15 +781,22 @@ function runMonteCarlo(
   };
 }
 
-function enrichWithProjections(parsed: any, responses: any) {
-  const stripCommas = (v: any) => Number(String(v || '0').replace(/,/g, '')) || 0;
+function enrichWithProjections(parsed: GeminiPlanResponse, responses: GeminiResponses) {
+  const stripCommas = (v: unknown) => Number(String(v || '0').replace(/,/g, '')) || 0;
   const n = Number(responses.timeline) || 10;
   const monthlyContrib = stripCommas(responses.monthlyContribution);
   const goalAmount     = stripCommas(responses.goalAmount) || 1000000;
   const startingAmount = stripCommas(responses.startingAmount);
 
   const r = parsed.marketGroundedRates;
-  const s = parsed.summary.bucketSizes;
+  const s = parsed.summary?.bucketSizes;
+
+  if (!r?.shortTerm?.rate || !r?.longTerm?.rate || !r?.retirement?.rate) {
+    throw new Error('enrichWithProjections: LLM response missing marketGroundedRates rates');
+  }
+  if (!s?.shortTerm || !s?.longTerm || !s?.retirement) {
+    throw new Error('enrichWithProjections: LLM response missing summary.bucketSizes');
+  }
 
   // rates come back as percentage numbers (e.g. 9.5 = 9.5%), convert to decimal
   const toDecimal = (v: number) => (v > 1 ? v / 100 : v);
