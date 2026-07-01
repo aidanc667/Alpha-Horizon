@@ -35,7 +35,9 @@ const LiveNarrativeSchema = z.object({
   briefBullets: z.array(
     z.object({ what: z.string(), why: z.string(), impact: z.string() }).passthrough()
   ).length(5),
-  liveHeadlines: z.array(z.string()).min(6),
+  liveHeadlines: z.array(
+    z.object({ headline: z.string(), source: z.string(), impactScore: z.number() }).passthrough()
+  ).min(6),
 }).passthrough();
 
 // ── Shared helper: accuracy calculation ──────────────────────────────────────
