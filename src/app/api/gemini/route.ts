@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI, Type } from '@google/genai';
 import { auth } from '@clerk/nextjs/server';
+import { z } from 'zod';
 import { CURATED_ASSETS } from '@/lib/assets';
 import { checkRateLimit } from '@/lib/rateLimit';
 
@@ -65,6 +66,32 @@ interface GeminiPlanResponse {
 
 type GeminiResponses = Record<string, unknown>;
 
+// ─── Zod runtime schema for Gemini plan response ──────────────────────────────
+const BucketRatesSchema = z.object({
+  rate: z.number(),
+  volatility: z.number(),
+}).passthrough();
+
+const BucketSizeSchema = z.object({
+  percent: z.number(),
+  dollar: z.number(),
+}).passthrough();
+
+const GeminiPlanResponseSchema = z.object({
+  summary: z.object({
+    bucketSizes: z.object({
+      shortTerm: BucketSizeSchema,
+      longTerm: BucketSizeSchema,
+      retirement: BucketSizeSchema,
+    }).passthrough(),
+  }).passthrough(),
+  marketGroundedRates: z.object({
+    shortTerm: BucketRatesSchema,
+    longTerm: BucketRatesSchema,
+    retirement: BucketRatesSchema,
+  }).passthrough(),
+}).passthrough();
+
 // ─── API key lives ONLY on the server ────────────────────────────────────────
 function getApiKey(): string {
   const key = process.env.GEMINI_API_KEY || process.env.API_KEY;
@@ -108,7 +135,13 @@ export async function POST(req: NextRequest) {
       });
 
       const jsonText = (dataResponse.text || '').trim();
-      const parsed = JSON.parse(jsonText);
+      const rawParsed = JSON.parse(jsonText);
+      const planValidation = GeminiPlanResponseSchema.safeParse(rawParsed);
+      if (!planValidation.success) {
+        console.error('[generatePlan] Plan schema validation failed:', planValidation.error.format(), '\nRaw keys:', Object.keys(rawParsed || {}));
+        throw new Error(`Gemini plan response missing required fields: ${planValidation.error.issues[0]?.message}`);
+      }
+      const parsed = planValidation.data;
 
       // Client-side math synthesis
       const enriched = enrichWithProjections(parsed, responses);
