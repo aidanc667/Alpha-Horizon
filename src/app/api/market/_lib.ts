@@ -77,29 +77,50 @@ export function getApiKey(): string {
 
 // ─── Market data fetchers ─────────────────────────────────────────────────────
 
+async function getCachedL1L2<T>(
+  key: string,
+  ttlMs: number,
+  fetcher: () => Promise<T>
+): Promise<T> {
+  // L1: in-process map
+  const l1 = getCached(key) as T | undefined;
+  if (l1 !== undefined) return l1;
+
+  // L2: Neon DB
+  const l2 = await getDbCache(key, ttlMs) as T | null;
+  if (l2 !== null) {
+    setCache(key, l2); // warm L1
+    return l2;
+  }
+
+  // Network fetch
+  const fresh = await fetcher();
+  setCache(key, fresh);         // write L1
+  await setDbCache(key, fresh); // write L2
+  return fresh;
+}
+
 export async function fetchSPYPutCallRatio(): Promise<number | null> {
-  const cached = getCached('putCallRatio') as number | null | undefined;
-  if (cached !== undefined) return cached;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await (yahooFinance as any).options('SPY');
-    let totalPuts = 0, totalCalls = 0;
-    // Use expirations within the next 30 days — captures broader market hedging sentiment,
-    // not just short-term weekly traders (7-day window was too noisy)
-    const cutoff = Date.now() + 30 * 24 * 60 * 60 * 1000;
-    for (const exp of (result.options ?? [])) {
-      const expDate = exp.expirationDate instanceof Date
-        ? exp.expirationDate.getTime()
-        : new Date(exp.expirationDate ?? 0).getTime();
-      if (expDate > cutoff) continue;
-      for (const p of exp.puts  ?? []) totalPuts  += p.volume ?? 0;
-      for (const c of exp.calls ?? []) totalCalls += c.volume ?? 0;
-    }
-    if (totalCalls === 0) { setCache('putCallRatio', null); return null; }
-    const ratio = Math.round((totalPuts / totalCalls) * 100) / 100;
-    setCache('putCallRatio', ratio);
-    return ratio;
-  } catch { return null; }
+  return getCachedL1L2<number | null>('putCallRatio', CACHE_TTL.putCallRatio, async () => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (yahooFinance as any).options('SPY');
+      let totalPuts = 0, totalCalls = 0;
+      // Use expirations within the next 30 days — captures broader market hedging sentiment,
+      // not just short-term weekly traders (7-day window was too noisy)
+      const cutoff = Date.now() + 30 * 24 * 60 * 60 * 1000;
+      for (const exp of (result.options ?? [])) {
+        const expDate = exp.expirationDate instanceof Date
+          ? exp.expirationDate.getTime()
+          : new Date(exp.expirationDate ?? 0).getTime();
+        if (expDate > cutoff) continue;
+        for (const p of exp.puts  ?? []) totalPuts  += p.volume ?? 0;
+        for (const c of exp.calls ?? []) totalCalls += c.volume ?? 0;
+      }
+      if (totalCalls === 0) return null;
+      return Math.round((totalPuts / totalCalls) * 100) / 100;
+    } catch { return null; }
+  });
 }
 
 export interface SPYData {
@@ -110,31 +131,29 @@ export interface SPYData {
   volumeRatio: number | null;
 }
 export async function fetchSPYData(): Promise<SPYData> {
-  const cached = getCached('spyData') as SPYData | undefined;
-  if (cached) return cached;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const quote = await (yahooFinance as any).quote('SPY');
-    const price: number | null = quote?.regularMarketPrice ?? null;
-    const changePct: number | null = quote?.regularMarketChangePercent != null
-      ? Math.round(quote.regularMarketChangePercent * 100) / 100 : null;
-    const ma50:  number | null = quote?.fiftyDayAverage ?? null;
-    const ma200: number | null = quote?.twoHundredDayAverage ?? null;
-    const vol:   number | null = quote?.regularMarketVolume ?? null;
-    const avg:   number | null = quote?.averageVolume ?? quote?.averageDailyVolume3Month ?? null;
-    const direction: 'Up' | 'Down' | 'Flat' =
-      changePct == null ? 'Flat' : changePct > 0.3 ? 'Up' : changePct < -0.3 ? 'Down' : 'Flat';
-    const result: SPYData = {
-      changePercent: changePct, direction,
-      above200MA: price != null && ma200 != null ? price > ma200 : null,
-      above50MA:  price != null && ma50  != null ? price > ma50  : null,
-      volumeRatio: vol && avg && avg > 0 ? Math.round((vol / avg) * 10) / 10 : null,
-    };
-    setCache('spyData', result);
-    return result;
-  } catch {
-    return { changePercent: null, direction: 'Flat', above200MA: null, above50MA: null, volumeRatio: null };
-  }
+  return getCachedL1L2<SPYData>('spyData', CACHE_TTL.spyData, async () => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const quote = await (yahooFinance as any).quote('SPY');
+      const price: number | null = quote?.regularMarketPrice ?? null;
+      const changePct: number | null = quote?.regularMarketChangePercent != null
+        ? Math.round(quote.regularMarketChangePercent * 100) / 100 : null;
+      const ma50:  number | null = quote?.fiftyDayAverage ?? null;
+      const ma200: number | null = quote?.twoHundredDayAverage ?? null;
+      const vol:   number | null = quote?.regularMarketVolume ?? null;
+      const avg:   number | null = quote?.averageVolume ?? quote?.averageDailyVolume3Month ?? null;
+      const direction: 'Up' | 'Down' | 'Flat' =
+        changePct == null ? 'Flat' : changePct > 0.3 ? 'Up' : changePct < -0.3 ? 'Down' : 'Flat';
+      return {
+        changePercent: changePct, direction,
+        above200MA: price != null && ma200 != null ? price > ma200 : null,
+        above50MA:  price != null && ma50  != null ? price > ma50  : null,
+        volumeRatio: vol && avg && avg > 0 ? Math.round((vol / avg) * 10) / 10 : null,
+      };
+    } catch {
+      return { changePercent: null, direction: 'Flat', above200MA: null, above50MA: null, volumeRatio: null };
+    }
+  });
 }
 
 export interface FearGreedData {
@@ -155,8 +174,7 @@ export interface FearGreedData {
  *   4. SPY daily momentum — positive day → greed; negative → fear
  */
 export async function fetchFearAndGreed(): Promise<FearGreedData | null> {
-  const cached = getCached('fearAndGreed') as FearGreedData | null | undefined;
-  if (cached !== undefined) return cached;
+  return getCachedL1L2<FearGreedData | null>('fearAndGreed', CACHE_TTL.fearAndGreed, async () => {
   try {
     // Fetch VIX + SPY data + put/call in parallel
     const [vixQuote, spyData, pcRatio] = await Promise.all([
@@ -238,12 +256,11 @@ export async function fetchFearAndGreed(): Promise<FearGreedData | null> {
       }
     } catch { /* non-fatal */ }
 
-    const result: FearGreedData = { score, label, delta: score - previousClose, previousClose };
-    setCache('fearAndGreed', result);
-    return result;
+    return { score, label, delta: score - previousClose, previousClose };
   } catch {
     return null;
   }
+  });
 }
 
 export interface MoverQuote { ticker: string; name: string; changePercent: number; change: string }
@@ -255,50 +272,46 @@ const SECTOR_NAMES: Record<string, string> = {
   XLU: 'Utilities', XLB: 'Materials', XLRE: 'Real Estate', XLC: 'Comm. Services',
 };
 export async function fetchSectorData(): Promise<{ leader: SectorQuote; lagger: SectorQuote } | null> {
-  const cached = getCached('sectorData') as { leader: SectorQuote; lagger: SectorQuote } | null | undefined;
-  if (cached !== undefined) return cached;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const quotes = await (yahooFinance as any).quote(SECTOR_ETFS);
-    const results: SectorQuote[] = (Array.isArray(quotes) ? quotes : [quotes])
-      .filter((q: Record<string, unknown>) => q?.symbol != null)
-      .map((q: Record<string, unknown>) => ({
-        ticker:        String(q.symbol),
-        sector:        SECTOR_NAMES[String(q.symbol)] ?? String(q.symbol),
-        changePercent: q.regularMarketChangePercent != null
-          ? Math.round(Number(q.regularMarketChangePercent) * 100) / 100 : 0,
-      }));
-    if (results.length < 2) { setCache('sectorData', null); return null; }
-    results.sort((a, b) => b.changePercent - a.changePercent);
-    const sectorResult = { leader: results[0], lagger: results[results.length - 1] };
-    setCache('sectorData', sectorResult);
-    return sectorResult;
-  } catch { return null; }
+  return getCachedL1L2<{ leader: SectorQuote; lagger: SectorQuote } | null>('sectorData', CACHE_TTL.sectorData, async () => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const quotes = await (yahooFinance as any).quote(SECTOR_ETFS);
+      const results: SectorQuote[] = (Array.isArray(quotes) ? quotes : [quotes])
+        .filter((q: Record<string, unknown>) => q?.symbol != null)
+        .map((q: Record<string, unknown>) => ({
+          ticker:        String(q.symbol),
+          sector:        SECTOR_NAMES[String(q.symbol)] ?? String(q.symbol),
+          changePercent: q.regularMarketChangePercent != null
+            ? Math.round(Number(q.regularMarketChangePercent) * 100) / 100 : 0,
+        }));
+      if (results.length < 2) return null;
+      results.sort((a, b) => b.changePercent - a.changePercent);
+      return { leader: results[0], lagger: results[results.length - 1] };
+    } catch { return null; }
+  });
 }
 
 export async function fetchMarketMovers(): Promise<{ gainers: MoverQuote[]; losers: MoverQuote[] }> {
-  const cached = getCached('marketMovers') as { gainers: MoverQuote[]; losers: MoverQuote[] } | undefined;
-  if (cached) return cached;
-  try {
-    const [gainersResult, losersResult] = await Promise.all([
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (yahooFinance as any).screener({ scrIds: 'day_gainers', count: 10 }).catch(() => null),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (yahooFinance as any).screener({ scrIds: 'day_losers',  count: 10 }).catch(() => null),
-    ]);
-    const toMover = (q: Record<string, unknown>): MoverQuote => {
-      const pct = Math.round(Number(q.regularMarketChangePercent) * 100) / 100;
-      return { ticker: String(q.symbol), name: String(q.shortName ?? q.longName ?? q.symbol),
-               changePercent: pct, change: `${pct >= 0 ? '+' : ''}${pct}%` };
-    };
-    const gainers: MoverQuote[] = ((gainersResult?.quotes ?? gainersResult ?? []) as Record<string, unknown>[])
-      .filter(q => q?.regularMarketChangePercent != null).slice(0, 5).map(toMover);
-    const losers: MoverQuote[] = ((losersResult?.quotes ?? losersResult ?? []) as Record<string, unknown>[])
-      .filter(q => q?.regularMarketChangePercent != null).slice(0, 5).map(toMover);
-    const moversResult = { gainers, losers };
-    setCache('marketMovers', moversResult);
-    return moversResult;
-  } catch { return { gainers: [], losers: [] }; }
+  return getCachedL1L2<{ gainers: MoverQuote[]; losers: MoverQuote[] }>('marketMovers', CACHE_TTL.marketMovers, async () => {
+    try {
+      const [gainersResult, losersResult] = await Promise.all([
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (yahooFinance as any).screener({ scrIds: 'day_gainers', count: 10 }).catch(() => null),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (yahooFinance as any).screener({ scrIds: 'day_losers',  count: 10 }).catch(() => null),
+      ]);
+      const toMover = (q: Record<string, unknown>): MoverQuote => {
+        const pct = Math.round(Number(q.regularMarketChangePercent) * 100) / 100;
+        return { ticker: String(q.symbol), name: String(q.shortName ?? q.longName ?? q.symbol),
+                 changePercent: pct, change: `${pct >= 0 ? '+' : ''}${pct}%` };
+      };
+      const gainers: MoverQuote[] = ((gainersResult?.quotes ?? gainersResult ?? []) as Record<string, unknown>[])
+        .filter(q => q?.regularMarketChangePercent != null).slice(0, 5).map(toMover);
+      const losers: MoverQuote[] = ((losersResult?.quotes ?? losersResult ?? []) as Record<string, unknown>[])
+        .filter(q => q?.regularMarketChangePercent != null).slice(0, 5).map(toMover);
+      return { gainers, losers };
+    } catch { return { gainers: [], losers: [] }; }
+  });
 }
 
 // ─── Shared prompt builders ───────────────────────────────────────────────────
