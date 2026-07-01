@@ -16,29 +16,27 @@ const TomorrowPredictionsSchema = z.object({
     score: z.number(),
     label: z.enum(['Extreme Fear', 'Fear', 'Neutral', 'Greed', 'Extreme Greed']),
     delta: z.number(),
-  }),
+  }).passthrough(),
   spyTrend: z.object({
     direction: z.enum(['Up', 'Down', 'Flat']),
     changePercent: z.number(),
-  }),
+  }).passthrough(),
   sectorRotation: z.object({
-    leader: z.object({ sector: z.string(), ticker: z.string(), performance: z.string() }),
-    lagger: z.object({ sector: z.string(), ticker: z.string(), performance: z.string() }),
-  }),
+    leader: z.object({ sector: z.string(), ticker: z.string(), performance: z.string() }).passthrough(),
+    lagger: z.object({ sector: z.string(), ticker: z.string(), performance: z.string() }).passthrough(),
+  }).passthrough(),
   optionsPulse: z.object({
     putCallRatio: z.number(),
     lean: z.enum(['Bullish', 'Neutral', 'Bearish']),
-  }),
-});
+  }).passthrough(),
+}).passthrough();
 
 const LiveNarrativeSchema = z.object({
   briefBullets: z.array(
-    z.object({ what: z.string(), why: z.string(), impact: z.string() })
+    z.object({ what: z.string(), why: z.string(), impact: z.string() }).passthrough()
   ).length(5),
-  liveHeadlines: z.array(
-    z.object({ headline: z.string(), source: z.string(), impactScore: z.number() }).passthrough()
-  ).min(1),
-});
+  liveHeadlines: z.array(z.string()).min(6),
+}).passthrough();
 
 // ── Shared helper: accuracy calculation ──────────────────────────────────────
 async function runAccuracyCalc(
@@ -277,7 +275,7 @@ Rules:
       console.error('[runLiveRefresh] Schema validation failed:', narrativeValidation.error.format(), '\nRaw:', narrativeRaw.slice(0, 500));
       throw new Error(`runLiveRefresh: invalid narrative shape — ${narrativeValidation.error.issues[0]?.message}`);
     }
-    const narrative = parsedNarrative as typeof parsedNarrative;
+    const narrative = narrativeValidation.data;
 
     const elite6 = {
       fearGreed: { score: fgScore, label: fgLabel, delta: fgDelta, description: `Market Sentiment: ${fgScore}/100 — ${fgLabel}` },
