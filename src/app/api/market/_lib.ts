@@ -83,6 +83,9 @@ async function getCachedL1L2<T>(
   fetcher: () => Promise<T>
 ): Promise<T> {
   // L1: in-process map
+  // Casts are safe within a single deploy: keys are typed by caller convention.
+  // L2 data could theoretically be stale across a schema change — cache key
+  // bumps in agentResponseCache.ts handle this at the plan level.
   const l1 = getCached(key) as T | undefined;
   if (l1 !== undefined) return l1;
 
@@ -95,8 +98,10 @@ async function getCachedL1L2<T>(
 
   // Network fetch
   const fresh = await fetcher();
-  setCache(key, fresh);         // write L1
-  await setDbCache(key, fresh); // write L2
+  setCache(key, fresh);          // always write L1
+  if (fresh !== null) {
+    await setDbCache(key, fresh); // only write L2 for real data
+  }
   return fresh;
 }
 
