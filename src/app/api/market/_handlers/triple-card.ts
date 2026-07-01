@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
 import { db } from '@/lib/db';
 import { scoreAccuracy, buildWeather, computePredictionSignals, computeWeightAdjustment } from '@/lib/market/scoring';
 import { rowToRecord } from '@/lib/market/scoring';
@@ -8,6 +9,36 @@ import {
   computeRollingAccuracy, buildEdgeBoard, loadSignalWeights, saveSignalWeights,
 } from '../_lib';
 import type { HandlerCtx } from '../_lib';
+
+// ── Zod schemas for LLM response validation ───────────────────────────────────
+const TomorrowPredictionsSchema = z.object({
+  fearGreed: z.object({
+    score: z.number(),
+    label: z.enum(['Extreme Fear', 'Fear', 'Neutral', 'Greed', 'Extreme Greed']),
+    delta: z.number(),
+  }),
+  spyTrend: z.object({
+    direction: z.enum(['Up', 'Down', 'Flat']),
+    changePercent: z.number(),
+  }),
+  sectorRotation: z.object({
+    leader: z.object({ sector: z.string(), ticker: z.string(), performance: z.string() }),
+    lagger: z.object({ sector: z.string(), ticker: z.string(), performance: z.string() }),
+  }),
+  optionsPulse: z.object({
+    putCallRatio: z.number(),
+    lean: z.enum(['Bullish', 'Neutral', 'Bearish']),
+  }),
+});
+
+const LiveNarrativeSchema = z.object({
+  briefBullets: z.array(
+    z.object({ what: z.string(), why: z.string(), impact: z.string() })
+  ).length(5),
+  liveHeadlines: z.array(
+    z.object({ headline: z.string(), source: z.string(), impactScore: z.number() }).passthrough()
+  ).min(1),
+});
 
 // ── Shared helper: accuracy calculation ──────────────────────────────────────
 async function runAccuracyCalc(
@@ -126,17 +157,29 @@ Rules:
       config: { tools: [{ googleSearch: {} }], temperature: 0.3 },
     });
     const predRaw = predResp.text || '{}';
-    const predJson = predRaw.slice(predRaw.indexOf('{'), predRaw.lastIndexOf('}') + 1);
-    const predResult = JSON.parse(predJson);
+    const predJsonMatch = predRaw.match(/```(?:json)?\s*([\s\S]*?)```/)
+      ?? predRaw.match(/(\{[\s\S]*\})/);
+    if (!predJsonMatch) {
+      console.error('[runNoonLock] No JSON block in LLM response:', predRaw.slice(0, 300));
+      throw new Error('runNoonLock: LLM response contained no JSON block');
+    }
+    const parsedPred = JSON.parse(predJsonMatch[1]);
+    const predTarget = parsedPred.tomorrowPredictions ?? parsedPred;
+    const predValidation = TomorrowPredictionsSchema.safeParse(predTarget);
+    if (!predValidation.success) {
+      console.error('[runNoonLock] Schema validation failed:', predValidation.error.format(), '\nRaw:', predRaw.slice(0, 500));
+      throw new Error(`runNoonLock: invalid prediction shape — ${predValidation.error.issues[0]?.message}`);
+    }
+    const predResult = { tomorrowPredictions: predValidation.data };
     if (predResult.tomorrowPredictions) {
-      predResult.tomorrowPredictions.confidence = predSignals.confidence;
-      predResult.tomorrowPredictions.signals = predSignals.signals;
+      (predResult.tomorrowPredictions as Record<string, unknown>).confidence = predSignals.confidence;
+      (predResult.tomorrowPredictions as Record<string, unknown>).signals = predSignals.signals;
       await sql`
         UPDATE market_daily_records
         SET is_noon_locked = true,
             noon_locked_at = now(),
             tomorrow_predictions = ${JSON.stringify(predResult.tomorrowPredictions)},
-            tomorrow_outlook = ${predResult.tomorrowOutlook ?? ''},
+            tomorrow_outlook = ${(parsedPred.tomorrowOutlook as string | undefined) ?? ''},
             updated_at = now()
         WHERE record_date = ${todayET}
       `;
@@ -222,8 +265,19 @@ Rules:
       config: { tools: [{ googleSearch: {} }], temperature: 0.2 },
     });
     const narrativeRaw = narrativeResp.text || '{}';
-    const narrativeJson = narrativeRaw.slice(narrativeRaw.indexOf('{'), narrativeRaw.lastIndexOf('}') + 1);
-    const narrative = JSON.parse(narrativeJson);
+    const narrativeJsonMatch = narrativeRaw.match(/```(?:json)?\s*([\s\S]*?)```/)
+      ?? narrativeRaw.match(/(\{[\s\S]*\})/);
+    if (!narrativeJsonMatch) {
+      console.error('[runLiveRefresh] No JSON block in LLM response:', narrativeRaw.slice(0, 300));
+      throw new Error('runLiveRefresh: LLM response contained no JSON block');
+    }
+    const parsedNarrative = JSON.parse(narrativeJsonMatch[1]);
+    const narrativeValidation = LiveNarrativeSchema.safeParse(parsedNarrative);
+    if (!narrativeValidation.success) {
+      console.error('[runLiveRefresh] Schema validation failed:', narrativeValidation.error.format(), '\nRaw:', narrativeRaw.slice(0, 500));
+      throw new Error(`runLiveRefresh: invalid narrative shape — ${narrativeValidation.error.issues[0]?.message}`);
+    }
+    const narrative = parsedNarrative as typeof parsedNarrative;
 
     const elite6 = {
       fearGreed: { score: fgScore, label: fgLabel, delta: fgDelta, description: `Market Sentiment: ${fgScore}/100 — ${fgLabel}` },
