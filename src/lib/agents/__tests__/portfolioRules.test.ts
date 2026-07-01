@@ -50,7 +50,9 @@ describe('selectETFsForAllocation', () => {
   it('does not include both VTI and VT', () => {
     const slices = selectETFsForAllocation(0.8, 0.2, 0, 7, 0.22, ['taxable']);
     const tickers = slices.map(s => s.ticker);
-    expect(tickers.includes('VTI') && tickers.includes('VT')).toBe(false);
+    const hasVTI = tickers.includes('VTI');
+    const hasVT = tickers.includes('VT');
+    expect(hasVTI && hasVT).toBe(false);
   });
 
   it('returns at least 3 holdings', () => {
