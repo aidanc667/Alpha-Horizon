@@ -254,6 +254,7 @@ Write in confident analytical prose. Each paragraph 3–4 sentences. No markdown
 
 // ─── Prompt builders ──────────────────────────────────────────────────────────
 function buildCoreAllocationPrompt(responses: GeminiResponses): string {
+  const str = (v: unknown): string => (v == null ? '' : String(v));
   return `You are a World-Class Institutional Portfolio Strategist — CFA charterholder, quantitative researcher, and tax expert. Generate the OPTIMAL 3-Bucket Allocation Plan for this specific user that maximizes RISK-ADJUSTED AFTER-TAX RETURNS.
 
 FOCUS: This call generates ONLY the core asset allocation. Be precise, fast, and personalized.
@@ -331,22 +332,22 @@ AVAILABLE ASSETS:
 ${CURATED_ASSETS.map((a: any) => `${a.ticker}: ${a.name} (${a.category})`).join(', ')}
 
 USER PROFILE:
-- Goal Type: ${responses.primaryGoal}
-- Target Amount: $${responses.goalAmount}
-- Timeline: ${responses.timeline} years
-- Current Age: ${responses.currentAge || 'Not provided'}
-- Target Retirement Age: ${responses.retirementAge || 'Not provided'}
-- Annual Income: $${responses.annualIncome} (${responses.taxFilingStatus})
-- Starting Capital: $${responses.startingAmount}
-- Monthly Expenses: $${responses.monthlyExpenses}
-- Monthly Contribution: $${responses.monthlyContribution}
-- Income Stability: ${responses.employmentStability || 'Not provided'}
-- Major Planned Expense: ${responses.majorExpense || 'None'}${responses.majorExpenseCost ? ` (~$${responses.majorExpenseCost})` : ''}
-- Stress/Risk Response: ${responses.riskThreshold || responses.downturnBehavior || 'Not provided'}
+- Goal Type: ${str(responses.primaryGoal)}
+- Target Amount: $${str(responses.goalAmount)}
+- Timeline: ${str(responses.timeline)} years
+- Current Age: ${str(responses.currentAge) || 'Not provided'}
+- Target Retirement Age: ${str(responses.retirementAge) || 'Not provided'}
+- Annual Income: $${str(responses.annualIncome)} (${str(responses.taxFilingStatus)})
+- Starting Capital: $${str(responses.startingAmount)}
+- Monthly Expenses: $${str(responses.monthlyExpenses)}
+- Monthly Contribution: $${str(responses.monthlyContribution)}
+- Income Stability: ${str(responses.employmentStability) || 'Not provided'}
+- Major Planned Expense: ${str(responses.majorExpense) || 'None'}${responses.majorExpenseCost ? ` (~$${str(responses.majorExpenseCost)})` : ''}
+- Stress/Risk Response: ${str(responses.riskThreshold) || str(responses.downturnBehavior) || 'Not provided'}
 - State: California
 - Tax-Advantaged Accounts: ${Array.isArray(responses.taxAdvantagedAccounts) ? responses.taxAdvantagedAccounts.join(', ') : 'None'}
-- Employer Match: ${responses.employerMatch || '0'}%
-- Roth IRA Available: ${responses.rothOption || 'No'}
+- Employer Match: ${str(responses.employerMatch) || '0'}%
+- Roth IRA Available: ${str(responses.rothOption) || 'No'}
 
 ═══════════════════════════════════════════════════════
 BUCKET CONSTRUCTION — DECISION FRAMEWORK
@@ -565,6 +566,7 @@ TASK: Return JSON matching schema exactly. Every number realistic and non-zero. 
 }
 
 function buildTaxEnrichmentPrompt(plan: GeminiPlanResponse, responses: GeminiResponses): string {
+  const str = (v: unknown): string => (v == null ? '' : String(v));
   const hasRoth = responses.rothOption === 'Yes' || (Array.isArray(responses.taxAdvantagedAccounts) && responses.taxAdvantagedAccounts.some((a: string) => a.toLowerCase().includes('roth')));
   const has401k = Array.isArray(responses.taxAdvantagedAccounts) && responses.taxAdvantagedAccounts.some((a: string) => a.toLowerCase().includes('401'));
   const hasHSA = Array.isArray(responses.taxAdvantagedAccounts) && responses.taxAdvantagedAccounts.some((a: string) => a.toLowerCase().includes('hsa'));
@@ -573,19 +575,19 @@ function buildTaxEnrichmentPrompt(plan: GeminiPlanResponse, responses: GeminiRes
   return `You are an expert CFA charterholder and CA tax attorney. Generate a comprehensive tax optimization analysis for this investor.
 
 USER PROFILE:
-- Income: $${responses.annualIncome} (${responses.taxFilingStatus})
+- Income: $${str(responses.annualIncome)} (${str(responses.taxFilingStatus)})
 - State: California
-- Timeline: ${responses.timeline} years
+- Timeline: ${str(responses.timeline)} years
 - Tax-Advantaged Accounts: ${Array.isArray(responses.taxAdvantagedAccounts) ? responses.taxAdvantagedAccounts.join(', ') : 'None'}
-- Employer Match: ${responses.employerMatch || '0'}%
+- Employer Match: ${str(responses.employerMatch) || '0'}%
 - Has Roth: ${hasRoth}
 - Has 401k: ${has401k}
 - Has HSA: ${hasHSA}
 
 ALLOCATED ASSETS (from core plan):
-- Safety: ${JSON.stringify(plan.shortTermStrategy?.assets?.map((a: any) => a.ticker) || [])}
-- Growth: ${JSON.stringify(plan.longTermStrategy?.assets?.map((a: any) => a.ticker) || [])}
-- Retirement: ${JSON.stringify(plan.retirementStrategy?.allocation?.assets?.map((a: any) => a.ticker) || [])}
+- Safety: ${JSON.stringify(plan.shortTermStrategy?.assets?.map((a: BucketAsset) => a.ticker) || [])}
+- Growth: ${JSON.stringify(plan.longTermStrategy?.assets?.map((a: BucketAsset) => a.ticker) || [])}
+- Retirement: ${JSON.stringify(plan.retirementStrategy?.allocation?.assets?.map((a: BucketAsset) => a.ticker) || [])}
 
 GENERATE THE FOLLOWING (return as JSON matching the taxAlphaData schema):
 
@@ -625,9 +627,9 @@ GENERATE THE FOLLOWING (return as JSON matching the taxAlphaData schema):
    - strategy: 1-2 sentence account strategy
    ${!hasAnyRetirement ? '⚠️ USER HAS NO RETIREMENT ACCOUNTS: Include ONLY Taxable Brokerage in the matrix. Do NOT include Roth IRA, 401k, or HSA columns. The strategy note should explain that without tax-advantaged accounts, tax efficiency must come entirely from asset selection and CA-exempt instruments.' : ''}
    CRITICAL CONSISTENCY RULES:
-   - Taxable Brokerage MUST contain ALL assets from the Growth Bucket: ${JSON.stringify(plan.longTermStrategy?.assets?.map((a: any) => a.ticker) || [])}
-   - Taxable Brokerage also contains Safety Bucket assets: ${JSON.stringify(plan.shortTermStrategy?.assets?.map((a: any) => a.ticker) || [])}
-   ${hasAnyRetirement ? `- Roth IRA and 401k contain Retirement Bucket assets only: ${JSON.stringify(plan.retirementStrategy?.allocation?.assets?.map((a: any) => a.ticker) || [])}` : '- No retirement bucket assets exist — all assets are in taxable brokerage'}
+   - Taxable Brokerage MUST contain ALL assets from the Growth Bucket: ${JSON.stringify(plan.longTermStrategy?.assets?.map((a: BucketAsset) => a.ticker) || [])}
+   - Taxable Brokerage also contains Safety Bucket assets: ${JSON.stringify(plan.shortTermStrategy?.assets?.map((a: BucketAsset) => a.ticker) || [])}
+   ${hasAnyRetirement ? `- Roth IRA and 401k contain Retirement Bucket assets only: ${JSON.stringify(plan.retirementStrategy?.allocation?.assets?.map((a: BucketAsset) => a.ticker) || [])}` : '- No retirement bucket assets exist — all assets are in taxable brokerage'}
    - NEVER place a growth bucket ticker in Roth/401k column — it contradicts the bucket structure
 
 4. caAfterTaxYields: Table of the TOP 10 assets ranked by HIGHEST after-tax yield for this user's specific bracket.
@@ -710,6 +712,7 @@ Return ONLY valid JSON with a top-level "taxAlphaData" key containing all the ab
 }
 
 function buildReportPrompt(plan: GeminiPlanResponse, responses: GeminiResponses): string {
+  const str = (v: unknown): string => (v == null ? '' : String(v));
   return `You are a Senior Institutional Portfolio Manager. Generate a concise, high-impact Investment Strategy Report.
 
 CRITICAL: Use the GOOGLE SEARCH tool to verify the latest "2026 Capital Market Assumptions" from Vanguard, BlackRock, J.P. Morgan, and Schwab.
@@ -718,14 +721,14 @@ PLAN DATA:
 ${JSON.stringify({ summary: plan.summary, shortTerm: plan.shortTermStrategy, longTerm: plan.longTermStrategy, retirement: plan.retirementStrategy }, null, 2)}
 
 USER CONTEXT:
-- Primary Goal: ${responses.primaryGoal}
-- Target: $${responses.goalAmount}
-- Timeline: ${responses.timeline}y
-- Age: ${responses.currentAge || 'N/A'} (retire at ${responses.retirementAge || 'N/A'})
-- Risk Response: ${responses.riskThreshold || responses.downturnBehavior || 'N/A'}
-- Income Stability: ${responses.employmentStability || 'N/A'}
-- Major Planned Expense: ${responses.majorExpense || 'None'}
-- Income: $${responses.annualIncome} (${responses.taxFilingStatus})
+- Primary Goal: ${str(responses.primaryGoal)}
+- Target: $${str(responses.goalAmount)}
+- Timeline: ${str(responses.timeline)}y
+- Age: ${str(responses.currentAge) || 'N/A'} (retire at ${str(responses.retirementAge) || 'N/A'})
+- Risk Response: ${str(responses.riskThreshold) || str(responses.downturnBehavior) || 'N/A'}
+- Income Stability: ${str(responses.employmentStability) || 'N/A'}
+- Major Planned Expense: ${str(responses.majorExpense) || 'None'}
+- Income: $${str(responses.annualIncome)} (${str(responses.taxFilingStatus)})
 
 REPORT REQUIREMENTS:
 1. START DIRECTLY with "## Executive Summary"
@@ -791,8 +794,11 @@ function enrichWithProjections(parsed: GeminiPlanResponse, responses: GeminiResp
   const r = parsed.marketGroundedRates;
   const s = parsed.summary?.bucketSizes;
 
-  if (!r?.shortTerm?.rate || !r?.longTerm?.rate || !r?.retirement?.rate) {
+  if (r?.shortTerm?.rate == null || r?.longTerm?.rate == null || r?.retirement?.rate == null) {
     throw new Error('enrichWithProjections: LLM response missing marketGroundedRates rates');
+  }
+  if (r?.shortTerm?.volatility == null || r?.longTerm?.volatility == null || r?.retirement?.volatility == null) {
+    throw new Error('enrichWithProjections: LLM response missing marketGroundedRates volatility');
   }
   if (!s?.shortTerm || !s?.longTerm || !s?.retirement) {
     throw new Error('enrichWithProjections: LLM response missing summary.bucketSizes');
