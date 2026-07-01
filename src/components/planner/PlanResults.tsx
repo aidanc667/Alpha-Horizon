@@ -12,6 +12,7 @@ import type { IntakeAnswers } from '@/lib/agents/types';
 import type { IPSDocument } from '@/types';
 import { IPSTab } from './IPSDocument';
 import { generateProjectionSeries } from '@/lib/projectionSeries';
+import { erfApprox } from '@/lib/math/erfApprox';
 
 // ─── Format helpers ────────────────────────────────────────────────────────────
 
@@ -24,12 +25,6 @@ const fmtY = (v: number) =>
 
 // ─── Math helpers (Abramowitz & Stegun 7.1.26, max error 1.5e-7) ──────────────
 
-function erfApprox(x: number): number {
-  const t = 1 / (1 + 0.3275911 * Math.abs(x));
-  const p = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429))));
-  const r = 1 - p * Math.exp(-x * x);
-  return x >= 0 ? r : -r;
-}
 const normalCDF = (z: number) => 0.5 * (1 + erfApprox(z / Math.SQRT2));
 const normalPDF = (z: number) => Math.exp(-z * z / 2) / Math.sqrt(2 * Math.PI);
 
