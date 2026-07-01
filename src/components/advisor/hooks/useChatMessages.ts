@@ -33,15 +33,21 @@ export function useChatMessages({
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
   const messagesRef = useRef<ChatMessage[]>([]);
+  const chatLoadingRef = useRef(false);
 
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
 
-  const sendChat = useCallback(async (text: string) => {
-    if (!text.trim() || chatLoading) return;
+  useEffect(() => {
+    chatLoadingRef.current = chatLoading;
+  }, [chatLoading]);
 
-    const userMsg: ChatMessage = { role: 'user', text };
+  const sendChat = useCallback(async (text?: string) => {
+    const input = (text ?? chatInput).trim();
+    if (!input || chatLoadingRef.current) return;
+
+    const userMsg: ChatMessage = { role: 'user', text: input };
     // Use ref — not state — so history is always current even mid-stream
     const historyForAPI = [...messagesRef.current, userMsg].map(m => ({
       role: m.role === 'assistant' ? 'model' : 'user',
@@ -77,7 +83,7 @@ export function useChatMessages({
       }
 
       // Persist sequentially to avoid race with clear-history
-      await fetch('/api/silas/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'user', content: text }) });
+      await fetch('/api/silas/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'user', content: input }) });
       await fetch('/api/silas/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'assistant', content: fullText }) });
     } catch {
       setMessages(prev => {
@@ -88,7 +94,7 @@ export function useChatMessages({
     } finally {
       setChatLoading(false);
     }
-  }, [chatLoading, nearTermData, liveData, polygonCtx, sessionCtx]);
+  }, [chatInput, nearTermData, liveData, polygonCtx, sessionCtx]);
 
   return { messages, setMessages, chatInput, setChatInput, chatLoading, sendChat };
 }

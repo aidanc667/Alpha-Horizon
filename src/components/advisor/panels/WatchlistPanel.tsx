@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Eye, Plus, Loader2, TrendingUp, TrendingDown, RefreshCw, X } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -20,7 +20,7 @@ export function WatchlistPanel({
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
 
-  const fetchPrice = async (ticker: string) => {
+  const fetchPrice = useCallback(async (ticker: string) => {
     setPrices(prev => ({ ...prev, [ticker]: { price: null, changePct: null, loading: true } }));
     try {
       const res = await fetch('/api/market', {
@@ -36,7 +36,7 @@ export function WatchlistPanel({
     } catch {
       setPrices(prev => ({ ...prev, [ticker]: { price: null, changePct: null, loading: false } }));
     }
-  };
+  }, []);
 
   // Load watchlist on mount
   useEffect(() => {
@@ -46,8 +46,7 @@ export function WatchlistPanel({
         d.tickers.forEach((t: string) => fetchPrice(t));
       }
     }).catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchPrice]);
 
   // Auto-refresh prices every 60s when visible
   useEffect(() => {
@@ -55,8 +54,7 @@ export function WatchlistPanel({
     const tick = () => { if (!document.hidden) tickers.forEach(t => fetchPrice(t)); };
     const interval = setInterval(tick, 60_000);
     return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tickers]);
+  }, [tickers, fetchPrice]);
 
   const addTicker = async () => {
     const t = input.trim().toUpperCase();
