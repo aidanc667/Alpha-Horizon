@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Brain, MessageSquare, PieChart, Zap, GitCompare, Star,
-  Plus, Trash2, Send, Loader2, Activity, AlertTriangle,
-  CalendarDays, Eye, TrendingUp, TrendingDown, RefreshCw, X, BarChart3,
+  Plus, Trash2, Send, Loader2, Activity,
+  CalendarDays, Eye, X, BarChart3,
 } from 'lucide-react';
 import clsx from 'clsx';
 import ReactMarkdown from 'react-markdown';
@@ -28,10 +28,6 @@ import { useAppContext } from '@/lib/appContext';
 type AdvisorMode = 'chat' | 'portfolio' | 'thesis' | 'compare' | 'best-assets' | 'best-strategy' | 'macro-calendar' | 'watchlist';
 type ContextStatus = 'loading' | 'ready' | 'partial' | 'failed';
 
-interface Message {
-  role: 'user' | 'assistant';
-  text: string;
-}
 
 interface PortfolioRow {
   id: string;
