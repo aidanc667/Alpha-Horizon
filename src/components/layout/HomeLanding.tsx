@@ -2,12 +2,6 @@
 
 import React, { useMemo, useEffect, useState } from 'react';
 import {
-  ShieldCheck,
-  FlaskConical,
-  Globe,
-  Brain,
-  Swords,
-  ArrowRight,
   Sparkles,
   TrendingUp,
   TrendingDown,
@@ -49,43 +43,47 @@ function fmtChg(c: number | null): string {
 const APPS = [
   {
     id: 'planner' as ActiveTab,
-    label: 'AI Financial Planner',
-    sub: 'Portfolio Architect',
+    label: 'Portfolio Planner',
+    sub: 'Multi-Agent Construction',
     desc: 'Build a personalized, tax-optimized ETF portfolio using a 7-agent AI pipeline.',
     cta: 'Build a plan',
-    accentHex: '#0d9e60',
-    softHex: '#d8f3e6',
-    icon: ShieldCheck,
+    accentHex: '#16a34a',
+    paleBg: '#f0fdf4',
+    paleBorder: '#bbf7d0',
+    emoji: '📊',
   },
   {
     id: 'lab' as ActiveTab,
-    label: 'Portfolio Growth Lab',
-    sub: 'Advanced Backtesting',
+    label: 'Backtesting Lab',
+    sub: 'Persona Simulation',
     desc: 'Backtest any portfolio strategy against historical data with full risk metrics.',
     cta: 'Open lab',
-    accentHex: '#2563eb',
-    softHex: '#dbe7fb',
-    icon: FlaskConical,
+    accentHex: '#6366f1',
+    paleBg: '#eef2ff',
+    paleBorder: '#c7d2fe',
+    emoji: '🧪',
   },
   {
     id: 'market-home' as ActiveTab,
     label: 'Market Analysis',
-    sub: 'Daily Intelligence',
+    sub: 'Live Intelligence',
     desc: 'Institutional-grade macro intelligence with sector analysis and live market data.',
     cta: 'Read the desk',
     accentHex: '#7c3aed',
-    softHex: '#e6dcfb',
-    icon: Globe,
+    paleBg: '#f5f3ff',
+    paleBorder: '#ddd6fe',
+    emoji: '📈',
   },
   {
     id: 'advisor' as ActiveTab,
-    label: 'Silas',
-    sub: 'Wealth Advisor',
+    label: 'Silas Advisor',
+    sub: 'AI Wealth Advisor',
     desc: 'Your AI wealth advisor for personalized investment guidance and portfolio insights.',
     cta: 'Ask Silas',
-    accentHex: '#d97706',
-    softHex: '#fbe7c8',
-    icon: Brain,
+    accentHex: '#C9A84C',
+    paleBg: '#fefce8',
+    paleBorder: '#fde68a',
+    emoji: '🤖',
   },
   {
     id: 'arena' as ActiveTab,
@@ -93,9 +91,10 @@ const APPS = [
     sub: 'Paper Trading',
     desc: 'Test trading strategies risk-free in a paper trading simulator with live data.',
     cta: 'Enter arena',
-    accentHex: '#b45309',
-    softHex: '#f5e0c8',
-    icon: Swords,
+    accentHex: '#b91c1c',
+    paleBg: '#fff1f2',
+    paleBorder: '#fecdd3',
+    emoji: '⚔️',
   },
 ] as const;
 
@@ -129,20 +128,28 @@ function TickerBar() {
   const items = prices.length ? [...prices, ...prices] : [];
 
   return (
-    <div className="h-8 border-b border-[rgba(15,20,25,0.05)] bg-white/40 overflow-hidden flex items-center flex-shrink-0">
+    <div
+      className="flex-shrink-0 flex items-center overflow-hidden"
+      style={{ height: 28, background: '#120d08', borderBottom: '1px solid #1e1610' }}
+    >
       {items.length === 0 ? (
-        <span className="font-mono text-[10px] text-[#9aa3ad] px-4">Loading market data…</span>
+        <span className="font-mono text-[10px] px-4" style={{ color: '#5a4535' }}>Loading market data…</span>
       ) : (
         <div className="ticker-track">
           {items.map((t, i) => {
             const chg = t.change;
-            const color = chg === null ? '#9aa3ad' : chg >= 0 ? '#0d9e60' : '#dc2626';
             return (
-              <span key={i} className="flex items-center gap-2 px-4 border-r border-[rgba(15,20,25,0.05)] whitespace-nowrap">
-                <span className="font-mono text-[10px] font-semibold tracking-[0.08em] text-[#3a4452]">{t.symbol.replace('^', '')}</span>
-                <span className="font-mono text-[10px] text-[#1a2330]">{fmtPrice(t.price, t.symbol)}</span>
+              <span key={i} className="inline-flex items-center gap-1.5 px-4 whitespace-nowrap">
+                <span className="font-mono text-[10px] font-semibold" style={{ color: '#c8b090' }}>
+                  {t.symbol.replace('-USD', '').replace('^TNX', '10Y').replace('^', '')}
+                </span>
+                <span className="font-mono text-[10px]" style={{ color: '#8a7060' }}>
+                  {fmtPrice(t.price, t.symbol)}
+                </span>
                 {chg !== null && (
-                  <span className="font-mono text-[10px]" style={{ color }}>{fmtChg(chg)}</span>
+                  <span className="font-mono text-[9px] font-semibold" style={{ color: chg >= 0 ? '#16a34a' : '#b91c1c' }}>
+                    {fmtChg(chg)}
+                  </span>
                 )}
               </span>
             );
@@ -154,29 +161,46 @@ function TickerBar() {
 }
 
 function AppTile({ app, onNavigate }: { app: typeof APPS[number]; onNavigate: (tab: ActiveTab) => void }) {
-  const Icon = app.icon;
   return (
     <button
       onClick={() => onNavigate(app.id)}
-      className="relative overflow-hidden rounded-[18px] p-[18px] bg-white border border-[rgba(15,20,25,0.06)] flex flex-col text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_32px_-16px_rgba(15,20,25,0.18)] cursor-pointer"
-      style={{ boxShadow: '0 1px 0 rgba(15,20,25,0.02), 0 8px 24px -16px rgba(15,20,25,0.12)' }}
+      className="group text-left rounded-[10px] transition-all border"
+      style={{ padding: '18px 20px', background: '#ffffff', borderColor: '#ebe4d8' }}
+      onMouseEnter={e => {
+        e.currentTarget.style.borderColor = app.accentHex;
+        e.currentTarget.style.boxShadow = `0 0 0 3px ${app.paleBg}`;
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.borderColor = '#ebe4d8';
+        e.currentTarget.style.boxShadow = 'none';
+      }}
     >
-      <div className="absolute inset-0 pointer-events-none" style={{ background: `linear-gradient(135deg, ${app.softHex}88 0%, transparent 55%)` }} />
-      <div className="relative flex items-center gap-2.5 mb-3">
-        <div className="w-9 h-9 rounded-[10px] flex items-center justify-center flex-shrink-0" style={{ background: app.softHex, color: app.accentHex }}>
-          <Icon className="w-[18px] h-[18px]" strokeWidth={1.6} />
+      {/* Top accent strip */}
+      <div className="h-[3px] rounded-full mb-4" style={{ background: app.accentHex, width: 28 }} />
+
+      <div className="flex items-start gap-3 mb-3">
+        <div
+          className="flex-shrink-0 flex items-center justify-center rounded-[8px] text-[18px]"
+          style={{ width: 36, height: 36, background: app.paleBg, border: `1px solid ${app.paleBorder}` }}
+        >
+          {app.emoji}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-[13px] font-semibold tracking-[-0.01em] text-[#0f1419] truncate">{app.label}</div>
-          <div className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#6a7480] mt-0.5">{app.sub}</div>
+          <div className="font-display text-[13px] font-semibold leading-tight" style={{ color: '#1a1008' }}>
+            {app.label}
+          </div>
+          <div className="font-sans uppercase mt-0.5" style={{ fontSize: 9, letterSpacing: '0.12em', fontWeight: 600, color: app.accentHex }}>
+            {app.sub}
+          </div>
         </div>
       </div>
-      <p className="relative text-[11px] leading-[1.55] text-[#6a7480] flex-1">{app.desc}</p>
-      <div className="relative flex items-center mt-3">
-        <span className="text-[11px] font-semibold flex items-center gap-1" style={{ color: app.accentHex }}>
-          {app.cta}
-          <ArrowRight className="w-[11px] h-[11px]" strokeWidth={2} />
-        </span>
+
+      <p className="font-sans text-[11.5px] leading-relaxed mb-4" style={{ color: '#6b5840' }}>
+        {app.desc}
+      </p>
+
+      <div className="font-sans text-[11px] font-semibold" style={{ color: app.accentHex }}>
+        {app.cta} →
       </div>
     </button>
   );
@@ -212,33 +236,37 @@ export default function HomeLanding({ onNavigate }: HomeLandingProps) {
   const fmtChange = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
 
   return (
-    <div className="flex flex-col min-h-full" style={{ background: '#eef0f3' }}>
+    <div className="flex flex-col min-h-full" style={{ background: '#faf8f3' }}>
 
-      {/* Topbar */}
-      <header className="px-8 py-5 flex items-center gap-3.5 border-b border-[rgba(15,20,25,0.05)] bg-white/60 backdrop-blur-xl sticky top-0 z-10">
-        <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-[#6a7480]">Home</span>
-        <span className="text-[#cbd2da]">›</span>
-        <span className="text-[13px] font-medium text-[#0f1419]">Overview</span>
-        <span className="flex-1" />
+      {/* Page header */}
+      <div className="px-8 pt-7 pb-2 flex items-center justify-between">
+        <div>
+          <p className="font-sans uppercase mb-1" style={{ fontSize: 9.5, letterSpacing: '0.16em', fontWeight: 600, color: '#C9A84C' }}>
+            ● Alpha Horizon
+          </p>
+          <h1 className="font-display font-semibold" style={{ fontSize: 26, color: '#1a1008', lineHeight: 1.2 }}>
+            Welcome back.
+          </h1>
+        </div>
         {marketOpen ? (
-          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#e8f5ee] rounded-md">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#0d9e60]" />
-            <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-[#0d6e44]">Markets open</span>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md" style={{ background: '#f0fdf4' }}>
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#16a34a' }} />
+            <span className="font-mono font-semibold uppercase" style={{ fontSize: 10, letterSpacing: '0.08em', color: '#15803d' }}>Markets open</span>
           </div>
         ) : (
-          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#fee2e2] rounded-md">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#dc2626]" />
-            <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-[#991b1b]">Markets closed</span>
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md" style={{ background: '#fff1f2' }}>
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#b91c1c' }} />
+            <span className="font-mono font-semibold uppercase" style={{ fontSize: 10, letterSpacing: '0.08em', color: '#991b1b' }}>Markets closed</span>
           </div>
         )}
-      </header>
+      </div>
 
       {/* Ticker bar */}
       <TickerBar />
 
       {/* Body */}
       <div>
-        <div className="px-8 pt-7 pb-9">
+        <div className="px-8 pt-4 pb-9">
 
           {/* Top bento: hero + brief */}
           <div className="grid grid-cols-6 gap-3.5" style={{ gridAutoRows: '170px' }}>
@@ -330,7 +358,7 @@ export default function HomeLanding({ onNavigate }: HomeLandingProps) {
           </div>
 
           {/* Footer */}
-          <div className="mt-[22px] flex items-center gap-4 text-[11px] text-[#6a7480]">
+          <div className="mt-[22px] flex items-center gap-4 text-[11px]" style={{ color: '#6b5840' }}>
             <span>© 2026 Alpha Horizon · For informational use only — not financial, investment, or tax advice.</span>
             <span className="flex-1" />
             <span className="font-mono text-[10px]">v3.4.1 · last sync {now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
