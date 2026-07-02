@@ -1,34 +1,27 @@
 import type { Metadata } from 'next';
-import { DM_Sans, DM_Serif_Display, DM_Mono, Orbitron } from 'next/font/google';
+import { Playfair_Display, Outfit, JetBrains_Mono } from 'next/font/google';
 import { ClerkProvider } from '@clerk/nextjs';
 import './globals.css';
 
-const dmSans = DM_Sans({
-  subsets: ['latin'],
-  variable: '--font-sans',
-  weight: ['300','400','500','600','700'],
-  display: 'swap',
-});
-
-const dmSerif = DM_Serif_Display({
+const playfair = Playfair_Display({
   subsets: ['latin'],
   variable: '--font-display',
-  weight: ['400'],
-  style: ['normal','italic'],
+  weight: ['400', '600', '700'],
+  style: ['normal', 'italic'],
   display: 'swap',
 });
 
-const dmMono = DM_Mono({
+const outfit = Outfit({
+  subsets: ['latin'],
+  variable: '--font-sans',
+  weight: ['300', '400', '500', '600'],
+  display: 'swap',
+});
+
+const jetbrains = JetBrains_Mono({
   subsets: ['latin'],
   variable: '--font-mono',
-  weight: ['400','500'],
-  display: 'swap',
-});
-
-const orbitron = Orbitron({
-  subsets: ['latin'],
-  variable: '--font-brand',
-  weight: ['700','800'],
+  weight: ['400', '500', '600'],
   display: 'swap',
 });
 
@@ -41,8 +34,8 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <ClerkProvider>
-      <html lang="en" className={`${dmSans.variable} ${dmSerif.variable} ${dmMono.variable} ${orbitron.variable}`}>
-        <body className="font-sans antialiased bg-slate-50 text-gray-800 overflow-hidden">
+      <html lang="en" className={`${playfair.variable} ${outfit.variable} ${jetbrains.variable}`}>
+        <body className="font-sans antialiased bg-[#faf8f3] text-[#1a1008] overflow-hidden">
           {children}
         </body>
       </html>
