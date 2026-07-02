@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { BarChart2, Zap, Lock, TrendingUp, Target, RefreshCw, ChevronRight } from 'lucide-react';
 import TripleCardMarket from '@/components/market/TripleCardMarket';
 
@@ -23,10 +24,13 @@ export default function MarketTab({ initialView = 'home', onBack, onNavigate }: 
 
         {/* Hero */}
         <div className="text-center space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-500/15 border border-purple-500/30 rounded-full mb-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
-            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-purple-300">Live Intelligence</span>
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-2" style={{ background: 'rgba(124,58,237,0.15)', border: '1px solid rgba(124,58,237,0.3)' }}>
+            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#7c3aed' }} />
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em]" style={{ color: '#c4b5fd' }}>Live Intelligence</span>
           </div>
+          <p className="font-sans uppercase mb-1" style={{ fontSize: 9.5, letterSpacing: '0.16em', fontWeight: 600, color: '#7c3aed' }}>
+            ● Market Analysis
+          </p>
           <h1 className="font-brand font-extrabold text-white tracking-[-0.02em] leading-none" style={{ fontSize: '2.75rem' }}>
             MARKET ANALYSIS
           </h1>
@@ -42,50 +46,57 @@ export default function MarketTab({ initialView = 'home', onBack, onNavigate }: 
               icon: BarChart2,
               title: 'Core 4 Indicators',
               desc: 'Fear & Greed sentiment, SPY direction + MAs, sector rotation leader/lagger, and options put/call lean — tracked and scored daily.',
-              color: 'text-purple-400',
-              bg: 'bg-purple-500/8 border-purple-500/20',
+              iconColor: '#7c3aed' as string | null,
+              bg: 'border rounded-2xl p-5 space-y-2',
+              bgStyle: { background: 'rgba(124,58,237,0.08)', borderColor: 'rgba(124,58,237,0.2)' } as React.CSSProperties | undefined,
             },
             {
               icon: Zap,
               title: 'Triple-Card System',
               desc: 'Yesterday\'s receipt with accuracy score, today\'s live pulse, and tomorrow\'s locked predictions — all in one view.',
-              color: 'text-amber-400',
-              bg: 'bg-amber-500/8 border-amber-500/20',
+              iconColor: null,
+              bg: 'border rounded-2xl p-5 space-y-2 bg-amber-500/8 border-amber-500/20',
+              bgStyle: undefined,
             },
             {
               icon: Lock,
               title: 'Noon Lock & Accuracy',
               desc: 'Predictions lock at 12 PM ET daily. Every forecast is scored against actual closes and tracked in a trust ledger.',
-              color: 'text-blue-400',
-              bg: 'bg-blue-500/8 border-blue-500/20',
+              iconColor: null,
+              bg: 'border rounded-2xl p-5 space-y-2 bg-blue-500/8 border-blue-500/20',
+              bgStyle: undefined,
             },
             {
               icon: TrendingUp,
               title: 'Daily Edge Board',
               desc: 'Top 5 assets with statistical edge today and bottom 5 to avoid — grounded with real search data every morning.',
-              color: 'text-emerald-400',
-              bg: 'bg-emerald-500/8 border-emerald-500/20',
+              iconColor: null,
+              bg: 'border rounded-2xl p-5 space-y-2 bg-emerald-500/8 border-emerald-500/20',
+              bgStyle: undefined,
             },
             {
               icon: Target,
               title: "Today's Positioning",
               desc: 'Overweight, neutral, and underweight calls updated daily based on institutional flow and macro conditions.',
-              color: 'text-rose-400',
-              bg: 'bg-rose-500/8 border-rose-500/20',
+              iconColor: null,
+              bg: 'border rounded-2xl p-5 space-y-2 bg-rose-500/8 border-rose-500/20',
+              bgStyle: undefined,
             },
             {
               icon: RefreshCw,
               title: 'Adaptive Signal Weights',
               desc: 'After each scored day, the system auto-adjusts how much it trusts each signal type. Underperforming signals get down-weighted in real-time.',
-              color: 'text-cyan-400',
-              bg: 'bg-cyan-500/8 border-cyan-500/20',
+              iconColor: null,
+              bg: 'border rounded-2xl p-5 space-y-2 bg-cyan-500/8 border-cyan-500/20',
+              bgStyle: undefined,
             },
-          ].map(({ icon: Icon, title, desc, color, bg }) => (
+          ].map(({ icon: Icon, title, desc, iconColor, bg, bgStyle }) => (
             <div
               key={title}
-              className={`border rounded-2xl p-5 space-y-2 ${bg}`}
+              className={bg}
+              style={bgStyle}
             >
-              <Icon className={`w-5 h-5 ${color}`} />
+              <Icon className="w-5 h-5" style={iconColor ? { color: iconColor } : undefined} />
               <p className="text-white font-semibold text-sm">{title}</p>
               <p className="text-slate-500 text-xs leading-relaxed">{desc}</p>
             </div>
@@ -99,11 +110,11 @@ export default function MarketTab({ initialView = 'home', onBack, onNavigate }: 
             {[
               { step: '① Today', desc: 'Live brief: 5 What/Why/Impact bullets, Core 4 indicators, Edge Board, weather gauge', color: 'text-amber-400' },
               { step: '② Noon Lock', desc: 'AI predictions for tomorrow\'s Core 4 sealed at 12 PM ET — self-weighted by past accuracy', color: 'text-blue-400' },
-              { step: '③ Yesterday', desc: 'Predictions scored vs actual closes, accuracy ledger updated', color: 'text-purple-400' },
-            ].map(({ step, desc, color }, i) => (
+              { step: '③ Yesterday', desc: 'Predictions scored vs actual closes, accuracy ledger updated', color: '', violetStep: true },
+            ].map(({ step, desc, color, violetStep }, i) => (
               <div key={i} className="flex items-start md:items-center gap-4 flex-1">
                 <div className="space-y-1">
-                  <p className={`text-sm font-bold ${color}`}>{step}</p>
+                  <p className={`text-sm font-bold ${color}`} style={violetStep ? { color: '#7c3aed' } : undefined}>{step}</p>
                   <p className="text-slate-400 text-xs leading-relaxed">{desc}</p>
                 </div>
                 {i < 2 && (
@@ -120,15 +131,15 @@ export default function MarketTab({ initialView = 'home', onBack, onNavigate }: 
             onClick={() => onNavigate?.('market-near')}
             className="group flex items-center gap-3 px-8 py-4 rounded-2xl font-bold text-base transition-all duration-200"
             style={{
-              background: 'linear-gradient(135deg, rgba(168,85,247,0.25) 0%, rgba(139,92,246,0.15) 100%)',
-              border: '1px solid rgba(168,85,247,0.4)',
-              color: '#c084fc',
+              background: 'linear-gradient(135deg, rgba(124,58,237,0.25) 0%, rgba(124,58,237,0.15) 100%)',
+              border: '1px solid rgba(124,58,237,0.4)',
+              color: '#c4b5fd',
             }}
             onMouseEnter={e => {
-              (e.currentTarget as HTMLButtonElement).style.background = 'linear-gradient(135deg, rgba(168,85,247,0.35) 0%, rgba(139,92,246,0.25) 100%)';
+              (e.currentTarget as HTMLButtonElement).style.background = 'linear-gradient(135deg, rgba(124,58,237,0.35) 0%, rgba(124,58,237,0.25) 100%)';
             }}
             onMouseLeave={e => {
-              (e.currentTarget as HTMLButtonElement).style.background = 'linear-gradient(135deg, rgba(168,85,247,0.25) 0%, rgba(139,92,246,0.15) 100%)';
+              (e.currentTarget as HTMLButtonElement).style.background = 'linear-gradient(135deg, rgba(124,58,237,0.25) 0%, rgba(124,58,237,0.15) 100%)';
             }}
           >
             <Zap className="w-5 h-5" />
