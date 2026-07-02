@@ -130,7 +130,7 @@ function TickerBar() {
   return (
     <div
       className="flex-shrink-0 flex items-center overflow-hidden"
-      style={{ height: 34, background: '#120d08', borderTop: '2px solid #faf8f3', borderBottom: '1px solid #1e1610' }}
+      style={{ height: 34, background: '#120d08', borderTop: '1px solid #1e1610', borderBottom: '1px solid #1e1610' }}
     >
       {items.length === 0 ? (
         <span className="font-mono text-[10px] px-4" style={{ color: '#5a4535' }}>Loading market data…</span>
