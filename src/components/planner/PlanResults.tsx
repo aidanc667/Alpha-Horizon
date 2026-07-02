@@ -1117,6 +1117,83 @@ function AnalysisTab({
         )}
       </div>
 
+      {/* ── Why this beats VT/VOO */}
+      {(() => {
+        const reasons: { headline: string; body: string }[] = [];
+
+        // Sharpe edge
+        const sharpeDelta = portSharpe - vtSharpe;
+        if (sharpeDelta > 0.05) {
+          reasons.push({
+            headline: `Better risk-adjusted return (+${sharpeDelta.toFixed(2)} Sharpe)`,
+            body: `This portfolio earns more return per unit of risk than VT. A higher Sharpe ratio means you're not just chasing raw return — you're being compensated efficiently for the volatility you're taking on.`,
+          });
+        }
+
+        // Tax alpha
+        if (taxBps > 30) {
+          reasons.push({
+            headline: `Tax efficiency worth ~${taxBps} bps/year`,
+            body: `VT held in a taxable account generates taxable dividends and distributions every year. This portfolio places tax-inefficient assets (bonds, REITs) in tax-advantaged accounts and uses tax-efficient ETFs in taxable — a real annual advantage that compounds over time.`,
+          });
+        }
+
+        // Drawdown reduction
+        const ddDelta = vtMaxDDVal - portMaxDD;
+        if (ddDelta > 3) {
+          reasons.push({
+            headline: `${ddDelta.toFixed(0)}% lower estimated max drawdown`,
+            body: `VT fell ~34% during COVID and ~55% in 2008. Based on your risk tolerance and time horizon, this portfolio targets a smaller maximum loss — which matters enormously if you need to withdraw funds or would be tempted to sell at the bottom.`,
+          });
+        }
+
+        // Factor tilt
+        if (factorBps > 0) {
+          reasons.push({
+            headline: `Small-cap value tilt (Fama-French factor premium)`,
+            body: `Decades of academic research show small-cap value stocks have outperformed broad market indices over long periods. VOO is concentrated in large-cap growth — this portfolio tilts toward historically higher-returning factors without abandoning diversification.`,
+          });
+        }
+
+        // International diversification
+        if (intlBps > 0) {
+          reasons.push({
+            headline: `International diversification reduces concentration risk`,
+            body: `US stocks are ~65% of global market cap but represent one economy, one currency, and one regulatory regime. International exposure (developed and emerging markets) historically lowers portfolio correlation and adds return potential when US valuations are stretched — as they are today.`,
+          });
+        }
+
+        // If portfolio basically is close to VT/VOO (aggressive young investor)
+        if (reasons.length === 0) {
+          reasons.push({
+            headline: `Your profile already aligns with a growth-heavy allocation`,
+            body: `Given your risk tolerance and time horizon, the optimizer landed near a broad equity index — which is correct. The value-add here is tax placement, factor efficiency, and avoiding the behavioral trap of holding 100% in one fund with no rebalancing framework.`,
+          });
+        }
+
+        return (
+          <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-5 shadow-sm">
+            <h3 className="text-xs font-bold text-emerald-800 uppercase tracking-widest mb-3">
+              Why this outperforms 100% VT or VOO — for you specifically
+            </h3>
+            <div className="space-y-3">
+              {reasons.map(r => (
+                <div key={r.headline} className="flex items-start gap-2">
+                  <span className="text-emerald-500 font-bold mt-0.5 flex-shrink-0">✓</span>
+                  <div>
+                    <p className="text-xs font-semibold text-emerald-900">{r.headline}</p>
+                    <p className="text-xs text-emerald-700 leading-relaxed mt-0.5">{r.body}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-emerald-600 mt-3 pt-3 border-t border-emerald-200">
+              These advantages compound over time. The gap between a personalized allocation and a single-fund strategy grows significantly over a 10–30 year horizon.
+            </p>
+          </div>
+        );
+      })()}
+
       {/* ── Factor Exposure bar */}
       <div className="rounded-xl border border-gray-100 bg-white p-5 shadow-sm">
         <h3 className="text-xs font-bold text-gray-900 uppercase tracking-widest mb-4">
