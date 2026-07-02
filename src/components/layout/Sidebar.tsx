@@ -72,7 +72,7 @@ export default function Sidebar({ activeTab, onTabChange, onHome }: SidebarProps
       <button
         onClick={onHome}
         className="w-full text-left transition-colors"
-        style={{ padding: '20px 18px 16px', borderBottom: '1px solid #1e1610' }}
+        style={{ padding: '20px 18px 16px', borderBottom: '2px solid #faf8f3' }}
         onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
       >
