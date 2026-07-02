@@ -10,43 +10,32 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
-        display: ['var(--font-display)', 'Georgia', 'serif'],
-        mono: ['var(--font-mono)', 'monospace'],
+        sans:    ['var(--font-sans)',    'system-ui', 'sans-serif'],
+        display: ['var(--font-display)', 'Georgia',   'serif'],
+        mono:    ['var(--font-mono)',    'monospace'],
+        brand:   ['var(--font-display)', 'Georgia',   'serif'],
       },
       colors: {
-        // Design system tokens
-        surface: {
-          DEFAULT: '#0F1117',
-          raised: '#161820',
-          overlay: '#1C1F2A',
-          border: '#252836',
-        },
+        // H theme tokens
+        cream:    { DEFAULT: '#faf8f3', card: '#ffffff' },
+        espresso: { DEFAULT: '#120d08', border: '#1e1610' },
+        ink:      { DEFAULT: '#1a1008', muted: '#6b5840', dim: '#b09060' },
+        gold:     { DEFAULT: '#C9A84C', light: '#E4C97E', pale: '#fefce8', border: '#fde68a' },
+        // Per-app accents
         emerald: {
-          50:  '#edfdf4',
-          100: '#d3f9e5',
-          200: '#aaf0cd',
-          300: '#74e3ae',
-          400: '#3cce8a',
-          500: '#18b370',
-          600: '#0d9e60',
-          700: '#0c7e4f',
-          800: '#0e6341',
-          900: '#0d5137',
-          950: '#052d1e',
+          DEFAULT: '#16a34a', pale: '#f0fdf4', border: '#bbf7d0',
+          50: '#f0fdf4', 100: '#dcfce7', 200: '#bbf7d0', 300: '#86efac',
+          400: '#4ade80', 500: '#22c55e', 600: '#16a34a', 700: '#15803d',
         },
-        gold: {
-          DEFAULT: '#C9A84C',
-          light: '#E4C97E',
-          dim: 'rgba(201,168,76,0.15)',
-        },
+        indigo:  { DEFAULT: '#6366f1', pale: '#eef2ff', border: '#c7d2fe' },
+        violet:  { DEFAULT: '#7c3aed', pale: '#f5f3ff', border: '#ddd6fe' },
+        crimson: { DEFAULT: '#b91c1c', pale: '#fff1f2', border: '#fecdd3' },
       },
       animation: {
         'fade-up':    'fadeUp 0.4s ease both',
         'fade-in':    'fadeIn 0.3s ease both',
-        'shimmer':    'shimmer 2s linear infinite',
         'pulse-soft': 'pulseSoft 2s ease-in-out infinite',
-        'spin-slow':  'spin 3s linear infinite',
+        'ticker':     'tickerScroll 30s linear infinite',
       },
       keyframes: {
         fadeUp: {
@@ -57,17 +46,14 @@ const config: Config = {
           from: { opacity: '0' },
           to:   { opacity: '1' },
         },
-        shimmer: {
-          '0%':   { backgroundPosition: '-200% center' },
-          '100%': { backgroundPosition:  '200% center' },
-        },
         pulseSoft: {
           '0%, 100%': { opacity: '1' },
-          '50%':      { opacity: '0.6' },
+          '50%':      { opacity: '0.5' },
         },
-      },
-      backdropBlur: {
-        xs: '2px',
+        tickerScroll: {
+          from: { transform: 'translateX(0)' },
+          to:   { transform: 'translateX(-50%)' },
+        },
       },
     },
   },
