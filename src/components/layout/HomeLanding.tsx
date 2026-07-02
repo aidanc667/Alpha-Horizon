@@ -240,7 +240,7 @@ export default function HomeLanding({ onNavigate }: HomeLandingProps) {
 
       {/* Page header */}
       <div className="px-8 pt-7 pb-2 flex items-center justify-between">
-        <p className="font-mono" style={{ fontSize: 12, color: '#b09060' }}>
+        <p className="font-mono" style={{ fontSize: 12, color: '#6b5840' }}>
           {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
         </p>
         {marketOpen ? (
