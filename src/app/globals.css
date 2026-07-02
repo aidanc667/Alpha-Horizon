@@ -8,25 +8,42 @@
 }
 .ticker-track {
   display: flex;
-  animation: ticker-scroll 48s linear infinite;
+  animation: ticker-scroll 30s linear infinite;
   width: max-content;
 }
 .ticker-track:hover { animation-play-state: paused; }
 
 :root {
   color-scheme: light;
+  --bg: #faf8f3;
+  --card: #ffffff;
+  --sidebar: #120d08;
+  --border: #ebe4d8;
+  --text: #1a1008;
+  --muted: #6b5840;
+  --dim: #b09060;
+  --gold: #C9A84C;
 }
 
 .font-brand {
-  font-family: var(--font-brand), sans-serif;
+  font-family: var(--font-display), Georgia, serif;
 }
 
 /* Scrollbars */
-* { scrollbar-width: thin; scrollbar-color: #e5e7eb transparent; }
+* { scrollbar-width: thin; scrollbar-color: #d6c8b4 transparent; }
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
-::-webkit-scrollbar-thumb:hover { background: #d1d5db; }
+::-webkit-scrollbar-thumb { background: #d6c8b4; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #c4b49a; }
+
+/* Stagger animation delays */
+.delay-0   { animation-delay: 0s; }
+.delay-1   { animation-delay: 0.06s; }
+.delay-2   { animation-delay: 0.12s; }
+.delay-3   { animation-delay: 0.18s; }
+
+/* Tabular numbers for all data */
+.tabular { font-variant-numeric: tabular-nums; }
 
 /* Base font size */
 html { font-size: 16px; }
