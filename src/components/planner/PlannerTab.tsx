@@ -257,6 +257,9 @@ export default function PlannerTab() {
                   <Sparkles className="w-3 h-3" style={{ color: '#06b6d4' }} />
                   <span className="font-mono text-[10px] uppercase tracking-[0.18em]" style={{ color: '#06b6d4' }}>6 AI Agents · Tax-Optimized · Institutional Grade</span>
                 </div>
+                <p className="font-sans uppercase mb-2" style={{ fontSize: 9.5, letterSpacing: '0.16em', fontWeight: 600, color: '#16a34a' }}>
+                  ● Portfolio Planner
+                </p>
                 <h1 className="font-brand font-extrabold text-white tracking-[-0.02em] leading-none" style={{
                   fontSize: '3.25rem',
                   background: 'linear-gradient(135deg, #ffffff 30%, #67e8f9 100%)',
@@ -347,7 +350,7 @@ export default function PlannerTab() {
               <button
                 onClick={() => setView('onboarding')}
                 className="group flex items-center gap-2 px-10 py-3.5 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-2xl hover:opacity-90 hover:scale-[1.02]"
-                style={{ backgroundColor: '#06b6d4', color: '#000' }}
+                style={{ background: '#16a34a', color: '#fff' }}
               >
                 <Sparkles className="w-4 h-4" />
                 Start Planning →

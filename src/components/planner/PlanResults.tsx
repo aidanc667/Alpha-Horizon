@@ -33,7 +33,7 @@ const normalPDF = (z: number) => Math.exp(-z * z / 2) / Math.sqrt(2 * Math.PI);
 function StatCell({
   label,
   value,
-  color = '#10b981',
+  color = '#16a34a',
 }: {
   label: string;
   value: string;
@@ -59,7 +59,7 @@ function MetricCard({ label, value, sub }: { label: string; value: string; sub?:
   );
 }
 
-const SLICE_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#64748b'];
+const SLICE_COLORS = ['#16a34a', '#3b82f6', '#f59e0b', '#8b5cf6', '#64748b'];
 
 const ACCOUNT_COLORS: Record<string, { bg: string; text: string; label: string }> = {
   taxable:     { bg: 'bg-slate-100',  text: 'text-slate-600',  label: 'Taxable' },
@@ -159,7 +159,7 @@ function PortfolioTab({
   const stats = plan.portfolio.statistics;
   const alloc = plan.portfolio.allocation;
   const overall = plan.criticScore.scores.overall;
-  const scoreColor = overall >= 90 ? '#10b981' : overall >= 80 ? '#f59e0b' : '#ef4444';
+  const scoreColor = overall >= 90 ? '#16a34a' : overall >= 80 ? '#f59e0b' : '#ef4444';
 
   const taxAlphaBps = plan.taxOptimization.estimatedAnnualSavings;
   const taxAlpha$ = Math.round((taxAlphaBps * answers.startingCapital) / 10_000);
@@ -293,8 +293,8 @@ function PortfolioTab({
       <div className="rounded-xl border border-gray-100 bg-slate-800 p-5 text-white shadow-sm">
         <div className="grid grid-cols-3 gap-4 sm:grid-cols-6 mb-4">
           <StatCell label="Critic Score" value={`${overall}/100`} color={scoreColor} />
-          <StatCell label="Exp. Return" value={fmtPct(stats.expectedReturn)} color="#10b981" />
-          <StatCell label="Sharpe Ratio" value={stats.sharpeRatio.toFixed(2)} color="#10b981" />
+          <StatCell label="Exp. Return" value={fmtPct(stats.expectedReturn)} color="#16a34a" />
+          <StatCell label="Sharpe Ratio" value={stats.sharpeRatio.toFixed(2)} color="#16a34a" />
           <StatCell
             label="Success Prob."
             value={
@@ -308,7 +308,7 @@ function PortfolioTab({
           <StatCell
             label="Est. Tax Alpha"
             value={taxAlpha$ > 0 ? `${fmt$(taxAlpha$)}/yr` : `${taxAlphaBps} bps`}
-            color="#10b981"
+            color="#16a34a"
           />
         </div>
 
@@ -446,7 +446,7 @@ function PortfolioTab({
           // Nothing placed in 401k — explain why and what to do with 401k contributions
           return (
             <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 space-y-2">
-              <p className="text-[10px] uppercase tracking-widest text-blue-500 font-bold">401(k) — No Holdings Placed</p>
+              <p className="text-[10px] uppercase tracking-widest font-bold" style={{ color: '#16a34a' }}>401(k) — No Holdings Placed</p>
               <p className="text-xs text-blue-700">
                 Your portfolio is all-equity with no bond ETFs. Bonds (e.g. BND) are the ideal 401(k) candidate because their interest income gets shielded from taxes. With this aggressive allocation, the optimizer placed everything in Taxable or Roth IRA instead.
               </p>
@@ -473,20 +473,20 @@ function PortfolioTab({
         const contributingToMatch = matchPct > 0 && est401kAnnual >= answers.annualIncome * matchPct / 100;
         return (
           <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 space-y-2">
-            <p className="text-[10px] uppercase tracking-widest text-blue-500 font-bold">401(k) Contribution Tracker</p>
+            <p className="text-[10px] uppercase tracking-widest font-bold" style={{ color: '#16a34a' }}>401(k) Contribution Tracker</p>
             <div className="flex flex-wrap gap-4 text-xs">
               <div>
-                <span className="text-blue-400">Est. 401(k) pace</span>
-                <span className="ml-2 font-mono font-bold text-blue-900">{fmt$(est401kAnnual)}/yr</span>
+                <span style={{ color: '#16a34a' }}>Est. 401(k) pace</span>
+                <span className="ml-2 font-mono font-bold" style={{ color: '#16a34a' }}>{fmt$(est401kAnnual)}/yr</span>
               </div>
               <div>
-                <span className="text-blue-400">IRS limit{(answers.age ?? 35) >= 50 ? ' (catch-up)' : ''}</span>
-                <span className="ml-2 font-mono font-bold text-blue-900">{fmt$(limit401k)}</span>
+                <span style={{ color: '#16a34a' }}>IRS limit{(answers.age ?? 35) >= 50 ? ' (catch-up)' : ''}</span>
+                <span className="ml-2 font-mono font-bold" style={{ color: '#16a34a' }}>{fmt$(limit401k)}</span>
               </div>
               {gap > 0 && (
                 <div>
-                  <span className="text-blue-400">To max out</span>
-                  <span className="ml-2 font-mono font-bold text-blue-900">+{fmt$(gapPerMonth)}/mo</span>
+                  <span style={{ color: '#16a34a' }}>To max out</span>
+                  <span className="ml-2 font-mono font-bold" style={{ color: '#16a34a' }}>+{fmt$(gapPerMonth)}/mo</span>
                 </div>
               )}
             </div>
@@ -550,8 +550,8 @@ function PortfolioTab({
               >
                 <defs>
                   <linearGradient id="portGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#16a34a" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#16a34a" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
@@ -611,7 +611,7 @@ function PortfolioTab({
                 <Area
                   type="monotone"
                   dataKey="portfolio"
-                  stroke="#10b981"
+                  stroke="#16a34a"
                   strokeWidth={2}
                   fill="url(#portGrad)"
                   dot={false}
@@ -620,7 +620,7 @@ function PortfolioTab({
             </ResponsiveContainer>
             <div className="flex gap-4 mt-2 justify-center">
               {[
-                { color: '#10b981', label: 'Portfolio', dash: false },
+                { color: '#16a34a', label: 'Portfolio', dash: false },
                 { color: '#3b82f6', label: 'VT Benchmark', dash: false },
                 { color: '#f59e0b', label: 'Contributed', dash: true },
               ].map(({ color, label, dash }) => (
@@ -681,8 +681,8 @@ function PortfolioTab({
           <ComposedChart data={projData} margin={{ top: 4, right: 8, bottom: 0, left: 8 }}>
             <defs>
               <linearGradient id="p50Grad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#10b981" stopOpacity={0.12} />
-                <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                <stop offset="5%" stopColor="#16a34a" stopOpacity={0.12} />
+                <stop offset="95%" stopColor="#16a34a" stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
@@ -752,7 +752,7 @@ function PortfolioTab({
               type="monotone"
               dataKey="bandWidth"
               stackId="outer"
-              fill="#10b981"
+              fill="#16a34a"
               fillOpacity={0.08}
               stroke="none"
               dot={false}
@@ -770,7 +770,7 @@ function PortfolioTab({
               type="monotone"
               dataKey="innerWidth"
               stackId="inner"
-              fill="#10b981"
+              fill="#16a34a"
               fillOpacity={0.14}
               stroke="none"
               dot={false}
@@ -789,7 +789,7 @@ function PortfolioTab({
             <Line
               type="monotone"
               dataKey="p90"
-              stroke="#10b981"
+              stroke="#16a34a"
               strokeWidth={1.5}
               strokeDasharray="4 2"
               strokeOpacity={0.5}
@@ -799,7 +799,7 @@ function PortfolioTab({
             <Area
               type="monotone"
               dataKey="p50"
-              stroke="#10b981"
+              stroke="#16a34a"
               strokeWidth={2}
               fill="url(#p50Grad)"
               dot={false}
@@ -809,8 +809,8 @@ function PortfolioTab({
 
         <div className="flex gap-4 mt-2 justify-center flex-wrap">
           {[
-            { color: '#10b981', label: 'P50 Median', dash: false },
-            { color: '#10b981', label: 'P90 Optimistic', dash: true },
+            { color: '#16a34a', label: 'P50 Median', dash: false },
+            { color: '#16a34a', label: 'P90 Optimistic', dash: true },
             { color: '#f59e0b', label: 'Contributed', dash: true },
           ].map(({ color, label, dash }) => (
             <div key={label} className="flex items-center gap-1.5 text-[10px] text-gray-500">
@@ -980,7 +980,7 @@ function AnalysisTab({
   }
   const total = Object.values(buckets).reduce((a, v) => a + v, 0) || 1;
   const factorBars = [
-    { label: 'GROWTH', weight: buckets.growth / total, color: '#10b981' },
+    { label: 'GROWTH', weight: buckets.growth / total, color: '#16a34a' },
     { label: 'VALUE',  weight: buckets.value  / total, color: '#8b5cf6' },
     { label: 'INTL',   weight: buckets.intl   / total, color: '#3b82f6' },
     { label: 'FIXED',  weight: buckets.fixed  / total, color: '#f59e0b' },
@@ -1566,8 +1566,8 @@ function TaxPlanningTab({
                 <p className="text-[11px] text-gray-400">{step.reason}</p>
                 <div className="mt-1.5 h-1 bg-slate-100 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-emerald-500 rounded-full"
-                    style={{ width: `${Math.min(step.pct, 100)}%` }}
+                    className="h-full rounded-full"
+                    style={{ width: `${Math.min(step.pct, 100)}%`, background: 'linear-gradient(90deg, #16a34a, #4ade80)' }}
                   />
                 </div>
               </div>
