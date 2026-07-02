@@ -4,7 +4,7 @@ import { db } from '@/lib/db';
 import { scoreAccuracy, buildWeather, computePredictionSignals, computeWeightAdjustment } from '@/lib/market/scoring';
 import { rowToRecord } from '@/lib/market/scoring';
 import {
-  fetchSPYPutCallRatio, fetchSPYData, fetchFearAndGreed, fetchSectorData, fetchMarketMovers,
+  fetchSPYPutCallRatio, fetchSPYData, fetchFearAndGreed, fetchSectorData, fetchMarketMovers, fetchVIXData,
   getTodayET, getYesterdayET, isAfterNoonET, getCurrentDate,
   computeRollingAccuracy, buildEdgeBoard, loadSignalWeights, saveSignalWeights,
 } from '../_lib';
@@ -12,23 +12,18 @@ import type { HandlerCtx } from '../_lib';
 
 // ── Zod schemas for LLM response validation ───────────────────────────────────
 const TomorrowPredictionsSchema = z.object({
-  fearGreed: z.object({
-    score: z.number(),
-    label: z.enum(['Extreme Fear', 'Fear', 'Neutral', 'Greed', 'Extreme Greed']),
-    delta: z.number(),
-  }).passthrough(),
-  spyTrend: z.object({
-    direction: z.enum(['Up', 'Down', 'Flat']),
+  spyDirection: z.enum(['Up', 'Down']),
+  spyChangePercent: z.number(),
+  vixDirection: z.enum(['Up', 'Down']),
+  vixChangePercent: z.number(),
+  topMover: z.object({
+    ticker: z.string(),
+    name: z.string(),
+    direction: z.enum(['Up', 'Down']),
     changePercent: z.number(),
-  }).passthrough(),
-  sectorRotation: z.object({
-    leader: z.object({ sector: z.string(), ticker: z.string(), performance: z.string() }).passthrough(),
-    lagger: z.object({ sector: z.string(), ticker: z.string(), performance: z.string() }).passthrough(),
-  }).passthrough(),
-  optionsPulse: z.object({
-    putCallRatio: z.number(),
-    lean: z.enum(['Bullish', 'Neutral', 'Bearish']),
-  }).passthrough(),
+  }),
+  confidence: z.enum(['High', 'Moderate', 'Low']).optional(),
+  rationale: z.string().optional(),
 }).passthrough();
 
 const LiveNarrativeSchema = z.object({
@@ -49,12 +44,9 @@ async function runAccuracyCalc(
 ) {
   if (!yesterdayRow?.tomorrow_predictions || yesterdayRow.accuracy_score != null || !todayRow?.elite6_actual) return;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const predConfidence = (yesterdayRow.tomorrow_predictions as any)?.confidence as 'High' | 'Moderate' | 'Low' | undefined;
     const { score, breakdown } = scoreAccuracy(
       yesterdayRow.tomorrow_predictions as Record<string, unknown>,
       todayRow.elite6_actual as Record<string, unknown>,
-      predConfidence,
     );
     await sql`
       UPDATE market_daily_records
@@ -101,7 +93,7 @@ async function runNoonLock(
       `,
       loadSignalWeights(sql),
     ]);
-    const avgBreakdown: Record<string, number[]> = { fearGreed: [], spyTrend: [], sectorRotation: [], optionsPulse: [] };
+    const avgBreakdown: Record<string, number[]> = { spy: [], vix: [], topMover: [] };
     for (const r of recentScores) {
       const ab = r.accuracy_breakdown as Record<string, number> | null;
       if (!ab) continue;
@@ -111,15 +103,17 @@ async function runNoonLock(
     }
     const avg = (arr: number[]) => arr.length ? Math.round(arr.reduce((a, b) => a + b) / arr.length) : null;
     const calibration = recentScores.length >= 3
-      ? `\nCALIBRATION (your recent 7-day accuracy — self-correct for known biases):\n- Fear & Greed: ${avg(avgBreakdown.fearGreed) ?? 'N/A'}% accurate\n- SPY Trend: ${avg(avgBreakdown.spyTrend) ?? 'N/A'}% accurate\n- Sector: ${avg(avgBreakdown.sectorRotation) ?? 'N/A'}% accurate\n- Options Pulse: ${avg(avgBreakdown.optionsPulse) ?? 'N/A'}% accurate\nAdjust your predictions to compensate for any indicator where accuracy is below 60%.\nADAPTIVE WEIGHTS (system-computed from accuracy history):\n- Fear & Greed signals: ${(currentWeights.fearGreed * 100).toFixed(0)}% weight\n- SPY Trend signals: ${(currentWeights.spyTrend * 100).toFixed(0)}% weight\n- Options Flow signals: ${(currentWeights.optionsPulse * 100).toFixed(0)}% weight\nSignals below 80% weight are underperforming historically — be more skeptical of them.\n`
+      ? `\nCALIBRATION (your recent 7-day accuracy — self-correct for known biases):\n- SPY Score: ${avg(avgBreakdown.spy) ?? 'N/A'}% (direction + magnitude)\n- VIX Score: ${avg(avgBreakdown.vix) ?? 'N/A'}% (direction + magnitude)\n- Top Mover Score: ${avg(avgBreakdown.topMover) ?? 'N/A'}% (direction + ticker move)\nAdjust your predictions to compensate for any indicator where accuracy is below 60%.\nADAPTIVE WEIGHTS (system-computed from accuracy history):\n- SPY Trend signals: ${(currentWeights.spyTrend * 100).toFixed(0)}% weight\n- Options Flow signals: ${(currentWeights.optionsPulse * 100).toFixed(0)}% weight\nSignals below 80% weight are underperforming historically — be more skeptical of them.\n`
       : '';
 
     const predSpyData = await fetchSPYData();
     const predFgData = await fetchFearAndGreed();
     const predPcRatio = await fetchSPYPutCallRatio() ?? 0.74;
     const predSectors = await fetchSectorData();
+    const predVixData = await fetchVIXData();
     const predSignals = computePredictionSignals(predSpyData, predFgData?.score ?? 50, predFgData?.delta ?? 0, predPcRatio, new Date(), currentWeights);
 
+    const predMovers = await fetchMarketMovers();
     const predPrompt = `You are a market prediction engine. Today is ${getCurrentDate()}.
 
 REAL TODAY DATA (already fetched — do NOT re-search these numbers):
@@ -128,28 +122,40 @@ REAL TODAY DATA (already fetched — do NOT re-search these numbers):
 - Sector leader today: ${predSectors?.leader ? `${predSectors.leader.ticker} ${predSectors.leader.changePercent > 0 ? '+' : ''}${predSectors.leader.changePercent}%` : 'N/A'}
 - Sector lagger today: ${predSectors?.lagger ? `${predSectors.lagger.ticker} ${predSectors.lagger.changePercent > 0 ? '+' : ''}${predSectors.lagger.changePercent}%` : 'N/A'}
 - SPY put/call ratio: ${predPcRatio}
+- VIX: ${predVixData?.level ?? 'N/A'} (${predVixData?.direction === 'Up' ? 'rising' : predVixData?.direction === 'Down' ? 'falling' : 'flat'} from yesterday's close of ${predVixData?.previousClose ?? 'N/A'})
+- Today's top gainers: ${predMovers.gainers.map(m => `${m.ticker} ${m.change}`).join(', ') || 'N/A'}
+- Today's top losers: ${predMovers.losers.map(m => `${m.ticker} ${m.change}`).join(', ') || 'N/A'}
 
 QUANTITATIVE SIGNALS (anchor your predictions to these):
 ${predSignals.signals.map((s: string) => `- ${s}`).join('\n')}
 SIGNAL BALANCE: ${predSignals.bullCount} bullish vs ${predSignals.bearCount} bearish → ${predSignals.confidence} Conviction ${predSignals.bias}
 
 ${calibration}
-Using these signals as your foundation, search for any additional context (upcoming catalysts, news) and predict tomorrow's 4 key indicators. Return ONLY valid JSON:
+Using these signals as your foundation, search for upcoming catalysts, earnings, and news to predict tomorrow's 3 key indicators. Return ONLY valid JSON:
 {
   "tomorrowPredictions": {
-    "fearGreed": { "score": 65, "label": "Greed", "delta": -3, "description": "Why this F&G prediction — cite signals above" },
-    "spyTrend": { "direction": "Up", "changePercent": 0.5, "above200MA": ${predSpyData.above200MA ?? true}, "above50MA": ${predSpyData.above50MA ?? true}, "volumeRatio": null, "description": "Why this SPY prediction — cite signals above" },
-    "sectorRotation": { "leader": { "sector": "Technology", "ticker": "XLK", "performance": "predicted +1.0%" }, "lagger": { "sector": "Energy", "ticker": "XLE", "performance": "predicted -0.5%" }, "implication": "Why this sector rotation — cite momentum or macro" },
-    "optionsPulse": { "putCallRatio": 0.80, "lean": "Neutral", "description": "Why this options prediction" }
+    "spyDirection": "Up",
+    "spyChangePercent": 0.6,
+    "vixDirection": "Down",
+    "vixChangePercent": -4.5,
+    "topMover": {
+      "ticker": "NVDA",
+      "name": "NVIDIA Corp",
+      "direction": "Up",
+      "changePercent": 3.5
+    },
+    "confidence": "${predSignals.confidence}",
+    "rationale": "2 sentences explaining all predictions citing today's signals"
   },
   "tomorrowOutlook": "2-3 sentence narrative anchored in the signals above"
 }
 Rules:
-- fearGreed.label: "Extreme Fear" | "Fear" | "Neutral" | "Greed" | "Extreme Greed"
-- spyTrend.direction: "Up" | "Down" | "Flat" (bias toward ${predSignals.bias === 'Bullish' ? 'Up' : predSignals.bias === 'Bearish' ? 'Down' : 'Flat'} based on signals)
-- spyTrend.above200MA and above50MA: use current values unless you have strong reason to predict change
-- sectorRotation: use sector ETF tickers (XLK, XLF, XLE, XLV, XLI, XLY, XLP, XLU, XLB, XLRE, XLC)
-- optionsPulse.lean: "Bullish" | "Neutral" | "Bearish"
+- spyDirection: "Up" or "Down" only (bias toward ${predSignals.bias === 'Bullish' ? 'Up' : predSignals.bias === 'Bearish' ? 'Down' : 'Up'} based on signals)
+- spyChangePercent: predicted % move for SPY — positive for Up, negative for Down (e.g. 0.6 not 60; e.g. -1.2)
+- vixDirection: "Up" (volatility rising, fear increasing) | "Down" (volatility falling, calm/greed)
+- vixChangePercent: predicted % change in VIX level — positive = rising VIX, negative = falling VIX (e.g. if VIX is ${predVixData?.level ?? 18} and you expect it to fall to ${predVixData?.level ? Math.round(predVixData.level * 0.9) : 16}, that's roughly -10%)
+- topMover: pick ONE stock with high conviction for a notable move tomorrow. Search today's news for earnings (pre/post market), FDA decisions, major analyst calls, macro-sensitive names. Pick a liquid, well-known name (S&P 500 or Nasdaq 100 preferred). Include the full company name.
+- topMover.changePercent: predicted % move — positive for Up, negative for Down
 - ANCHOR predictions to the quantitative signals — only override with strong search-based evidence`;
 
     const predResp = await ai.models.generateContent({
@@ -200,8 +206,8 @@ async function runLiveRefresh(
   model: string,
 ): Promise<void> {
   try {
-    const [realPutCall, spyData, fearGreedData, sectorData, movers] = await Promise.all([
-      fetchSPYPutCallRatio(), fetchSPYData(), fetchFearAndGreed(), fetchSectorData(), fetchMarketMovers(),
+    const [realPutCall, spyData, fearGreedData, sectorData, movers, vixData] = await Promise.all([
+      fetchSPYPutCallRatio(), fetchSPYData(), fetchFearAndGreed(), fetchSectorData(), fetchMarketMovers(), fetchVIXData(),
     ]);
 
     const fgScore = fearGreedData?.score ?? 50;
@@ -227,7 +233,7 @@ REAL MARKET DATA (fetched from Yahoo Finance & CNN — DO NOT change these numbe
 Using this real data as your foundation, search for today's market news and generate the following. Return ONLY valid JSON:
 {
   "briefBullets": [
-    { "what": "Short headline naming the specific event (5-8 words, include actual ticker/number if relevant)", "why": "The precise data/catalyst that caused it with real numbers", "impact": "2-3 sentences: which sectors/ETFs win or lose, what this changes for Fed/earnings outlooks, what a practical investor should watch" }
+    { "what": "Search for actual top story — e.g. 'Fed holds rates at 4.5%, signals cuts delayed'", "why": "Specific data/catalyst from today's news with real numbers", "impact": "2-3 sentences: which sectors/ETFs win or lose, what a practical investor should do or watch" }
   ],
   "outlier": "One genuinely surprising or counter-intuitive data point NOT already covered in briefBullets — must reference a specific ticker with a real number (e.g. a stock moving 10%+ with no obvious catalyst, or a sector move that contradicts the macro narrative). Do NOT repeat the SPY move or volume observation already in the brief.",
   "catalyst": "The single most important event to watch in next 24 hours — include: exact time (e.g. '8:30 AM ET'), event name, consensus estimate vs prior reading, and a one-sentence stake (what a beat/miss means for the market)",
@@ -251,7 +257,7 @@ Using this real data as your foundation, search for today's market news and gene
 }
 
 Rules:
-- briefBullets: exactly 5 bullets — use the real numbers from the data above, search for additional context
+- briefBullets: exactly 5 bullets. Search for today's TOP 5 most market-moving investment news stories (not just the indicators above). Rank by investor impact: Fed decisions/macro data > major earnings > sector catalysts > individual stocks. For each story, write: what = short specific headline with ticker/number (5-8 words); why = precise catalyst with real data; impact = 2-3 sentences on which sectors/ETFs win or lose, what it means for portfolios. These should be NEWS-DRIVEN, not just restatements of the indicator data above. The indicators provide context but the 5 bullets should be the 5 biggest stories of the day.
 - outlier: must reference a real ticker or real number, not generic commentary
 - liveHeadlines: HARD MINIMUM 6, TARGET 8. Search broadly for today's top market and investment news. Accept any reputable financial source — Bloomberg, Reuters, WSJ, FT, CNBC, AP, MarketWatch, Yahoo Finance, Barron's, Forbes, Seeking Alpha, The Economist, NPR Markets, etc. ONLY exclude obvious spam/PR: PR Newswire, Stock Titan, GuruFocus, GlobeNewsWire company press releases. Impact score — be GENEROUS, most real market news scores 6+: 9-10 = Fed decision, CPI/jobs/GDP print, major geopolitical shock affecting markets; 7-8 = earnings from any S&P 500 company, macro economic data, sector-wide catalyst, rate/yield move, commodity shock; 5-6 = notable individual stock move, mid-cap earnings, analyst upgrade/downgrade on major name. Score 5 minimum for any headline that would appear in a morning market briefing. DO NOT self-filter — return all 6-8 sorted by impactScore descending. Each must have a one-sentence "impact" field. No url field
 - bigStory: the ticker is already set above — write only the reason field by searching for news
@@ -279,6 +285,11 @@ Rules:
     }
     const narrative = narrativeValidation.data;
 
+    // Derive scoring fields
+    const spyDirection: 'Up' | 'Down' = (spyData.changePercent ?? 0) >= 0 ? 'Up' : 'Down';
+    const vixChangeActual = vixData?.level != null && vixData?.previousClose != null && vixData.previousClose !== 0
+      ? Math.round(((vixData.level - vixData.previousClose) / vixData.previousClose) * 10000) / 100
+      : null;
     const elite6 = {
       fearGreed: { score: fgScore, label: fgLabel, delta: fgDelta, description: `Market Sentiment: ${fgScore}/100 — ${fgLabel}` },
       spyTrend: {
@@ -295,6 +306,21 @@ Rules:
         implication: `${leaderSector.sector} leads, ${laggerSector.sector} lags`,
       } : null,
       optionsPulse: { putCallRatio: pcRatio, lean: pcLean as 'Bullish' | 'Neutral' | 'Bearish', description: `SPY put/call ${pcRatio} — ${pcLean} lean` },
+      // Scoring fields
+      spyDirection,
+      spyChangePercent: spyData.changePercent ?? 0,
+      vixDirection: vixData?.direction ?? null,
+      vixChangePercent: vixChangeActual,
+      // topMover actual data — predictedTickerChange/predictedTickerWasTop3 filled in by scorePreviousDay
+      topMover: {
+        actualTopTicker: movers.gainers[0]?.ticker ?? null,
+        actualTopChange: movers.gainers[0]?.changePercent ?? null,
+        actualTopLoser: movers.losers[0]?.ticker ?? null,
+      },
+      // Top 3 gainers for "was top 3" check in scorePreviousDay
+      topMoverActualTop1: movers.gainers[0]?.ticker ?? null,
+      topMoverActualTop2: movers.gainers[1]?.ticker ?? null,
+      topMoverActualTop3: movers.gainers[2]?.ticker ?? null,
       bigStory: narrative.bigStory ?? (topMover ? { ticker: topMover.ticker, name: topMover.name, changePercent: topMover.change, direction: topMover.changePercent >= 0 ? 'Up' : 'Down', reason: 'Top market mover today' } : null),
       nextCatalyst: narrative.nextCatalyst ?? null,
     };
@@ -326,22 +352,23 @@ export async function handleTripleCard(ctx: HandlerCtx): Promise<NextResponse> {
   const { ai, model } = ctx;
   const sql = db();
   const todayET = getTodayET();
-  const yesterdayET = getYesterdayET();
 
   await sql`INSERT INTO market_daily_records (record_date) VALUES (${todayET}) ON CONFLICT (record_date) DO NOTHING`;
-  const [todayResult, yesterdayResult] = await Promise.all([
+  const [todayResult, prevResult] = await Promise.all([
     sql`SELECT * FROM market_daily_records WHERE record_date = ${todayET}`,
-    sql`SELECT * FROM market_daily_records WHERE record_date = ${yesterdayET}`,
+    sql`SELECT * FROM market_daily_records WHERE record_date < ${todayET} AND is_noon_locked = true ORDER BY record_date DESC LIMIT 1`,
   ]);
+  const yesterdayResult = prevResult;
+  const yesterdayET: string = prevResult[0]?.record_date ? String(prevResult[0].record_date).slice(0, 10) : getYesterdayET();
   let todayRow = todayResult[0];
   const yesterdayRow = yesterdayResult[0] ?? null;
 
-  // Schema invalidation
-  if (todayRow.elite6_actual && !(todayRow.elite6_actual as Record<string, unknown>).spyTrend) {
-    await sql`UPDATE market_daily_records SET elite6_actual = NULL, updated_at = NULL WHERE record_date = ${todayET}`;
-    todayRow = { ...todayRow, elite6_actual: null, updated_at: null };
+  // Schema invalidation — detect rows that lack topMover field (previous schema)
+  if (todayRow.elite6_actual && !(todayRow.elite6_actual as Record<string, unknown>).topMoverActualTop1) {
+    await sql`UPDATE market_daily_records SET elite6_actual = NULL, updated_at = NULL, brief_bullets = NULL, live_headlines = NULL WHERE record_date = ${todayET}`;
+    todayRow = { ...todayRow, elite6_actual: null, updated_at: null, brief_bullets: null, live_headlines: null };
   }
-  if (todayRow.tomorrow_predictions && !(todayRow.tomorrow_predictions as Record<string, unknown>).spyTrend) {
+  if (todayRow.tomorrow_predictions && !(todayRow.tomorrow_predictions as Record<string, unknown>).topMover) {
     await sql`UPDATE market_daily_records SET tomorrow_predictions = NULL, is_noon_locked = false, noon_locked_at = NULL WHERE record_date = ${todayET}`;
     todayRow = { ...todayRow, tomorrow_predictions: null, is_noon_locked: false, noon_locked_at: null };
   }
@@ -426,12 +453,13 @@ export async function handleRefreshLive(ctx: HandlerCtx): Promise<NextResponse> 
   const { ai, model } = ctx;
   const sql = db();
   const todayET = getTodayET();
-  const yesterdayET = getYesterdayET();
 
-  const [todayResult, yesterdayResult] = await Promise.all([
+  const [todayResult, prevResult2] = await Promise.all([
     sql`SELECT * FROM market_daily_records WHERE record_date = ${todayET}`,
-    sql`SELECT * FROM market_daily_records WHERE record_date = ${yesterdayET}`,
+    sql`SELECT * FROM market_daily_records WHERE record_date < ${todayET} AND is_noon_locked = true ORDER BY record_date DESC LIMIT 1`,
   ]);
+  const yesterdayResult = prevResult2;
+  const yesterdayET: string = prevResult2[0]?.record_date ? String(prevResult2[0].record_date).slice(0, 10) : getYesterdayET();
   let todayRow = todayResult[0];
   const yesterdayRow = yesterdayResult[0] ?? null;
 
@@ -439,12 +467,12 @@ export async function handleRefreshLive(ctx: HandlerCtx): Promise<NextResponse> 
 
   const twentyMinAgo = Date.now() - 20 * 60 * 1000;
 
-  // Schema invalidation
-  if (todayRow.elite6_actual && !(todayRow.elite6_actual as Record<string, unknown>).spyTrend) {
-    await sql`UPDATE market_daily_records SET elite6_actual = NULL, updated_at = NULL WHERE record_date = ${todayET}`;
-    todayRow = { ...todayRow, elite6_actual: null, updated_at: null };
+  // Schema invalidation — detect rows that lack topMover field (previous schema)
+  if (todayRow.elite6_actual && !(todayRow.elite6_actual as Record<string, unknown>).topMoverActualTop1) {
+    await sql`UPDATE market_daily_records SET elite6_actual = NULL, updated_at = NULL, brief_bullets = NULL, live_headlines = NULL WHERE record_date = ${todayET}`;
+    todayRow = { ...todayRow, elite6_actual: null, updated_at: null, brief_bullets: null, live_headlines: null };
   }
-  if (todayRow.tomorrow_predictions && !(todayRow.tomorrow_predictions as Record<string, unknown>).spyTrend) {
+  if (todayRow.tomorrow_predictions && !(todayRow.tomorrow_predictions as Record<string, unknown>).topMover) {
     await sql`UPDATE market_daily_records SET tomorrow_predictions = NULL, is_noon_locked = false, noon_locked_at = NULL WHERE record_date = ${todayET}`;
     todayRow = { ...todayRow, tomorrow_predictions: null, is_noon_locked: false, noon_locked_at: null };
   }
@@ -500,4 +528,120 @@ export async function handleRefreshLive(ctx: HandlerCtx): Promise<NextResponse> 
       userStreak,
     },
   });
+}
+
+// ── Exported: score yesterday's prediction against today's actuals ─────────────
+// Called by the after-close cron (21:05 UTC / 5:05 PM ET) directly — no HTTP round-trip.
+export async function scorePreviousDay(
+  sql: ReturnType<typeof db>,
+  ai?: import('@google/genai').GoogleGenAI,
+  model?: string,
+): Promise<{ scored: boolean; date?: string; score?: number }> {
+  const todayET = getTodayET();
+  const [todayResult, prevTradingResult] = await Promise.all([
+    sql`SELECT elite6_actual FROM market_daily_records WHERE record_date = ${todayET}`,
+    sql`SELECT record_date, tomorrow_predictions, accuracy_score FROM market_daily_records WHERE record_date < ${todayET} AND is_noon_locked = true ORDER BY record_date DESC LIMIT 1`,
+  ]);
+  const todayRow = todayResult[0];
+  const yesterdayRow = prevTradingResult[0];
+  if (!yesterdayRow?.tomorrow_predictions || yesterdayRow.accuracy_score != null || !todayRow?.elite6_actual) {
+    return { scored: false };
+  }
+  const yesterdayET: string = String(yesterdayRow.record_date).slice(0, 10);
+
+  const pred = yesterdayRow.tomorrow_predictions as Record<string, unknown>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const actual: Record<string, unknown> = { ...(todayRow.elite6_actual as any) };
+
+  // Fetch the predicted ticker's actual closing performance and enrich topMover actual
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const predTopMover = pred.topMover as any;
+  const predTicker = predTopMover?.ticker as string | undefined;
+  if (predTicker) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const yahooFinance = require('yahoo-finance2').default;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const quote = await (yahooFinance.quote(predTicker) as Promise<any>).catch(() => null);
+      const tickerChange = quote?.regularMarketChangePercent != null
+        ? Math.round(quote.regularMarketChangePercent * 100) / 100
+        : null;
+      const top3Tickers = [
+        actual.topMoverActualTop1,
+        actual.topMoverActualTop2,
+        actual.topMoverActualTop3,
+      ].filter(Boolean) as string[];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      actual.topMover = {
+        ...((actual.topMover as Record<string, unknown>) ?? {}),
+        predictedTickerChange: tickerChange,
+        predictedTickerWasTop3: top3Tickers.includes(predTicker),
+      };
+    } catch {
+      // scoring without ticker data — topMover will score 0
+    }
+  }
+
+  const { score, breakdown } = scoreAccuracy(pred, actual);
+
+  // Generate a brief recap of what happened and why predictions were right/wrong
+  let accuracyBrief: string | null = null;
+  if (ai && model) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const p = pred as any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const a = actual as any;
+      const spyPredDir = p.spyDirection ?? '?';
+      const spyPredPct = p.spyChangePercent != null ? `${p.spyChangePercent > 0 ? '+' : ''}${Number(p.spyChangePercent).toFixed(1)}%` : '?';
+      const spyActualDir = a.spyDirection ?? '?';
+      const spyActualPct = a.spyChangePercent != null ? `${a.spyChangePercent > 0 ? '+' : ''}${Number(a.spyChangePercent).toFixed(1)}%` : '?';
+      const vixPredDir = p.vixDirection ?? '?';
+      const vixPredPct = p.vixChangePercent != null ? `${p.vixChangePercent > 0 ? '+' : ''}${Number(p.vixChangePercent).toFixed(1)}%` : '?';
+      const vixActualDir = a.vixDirection ?? '?';
+      const vixActualPct = a.vixChangePercent != null ? `${a.vixChangePercent > 0 ? '+' : ''}${Number(a.vixChangePercent).toFixed(1)}%` : '?';
+      const topMoverTicker = p.topMover?.ticker ?? '?';
+      const topMoverPredDir = p.topMover?.direction ?? '?';
+      const topMoverPredPct = p.topMover?.changePercent != null ? `${p.topMover.changePercent > 0 ? '+' : ''}${Number(p.topMover.changePercent).toFixed(1)}%` : '?';
+      const topMoverActualPct = a.topMover?.predictedTickerChange != null ? `${a.topMover.predictedTickerChange > 0 ? '+' : ''}${Number(a.topMover.predictedTickerChange).toFixed(1)}%` : 'N/A';
+      const topMoverWasTop3 = a.topMover?.predictedTickerWasTop3 ? 'yes' : 'no';
+      const overallScore = score;
+      const spyScore = (breakdown as Record<string, number>).spy ?? 0;
+      const vixScore = (breakdown as Record<string, number>).vix ?? 0;
+      const topMoverScore = (breakdown as Record<string, number>).topMover ?? 0;
+
+      const briefPrompt = `You are writing a brief market recap for ${yesterdayET} (the trading day just closed).
+
+Our predictions vs actuals:
+- SPY: predicted ${spyPredDir} ${spyPredPct} → actual ${spyActualDir} ${spyActualPct} (score: ${spyScore}/100)
+- VIX: predicted ${vixPredDir} ${vixPredPct} → actual ${vixActualDir} ${vixActualPct} (score: ${vixScore}/100)
+- Top Mover (${topMoverTicker}): predicted ${topMoverPredDir} ${topMoverPredPct} → actual ${topMoverActualPct}, was top-3 mover: ${topMoverWasTop3} (score: ${topMoverScore}/100)
+- Overall accuracy score: ${overallScore}/100
+
+Write 2-3 sentences (no lists, no headers) that:
+1. Briefly state what the market did (SPY direction/magnitude, any notable VIX move)
+2. Explain why our predictions were right or wrong on each indicator
+3. Mention any major market driver that influenced the session (earnings surprise, Fed comment, macro data, geopolitical, etc.) if it explains the moves
+
+Be concise, factual, and written in the tone of a professional market analyst. Do not mention scores or numbers from the scoring system. Do not start with "Today" or "Yesterday" — start with the actual driver or market action.`;
+
+      const resp = await ai.models.generateContent({
+        model,
+        contents: [{ role: 'user', parts: [{ text: briefPrompt }] }],
+      });
+      accuracyBrief = resp.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? null;
+    } catch {
+      // brief is non-critical — scoring still saves without it
+    }
+  }
+
+  await sql`
+    UPDATE market_daily_records
+    SET accuracy_score = ${score},
+        accuracy_breakdown = ${JSON.stringify(breakdown)},
+        accuracy_calculated_at = NOW()
+        ${accuracyBrief != null ? sql`, accuracy_brief = ${accuracyBrief}` : sql``}
+    WHERE record_date = ${yesterdayET}
+  `;
+  return { scored: true, date: yesterdayET, score };
 }

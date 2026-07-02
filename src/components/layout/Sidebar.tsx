@@ -62,10 +62,6 @@ export default function Sidebar({ activeTab, onTabChange, onHome }: SidebarProps
     user?.firstName?.[0] ??
     user?.emailAddresses?.[0]?.emailAddress?.[0]?.toUpperCase() ??
     'A';
-  const displayName =
-    user?.firstName
-      ? `${user.firstName} ${user.lastName ?? ''}`.trim()
-      : 'You';
 
   return (
     <aside
@@ -80,14 +76,8 @@ export default function Sidebar({ activeTab, onTabChange, onHome }: SidebarProps
         onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
       >
-        <div className="font-display italic text-white" style={{ fontSize: 17, letterSpacing: '0.01em' }}>
+        <div className="font-display italic text-white" style={{ fontSize: 24, letterSpacing: '0.01em', lineHeight: 1.1 }}>
           Alpha <span style={{ color: '#C9A84C' }}>Horizon</span>
-        </div>
-        <div
-          className="font-sans uppercase mt-0.5"
-          style={{ fontSize: 9, letterSpacing: '0.18em', color: '#5a4535' }}
-        >
-          Institutional Intelligence
         </div>
       </button>
 
@@ -133,19 +123,13 @@ export default function Sidebar({ activeTab, onTabChange, onHome }: SidebarProps
                 <div
                   className="font-sans truncate"
                   style={{
-                    fontSize: 12,
+                    fontSize: 13,
                     fontWeight: 500,
                     lineHeight: 1.2,
                     color: isActive ? '#ffffff' : '#e8d8c0',
                   }}
                 >
                   {item.label}
-                </div>
-                <div
-                  className="font-sans truncate mt-0.5"
-                  style={{ fontSize: 9.5, color: isActive ? '#8a6840' : '#5a4535' }}
-                >
-                  {item.desc}
                 </div>
               </div>
             </button>
@@ -186,18 +170,12 @@ export default function Sidebar({ activeTab, onTabChange, onHome }: SidebarProps
           />
         </div>
         <div className="flex-1 min-w-0">
-          <div
-            className="font-sans truncate"
-            style={{ fontSize: 11, color: '#c8b090', fontWeight: 500 }}
-          >
-            {displayName}
-          </div>
           <button
             onClick={handleSignOut}
             className="font-sans text-left transition-colors"
-            style={{ fontSize: 9, color: '#5a4535' }}
-            onMouseEnter={e => (e.currentTarget.style.color = '#b91c1c')}
-            onMouseLeave={e => (e.currentTarget.style.color = '#5a4535')}
+            style={{ fontSize: 11, color: '#c8b090', fontWeight: 500 }}
+            onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
+            onMouseLeave={e => (e.currentTarget.style.color = '#c8b090')}
           >
             Sign out
           </button>

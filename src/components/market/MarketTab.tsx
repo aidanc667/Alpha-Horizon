@@ -1,7 +1,6 @@
 'use client';
 
-import React from 'react';
-import { BarChart2, Zap, Lock, TrendingUp, Target, RefreshCw, ChevronRight } from 'lucide-react';
+import { BarChart2, Zap, TrendingUp, Target, RefreshCw, Newspaper, AlertTriangle, Calendar, ArrowRight, CheckCircle } from 'lucide-react';
 import TripleCardMarket from '@/components/market/TripleCardMarket';
 
 interface MarketTabProps {
@@ -16,136 +15,197 @@ export default function MarketTab({ initialView = 'home', onBack, onNavigate }: 
   }
 
   return (
-    <div
-      className="h-full overflow-y-auto"
-      style={{ background: 'linear-gradient(135deg, #0a0d12 0%, #0f1419 40%, #141d27 100%)' }}
-    >
-      <div className="max-w-4xl mx-auto px-6 py-16 space-y-12">
+    <div className="h-full overflow-y-auto" style={{ background: '#faf8f3' }}>
 
-        {/* Hero */}
-        <div className="text-center space-y-4">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-2" style={{ background: 'rgba(124,58,237,0.15)', border: '1px solid rgba(124,58,237,0.3)' }}>
-            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: '#7c3aed' }} />
-            <span className="font-mono text-[10px] uppercase tracking-[0.18em]" style={{ color: '#c4b5fd' }}>Live Intelligence</span>
+      {/* Hero */}
+      <div className="px-10 pt-10 pb-8" style={{ borderBottom: '1px solid #ebe4d8' }}>
+        <p className="font-sans uppercase mb-3" style={{ fontSize: 9.5, letterSpacing: '0.16em', fontWeight: 600, color: '#7c3aed' }}>
+          ● Market Analysis
+        </p>
+        <div className="flex items-end justify-between gap-8">
+          <div>
+            <h1 className="font-display font-bold leading-none" style={{ fontSize: '2.6rem', color: '#1a1008' }}>
+              Understand the market today.<br />
+              <span style={{ color: '#7c3aed' }}>Forecast what comes next.</span>
+            </h1>
+            <p className="font-sans mt-3 max-w-lg" style={{ fontSize: 13.5, lineHeight: 1.7, color: '#6b5840' }}>
+              Every morning the AI publishes locked predictions for SPY, VIX, and the day&apos;s top mover — including exact percentage targets. After close, it scores itself, explains what happened, and sharpens the next call. No other tool holds its own forecasts accountable like this.
+            </p>
           </div>
-          <p className="font-sans uppercase mb-1" style={{ fontSize: 9.5, letterSpacing: '0.16em', fontWeight: 600, color: '#7c3aed' }}>
-            ● Market Analysis
-          </p>
-          <h1 className="font-brand font-extrabold text-white tracking-[-0.02em] leading-none" style={{ fontSize: '2.75rem' }}>
-            MARKET ANALYSIS
-          </h1>
-          <p className="text-slate-400 text-[14px] leading-[1.65] max-w-xl mx-auto" style={{ color: 'rgba(241,244,248,0.5)' }}>
-            A daily intelligence loop — live briefings, noon-locked predictions, and an AI accuracy ledger that learns from every miss.
-          </p>
+          <button
+            onClick={() => onNavigate?.('market-near')}
+            className="flex-shrink-0 flex items-center gap-2 font-sans font-semibold rounded-xl transition-all hover:opacity-90 active:scale-95"
+            style={{ background: '#7c3aed', color: '#fff', padding: '11px 24px', fontSize: 13 }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#6d28d9'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#7c3aed'; }}
+          >
+            <Zap className="w-4 h-4" />
+            Open Daily Brief
+            <ArrowRight className="w-4 h-4" />
+          </button>
         </div>
+      </div>
 
-        {/* Feature grid */}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      {/* Stats strip */}
+      <div className="grid grid-cols-4" style={{ borderBottom: '1px solid #ebe4d8' }}>
+        {[
+          { value: '3', label: 'Scored indicators', sub: 'SPY · VIX · Top Mover' },
+          { value: '5+', label: 'Daily brief bullets', sub: 'grounded in real prices' },
+          { value: 'Explains', label: 'What happened & Why', sub: 'impact on your investments' },
+          { value: '12 p.m.', label: 'Prediction lock', sub: 'ET · scored at close' },
+        ].map((s, i) => (
+          <div
+            key={s.label}
+            className="py-5 px-6 flex flex-col gap-0.5"
+            style={{ borderRight: i < 3 ? '1px solid #ebe4d8' : 'none' }}
+          >
+            <p className="font-mono font-bold" style={{ fontSize: 22, color: '#7c3aed', lineHeight: 1 }}>{s.value}</p>
+            <p className="font-sans font-medium" style={{ fontSize: 11, color: '#1a1008', marginTop: 4 }}>{s.label}</p>
+            <p className="font-sans" style={{ fontSize: 10, color: '#b09060' }}>{s.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="px-10 py-8 max-w-4xl">
+
+        {/* What makes this different */}
+        <p className="font-sans uppercase mb-5" style={{ fontSize: 9.5, letterSpacing: '0.14em', fontWeight: 600, color: '#b09060' }}>
+          What makes this different
+        </p>
+        <div className="rounded-xl border overflow-hidden mb-8" style={{ borderColor: '#ebe4d8' }}>
           {[
             {
-              icon: BarChart2,
-              title: 'Core 4 Indicators',
-              desc: 'Fear & Greed sentiment, SPY direction + MAs, sector rotation leader/lagger, and options put/call lean — tracked and scored daily.',
-              iconColor: '#7c3aed' as string | null,
-              bg: 'border rounded-2xl p-5 space-y-2',
-              bgStyle: { background: 'rgba(124,58,237,0.08)', borderColor: 'rgba(124,58,237,0.2)' } as React.CSSProperties | undefined,
+              headline: 'Predictions with a paper trail',
+              body: 'Every noon-locked call is immutable — direction and exact percentage target for SPY, VIX, and a named top mover. You can see exactly what was predicted before the market opened, not a vague retroactive narrative.',
             },
             {
-              icon: Zap,
-              title: 'Triple-Card System',
-              desc: 'Yesterday\'s receipt with accuracy score, today\'s live pulse, and tomorrow\'s locked predictions — all in one view.',
-              iconColor: null,
-              bg: 'border rounded-2xl p-5 space-y-2 bg-amber-500/8 border-amber-500/20',
-              bgStyle: undefined,
+              headline: 'Self-scoring AI',
+              body: 'After close each day, the system fetches real prices, computes a 0–100 accuracy score per indicator with partial credit for magnitude, then writes a plain-English recap explaining why it was right or wrong and what drove the session.',
             },
             {
-              icon: Lock,
-              title: 'Noon Lock & Accuracy',
-              desc: 'Predictions lock at 12 PM ET daily. Every forecast is scored against actual closes and tracked in a trust ledger.',
-              iconColor: null,
-              bg: 'border rounded-2xl p-5 space-y-2 bg-blue-500/8 border-blue-500/20',
-              bgStyle: undefined,
+              headline: 'Rolling accuracy ledger',
+              body: 'A full history of every prediction and score is stored and displayed as a calendar heatmap. You can see how the model performs over time — not cherry-picked wins, but every single day on record.',
             },
-            {
-              icon: TrendingUp,
-              title: 'Daily Edge Board',
-              desc: 'Top 5 assets with statistical edge today and bottom 5 to avoid — grounded with real search data every morning.',
-              iconColor: null,
-              bg: 'border rounded-2xl p-5 space-y-2 bg-emerald-500/8 border-emerald-500/20',
-              bgStyle: undefined,
-            },
-            {
-              icon: Target,
-              title: "Today's Positioning",
-              desc: 'Overweight, neutral, and underweight calls updated daily based on institutional flow and macro conditions.',
-              iconColor: null,
-              bg: 'border rounded-2xl p-5 space-y-2 bg-rose-500/8 border-rose-500/20',
-              bgStyle: undefined,
-            },
-            {
-              icon: RefreshCw,
-              title: 'Adaptive Signal Weights',
-              desc: 'After each scored day, the system auto-adjusts how much it trusts each signal type. Underperforming signals get down-weighted in real-time.',
-              iconColor: null,
-              bg: 'border rounded-2xl p-5 space-y-2 bg-cyan-500/8 border-cyan-500/20',
-              bgStyle: undefined,
-            },
-          ].map(({ icon: Icon, title, desc, iconColor, bg, bgStyle }) => (
+          ].map(({ headline, body }, i) => (
             <div
-              key={title}
-              className={bg}
-              style={bgStyle}
+              key={headline}
+              className="flex items-start gap-4 px-5 py-4"
+              style={{ borderBottom: i < 2 ? '1px solid #ebe4d8' : 'none', background: '#ffffff' }}
             >
-              <Icon className="w-5 h-5" style={iconColor ? { color: iconColor } : undefined} />
-              <p className="text-white font-semibold text-sm">{title}</p>
-              <p className="text-slate-500 text-xs leading-relaxed">{desc}</p>
+              <div className="flex-shrink-0 mt-0.5">
+                <CheckCircle style={{ width: 15, height: 15, color: '#7c3aed' }} />
+              </div>
+              <div>
+                <p className="font-sans font-semibold mb-0.5" style={{ fontSize: 12, color: '#1a1008' }}>{headline}</p>
+                <p className="font-sans" style={{ fontSize: 11.5, lineHeight: 1.6, color: '#6b5840' }}>{body}</p>
+              </div>
             </div>
           ))}
         </div>
 
-        {/* How it works strip */}
-        <div className="bg-white/3 border border-white/8 rounded-2xl p-6">
-          <p className="font-mono text-[10px] uppercase tracking-[0.18em] mb-5" style={{ color: 'rgba(241,244,248,0.3)' }}>How It Works</p>
-          <div className="flex flex-col md:flex-row items-start md:items-center gap-4 md:gap-0">
-            {[
-              { step: '① Today', desc: 'Live brief: 5 What/Why/Impact bullets, Core 4 indicators, Edge Board, weather gauge', color: 'text-amber-400' },
-              { step: '② Noon Lock', desc: 'AI predictions for tomorrow\'s Core 4 sealed at 12 PM ET — self-weighted by past accuracy', color: 'text-blue-400' },
-              { step: '③ Yesterday', desc: 'Predictions scored vs actual closes, accuracy ledger updated', color: '', violetStep: true },
-            ].map(({ step, desc, color, violetStep }, i) => (
-              <div key={i} className="flex items-start md:items-center gap-4 flex-1">
-                <div className="space-y-1">
-                  <p className={`text-sm font-bold ${color}`} style={violetStep ? { color: '#7c3aed' } : undefined}>{step}</p>
-                  <p className="text-slate-400 text-xs leading-relaxed">{desc}</p>
-                </div>
-                {i < 2 && (
-                  <ChevronRight className="w-4 h-4 text-slate-700 flex-shrink-0 hidden md:block" />
-                )}
+        {/* What's in the daily brief */}
+        <p className="font-sans uppercase mb-5" style={{ fontSize: 9.5, letterSpacing: '0.14em', fontWeight: 600, color: '#b09060' }}>
+          What&apos;s in the daily brief
+        </p>
+        <div className="grid grid-cols-2 gap-3 mb-8">
+          {([
+            {
+              Icon: BarChart2,
+              title: '3 Scored Indicators',
+              desc: 'SPY direction + % target, VIX direction + % target, and a named top mover with a predicted move — all locked at noon and graded after close.',
+            },
+            {
+              Icon: Newspaper,
+              title: '6–8 Live Headlines',
+              desc: 'Top market-moving news sourced from Bloomberg, Reuters, WSJ, FT, and CNBC. Each headline is impact-scored and ranked.',
+            },
+            {
+              Icon: TrendingUp,
+              title: 'Edge Board',
+              desc: 'Top 5 assets with statistical edge and bottom 5 to avoid — based on price momentum, volume, and sector flow.',
+            },
+            {
+              Icon: Target,
+              title: 'Positioning Calls',
+              desc: 'Overweight, neutral, and underweight calls based on institutional flow, macro regime, and today\'s live indicator readings.',
+            },
+            {
+              Icon: AlertTriangle,
+              title: 'Outlier Detection',
+              desc: 'One counter-intuitive data point flagged daily — a ticker moving with no obvious catalyst, or a sector contradicting the macro narrative.',
+            },
+            {
+              Icon: RefreshCw,
+              title: 'Weather Gauge',
+              desc: 'A single-line market sentiment summary derived from SPY momentum, VIX level, and sector rotation — a quick pulse for the day.',
+            },
+          ] as const).map(({ Icon, title, desc }) => (
+            <div
+              key={title}
+              className="flex items-start gap-3 rounded-xl p-4 border"
+              style={{ background: '#ffffff', borderColor: '#ebe4d8' }}
+            >
+              <div
+                className="flex-shrink-0 flex items-center justify-center rounded-lg"
+                style={{ width: 34, height: 34, background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.15)' }}
+              >
+                <Icon style={{ width: 15, height: 15, color: '#7c3aed' }} />
               </div>
-            ))}
-          </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-sans font-semibold mb-1" style={{ fontSize: 12, color: '#1a1008' }}>{title}</h3>
+                <p className="font-sans" style={{ fontSize: 11, lineHeight: 1.55, color: '#6b5840' }}>{desc}</p>
+              </div>
+            </div>
+          ))}
         </div>
 
-        {/* Launch button */}
-        <div className="flex justify-center">
-          <button
-            onClick={() => onNavigate?.('market-near')}
-            className="group flex items-center gap-3 px-8 py-4 rounded-2xl font-bold text-base transition-all duration-200"
-            style={{
-              background: 'linear-gradient(135deg, rgba(124,58,237,0.25) 0%, rgba(124,58,237,0.15) 100%)',
-              border: '1px solid rgba(124,58,237,0.4)',
-              color: '#c4b5fd',
-            }}
-            onMouseEnter={e => {
-              (e.currentTarget as HTMLButtonElement).style.background = 'linear-gradient(135deg, rgba(124,58,237,0.35) 0%, rgba(124,58,237,0.25) 100%)';
-            }}
-            onMouseLeave={e => {
-              (e.currentTarget as HTMLButtonElement).style.background = 'linear-gradient(135deg, rgba(124,58,237,0.25) 0%, rgba(124,58,237,0.15) 100%)';
-            }}
+        {/* How the loop works */}
+        <p className="font-sans uppercase mb-4" style={{ fontSize: 9.5, letterSpacing: '0.14em', fontWeight: 600, color: '#b09060' }}>
+          How the prediction loop works
+        </p>
+        <div className="rounded-xl border overflow-hidden mb-6" style={{ borderColor: '#ebe4d8' }}>
+          {[
+            {
+              step: '① Morning',
+              desc: 'Live brief generated with real prices, headlines, edge board, and positioning calls. The previous day\'s accuracy recap appears in Yesterday\'s Call.',
+            },
+            {
+              step: '② Noon lock',
+              desc: 'At 12 PM ET, tomorrow\'s predictions are sealed — direction and exact % target for SPY, VIX, and one named top mover stock. The record is immutable from this point.',
+            },
+            {
+              step: '③ After close',
+              desc: 'Real closing prices are fetched, every indicator is scored 0–100 (partial credit for how close the magnitude was), and a plain-English recap is written explaining what happened and why.',
+            },
+          ].map(({ step, desc }, i) => (
+            <div
+              key={step}
+              className="flex items-start gap-4 px-5 py-4"
+              style={{ borderBottom: i < 2 ? '1px solid #ebe4d8' : 'none', background: '#ffffff' }}
+            >
+              <span className="font-sans font-bold flex-shrink-0 mt-0.5" style={{ fontSize: 12, color: '#7c3aed', minWidth: 90 }}>{step}</span>
+              <p className="font-sans" style={{ fontSize: 11.5, lineHeight: 1.6, color: '#6b5840' }}>{desc}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Near-term analysis callout */}
+        <div
+          className="rounded-xl border p-5 flex items-start gap-4"
+          style={{ background: 'rgba(124,58,237,0.04)', borderColor: 'rgba(124,58,237,0.18)' }}
+        >
+          <div
+            className="flex-shrink-0 flex items-center justify-center rounded-lg"
+            style={{ width: 36, height: 36, background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.2)' }}
           >
-            <Zap className="w-5 h-5" />
-            Launch Daily Intelligence
-            <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
-          </button>
+            <Calendar style={{ width: 16, height: 16, color: '#7c3aed' }} />
+          </div>
+          <div>
+            <p className="font-sans font-semibold mb-1" style={{ fontSize: 12, color: '#1a1008' }}>On-demand deep analysis</p>
+            <p className="font-sans" style={{ fontSize: 11.5, lineHeight: 1.6, color: '#6b5840' }}>
+              Full What / Why / Impact breakdown across 5 asset classes — Equities, Fixed Income, Commodities, FX, and Real Assets — plus a 7-day catalyst calendar of key events that could shift the thesis.
+            </p>
+          </div>
         </div>
 
       </div>

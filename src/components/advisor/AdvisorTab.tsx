@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Brain, MessageSquare, PieChart, Zap, GitCompare, Star,
+  Brain, MessageSquare, PieChart, GitCompare, Star,
   Plus, Trash2, Send, Loader2, Activity,
   CalendarDays, Eye, X, BarChart3,
 } from 'lucide-react';
@@ -25,7 +25,7 @@ import { useAppContext } from '@/lib/appContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type AdvisorMode = 'chat' | 'portfolio' | 'thesis' | 'compare' | 'best-assets' | 'best-strategy' | 'macro-calendar' | 'watchlist';
+type AdvisorMode = 'chat' | 'portfolio' | 'compare' | 'best-assets' | 'best-strategy' | 'macro-calendar' | 'watchlist';
 type ContextStatus = 'loading' | 'ready' | 'partial' | 'failed';
 
 
@@ -49,23 +49,22 @@ const ACCOUNT_TYPES = [
 ];
 
 const SUGGESTED_PROMPTS = [
-  "Should I rebalance my portfolio right now?",
-  "What's the right asset allocation for someone in their 40s?",
-  "How much should I keep in cash vs. invested?",
-  "What's the biggest risk to my portfolio over the next 12 months?",
-  "How do I protect against a downturn without leaving the market?",
-  "What should I do with a $50,000 windfall right now?",
+  "What's the single biggest risk to a balanced portfolio right now, given current macro conditions?",
+  "Should I be overweight or underweight equities in this regime?",
+  "What's your conviction call on the next 3 months — where would you put new money today?",
+  "How do I protect downside without sitting in cash?",
+  "What does the yield curve and credit spread environment mean for my allocation?",
+  "Give me a plain-English summary of where we are in the market cycle.",
 ];
 
 const MODES: { id: AdvisorMode; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: 'chat',          label: 'Intelligence Chat',   Icon: MessageSquare },
-  { id: 'portfolio',     label: 'Portfolio Analysis',  Icon: PieChart },
-  { id: 'thesis',        label: 'Stress Test',         Icon: Zap },
-  { id: 'compare',       label: 'Compare Assets',      Icon: GitCompare },
-  { id: 'best-assets',   label: 'Best Stocks',         Icon: Star },
-  { id: 'best-strategy', label: 'Quick Portfolio',   Icon: BarChart3 },
-  { id: 'macro-calendar', label: 'Macro Calendar',     Icon: CalendarDays },
-  { id: 'watchlist',     label: 'Watchlist',           Icon: Eye },
+  { id: 'chat',           label: 'Chat',             Icon: MessageSquare },
+  { id: 'portfolio',      label: 'Portfolio Analysis', Icon: PieChart },
+  { id: 'compare',        label: 'Head-to-Head',       Icon: GitCompare },
+  { id: 'best-assets',    label: 'Best Stocks',        Icon: Star },
+  { id: 'best-strategy',  label: 'Quick Portfolio',    Icon: BarChart3 },
+  { id: 'macro-calendar', label: 'Event Calendar',   Icon: CalendarDays },
+  { id: 'watchlist',      label: 'Watchlist',        Icon: Eye },
 ];
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -92,9 +91,6 @@ export default function AdvisorTab() {
   const [portfolioRows, setPortfolioRows] = useState<PortfolioRow[]>([
     { id: '1', asset: '', amount: '', accountType: 'Taxable Brokerage' },
   ]);
-
-  // Thesis
-  const [thesis, setThesis] = useState('');
 
   // Compare
   const [compareItems, setCompareItems] = useState<string[]>(['', '']);
@@ -243,15 +239,6 @@ export default function AdvisorTab() {
     sendChat(`Analyze my portfolio — ${holdings}. Give me macro alignment, concentration risks, tax placement efficiency, and your top improvement suggestions.`);
   };
 
-  // ── Stress test thesis ─────────────────────────────────────────────────────
-  const stressTestThesis = () => {
-    if (!thesis.trim()) return;
-    const t = thesis.trim();
-    setSessionCtx(prev => ({ ...prev, thesis: t.slice(0, 150) }));
-    setMode('chat');
-    sendChat(`Stress test this thesis against today's market: "${t}". What kills it, what confirms it, and what's the probability-weighted verdict?`);
-  };
-
   // ── Compare assets ─────────────────────────────────────────────────────────
   const compareAssets = () => {
     const valid = compareItems.map(s => s.trim()).filter(Boolean);
@@ -278,7 +265,7 @@ export default function AdvisorTab() {
                 ● Silas Advisor
               </p>
               <h1 className="text-lg font-bold text-zinc-900 leading-tight">Silas</h1>
-              <p className="text-xs text-zinc-500">Expert Wealth Advisor</p>
+              <p className="text-xs text-zinc-500">Wealth Advisor</p>
             </div>
           </div>
 
@@ -414,10 +401,10 @@ export default function AdvisorTab() {
                     <>
                       <p className="text-center text-zinc-400 text-sm mb-6 leading-relaxed">
                         {contextStatus === 'ready'
-                          ? 'Market context loaded — ask me anything about investments, markets, and portfolio strategy.'
+                          ? 'Silas knows your portfolio, lab runs, and live market context. Ask anything.'
                           : contextStatus === 'loading'
-                          ? 'Loading real-time market context in the background...'
-                          : 'Ask me anything — I have expert investment knowledge'}
+                          ? 'Loading your financial picture and real-time market context...'
+                          : 'Silas knows your whole financial picture across every app — from your personalized portfolio, lab runs, and live market context. Ask me anything.'}
                       </p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-2xl mx-auto">
                         {SUGGESTED_PROMPTS.map(p => (
@@ -524,17 +511,6 @@ export default function AdvisorTab() {
                 <MessageSquare className="w-10 h-10 text-zinc-200 mx-auto mb-3" />
                 <p className="text-sm text-zinc-400 font-medium">Analysis streams into Intelligence Chat</p>
                 <p className="text-xs text-zinc-400 mt-1">Add your holdings above, then click Analyze in Chat</p>
-              </div>
-            </div>
-          </div>
-        ) : mode === 'thesis' ? (
-          <div className="flex flex-col flex-1 min-h-0">
-            <ThesisPanel thesis={thesis} setThesis={setThesis} onStressTest={stressTestThesis} loading={chatLoading} />
-            <div className="flex-1 flex items-center justify-center px-6 py-8 text-center">
-              <div>
-                <MessageSquare className="w-10 h-10 text-zinc-200 mx-auto mb-3" />
-                <p className="text-sm text-zinc-400 font-medium">Stress test streams into Intelligence Chat</p>
-                <p className="text-xs text-zinc-400 mt-1">Enter your thesis above, then click Stress Test in Chat</p>
               </div>
             </div>
           </div>
@@ -688,42 +664,10 @@ function PortfolioBuilderPanel({
       <button
         onClick={onAnalyze}
         disabled={loading || rows.every(r => !r.asset.trim())}
-        className="mt-3 w-full disabled:bg-zinc-200 text-white disabled:text-zinc-400 text-xs font-bold py-2 rounded-xl transition-colors flex items-center justify-center gap-2" style={{ background: '#C9A84C' }}
+        className="mt-3 w-full disabled:bg-zinc-200 disabled:text-zinc-400 text-xs font-bold py-2 rounded-xl transition-colors flex items-center justify-center gap-2" style={{ background: '#C9A84C', color: '#1a1008' }}
       >
         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
         {loading ? 'Analyzing...' : 'Analyze in Chat'}
-      </button>
-    </div>
-  );
-}
-
-// ─── Thesis Panel ─────────────────────────────────────────────────────────────
-
-function ThesisPanel({ thesis, setThesis, onStressTest, loading }: {
-  thesis: string; setThesis: (s: string) => void; onStressTest: () => void; loading: boolean;
-}) {
-  return (
-    <div className="flex-shrink-0 border-b border-zinc-200 px-6 py-4 bg-zinc-50">
-      <div className="mb-2">
-        <div className="flex items-center gap-2 mb-1">
-          <Zap className="w-4 h-4" style={{ color: '#C9A84C' }} />
-          <span className="text-sm font-bold text-zinc-900">Stress Test</span>
-        </div>
-        <p className="text-xs text-zinc-500 leading-relaxed">Describe an investment thesis and Silas will stress-test it against current macro conditions — what kills it, what confirms it, and a probability-weighted verdict.</p>
-      </div>
-      <textarea
-        value={thesis}
-        onChange={e => setThesis(e.target.value)}
-        placeholder='e.g. "I think tech will outperform over the next 6 months because AI capex is still accelerating and the Fed is done hiking"'
-        className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-xs text-zinc-900 placeholder-zinc-400 resize-none h-20 focus:outline-none focus:border-[#C9A84C] leading-relaxed"
-      />
-      <button
-        onClick={onStressTest}
-        disabled={loading || !thesis.trim()}
-        className="mt-2 w-full disabled:bg-zinc-200 text-white disabled:text-zinc-400 text-xs font-bold py-2 rounded-xl transition-colors flex items-center justify-center gap-2" style={{ background: '#C9A84C' }}
-      >
-        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
-        {loading ? 'Testing...' : 'Stress Test in Chat'}
       </button>
     </div>
   );
@@ -782,7 +726,7 @@ function ComparePanel({ items, setItems, onCompare, loading }: {
       <button
         onClick={onCompare}
         disabled={loading || validCount < 2}
-        className="w-full disabled:bg-zinc-200 text-white disabled:text-zinc-400 text-xs font-bold py-2 rounded-xl transition-colors flex items-center justify-center gap-2" style={{ background: '#C9A84C' }}
+        className="w-full disabled:bg-zinc-200 disabled:text-zinc-400 text-xs font-bold py-2 rounded-xl transition-colors flex items-center justify-center gap-2" style={{ background: '#C9A84C', color: '#1a1008' }}
       >
         {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageSquare className="w-3.5 h-3.5" />}
         {loading ? 'Comparing...' : 'Compare in Chat'}

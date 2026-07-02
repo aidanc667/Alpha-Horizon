@@ -55,7 +55,7 @@ const APPS = [
   {
     id: 'lab' as ActiveTab,
     label: 'Backtesting Lab',
-    sub: 'Persona Simulation',
+    sub: 'Historical Simulations',
     desc: 'Backtest any portfolio strategy against historical data with full risk metrics.',
     cta: 'Open lab',
     accentHex: '#6366f1',
@@ -66,8 +66,8 @@ const APPS = [
   {
     id: 'market-home' as ActiveTab,
     label: 'Market Analysis',
-    sub: 'Live Intelligence',
-    desc: 'Institutional-grade macro intelligence with sector analysis and live market data.',
+    sub: 'Real-Time Intelligence',
+    desc: 'Daily AI predictions on SPY, VIX, and top movers — scored against actuals with a full accuracy history.',
     cta: 'Read the desk',
     accentHex: '#7c3aed',
     paleBg: '#f5f3ff',
@@ -88,7 +88,7 @@ const APPS = [
   {
     id: 'arena' as ActiveTab,
     label: 'Strategy Arena',
-    sub: 'Paper Trading',
+    sub: 'Unlimited Paper Trading',
     desc: 'Test trading strategies risk-free in a paper trading simulator with live data.',
     cta: 'Enter arena',
     accentHex: '#b91c1c',
@@ -130,7 +130,7 @@ function TickerBar() {
   return (
     <div
       className="flex-shrink-0 flex items-center overflow-hidden"
-      style={{ height: 28, background: '#120d08', borderBottom: '1px solid #1e1610' }}
+      style={{ height: 34, background: '#120d08', borderBottom: '1px solid #1e1610' }}
     >
       {items.length === 0 ? (
         <span className="font-mono text-[10px] px-4" style={{ color: '#5a4535' }}>Loading market data…</span>
@@ -140,14 +140,14 @@ function TickerBar() {
             const chg = t.change;
             return (
               <span key={i} className="inline-flex items-center gap-1.5 px-4 whitespace-nowrap">
-                <span className="font-mono text-[10px] font-semibold" style={{ color: '#c8b090' }}>
+                <span className="font-mono text-[12px] font-semibold" style={{ color: '#e8d0a8' }}>
                   {t.symbol.replace('-USD', '').replace('^TNX', '10Y').replace('^', '')}
                 </span>
-                <span className="font-mono text-[10px]" style={{ color: '#8a7060' }}>
+                <span className="font-mono text-[12px]" style={{ color: '#a89070' }}>
                   {fmtPrice(t.price, t.symbol)}
                 </span>
                 {chg !== null && (
-                  <span className="font-mono text-[9px] font-semibold" style={{ color: chg >= 0 ? '#16a34a' : '#b91c1c' }}>
+                  <span className="font-mono text-[11px] font-semibold" style={{ color: chg >= 0 ? '#22c55e' : '#f87171' }}>
                     {fmtChg(chg)}
                   </span>
                 )}
@@ -185,17 +185,17 @@ function AppTile({ app, onNavigate }: { app: typeof APPS[number]; onNavigate: (t
         >
           {app.emoji}
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="font-display text-[13px] font-semibold leading-tight" style={{ color: '#1a1008' }}>
+        <div className="flex-1 min-w-0" style={{ height: 54 }}>
+          <div className="font-display font-semibold leading-tight whitespace-nowrap" style={{ fontSize: 12.5, color: '#1a1008' }}>
             {app.label}
           </div>
-          <div className="font-sans uppercase mt-0.5" style={{ fontSize: 9, letterSpacing: '0.12em', fontWeight: 600, color: app.accentHex }}>
+          <div className="font-sans uppercase mt-1" style={{ fontSize: 9, letterSpacing: '0.12em', fontWeight: 600, color: app.accentHex, lineHeight: 1.4 }}>
             {app.sub}
           </div>
         </div>
       </div>
 
-      <p className="font-sans text-[11.5px] leading-relaxed mb-4" style={{ color: '#6b5840' }}>
+      <p className="font-sans text-[11.5px] leading-relaxed mb-4" style={{ color: '#6b5840', minHeight: 72 }}>
         {app.desc}
       </p>
 
@@ -240,14 +240,9 @@ export default function HomeLanding({ onNavigate }: HomeLandingProps) {
 
       {/* Page header */}
       <div className="px-8 pt-7 pb-2 flex items-center justify-between">
-        <div>
-          <p className="font-sans uppercase mb-1" style={{ fontSize: 9.5, letterSpacing: '0.16em', fontWeight: 600, color: '#C9A84C' }}>
-            ● Alpha Horizon
-          </p>
-          <h1 className="font-display font-semibold" style={{ fontSize: 26, color: '#1a1008', lineHeight: 1.2 }}>
-            Welcome back.
-          </h1>
-        </div>
+        <p className="font-mono" style={{ fontSize: 12, color: '#b09060' }}>
+          {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+        </p>
         {marketOpen ? (
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md" style={{ background: '#f0fdf4' }}>
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#16a34a' }} />
@@ -286,11 +281,11 @@ export default function HomeLanding({ onNavigate }: HomeLandingProps) {
                 </div>
                 <div className="flex items-center gap-3 mt-4">
                   <div className="h-px flex-shrink-0 w-8" style={{ background: '#e4c97e' }} />
-                  <span className="font-mono text-[11px] uppercase tracking-[0.22em]" style={{ color: '#e4c97e' }}>AI Finance Terminal</span>
+                  <span className="font-mono text-[11px] uppercase tracking-[0.22em]" style={{ color: '#e4c97e' }}>AI Investment Platform</span>
                   <div className="h-px flex-1" style={{ background: 'linear-gradient(to right, #e4c97e, transparent)' }} />
                 </div>
                 <p className="mt-5 text-[14px] leading-[1.65] max-w-[480px]" style={{ color: 'rgba(241,244,248,0.55)' }}>
-                  An all-in-one investment platform that streamlines complex market research and portfolio analysis. Experience five institutional-grade apps — spanning personalized portfolio construction, backtesting, live market analysis, wealth advisory, and adversarial paper trading — designed to help you master the market and expand your investing knowledge.
+                  Five institutional-grade tools built for serious investors: personalized portfolio construction, strategy backtesting, live market intelligence, AI wealth advisory, and paper trading. Everything you need to research, analyze, and act with conviction.
                 </p>
               </div>
             </div>

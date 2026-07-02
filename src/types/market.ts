@@ -323,6 +323,14 @@ export interface DailyIndicators {
     lean: 'Bullish' | 'Neutral' | 'Bearish';
     description: string;
   };
+  // ── Scoring fields (written alongside existing data) ──
+  spyDirection?: 'Up' | 'Down';
+  spyChangePercent?: number | null;
+  sectorCategory?: { category: string; leaderTicker: string } | null;
+  marketMood?: 'Risk-On' | 'Neutral' | 'Risk-Off';
+  vixDirection?: 'Up' | 'Down' | null;
+  vixChangePercent?: number | null;
+  topMoverPrediction?: { ticker: string; direction: 'Up' | 'Down'; changePercent: number } | null;
   // ── Facts (reported today, not scored) ──
   bigStory: {
     ticker: string;
@@ -342,12 +350,27 @@ export interface DailyIndicators {
 export type Elite6Indicators = DailyIndicators;
 
 export interface TomorrowPredictions {
-  fearGreed: DailyIndicators['fearGreed'];
-  spyTrend: DailyIndicators['spyTrend'];
-  sectorRotation: DailyIndicators['sectorRotation'];
-  optionsPulse: DailyIndicators['optionsPulse'];
+  // New model fields
+  spyDirection?: 'Up' | 'Down';
+  spyChangePercent?: number;
+  vixDirection?: 'Up' | 'Down';
+  vixChangePercent?: number;
+  topMover?: {
+    ticker: string;
+    name?: string;
+    direction: 'Up' | 'Down';
+    changePercent: number;
+  };
   confidence?: 'High' | 'Moderate' | 'Low';
+  rationale?: string;
   signals?: string[];
+  // Legacy fields (kept for old DB rows)
+  sectorCategory?: { category?: string; leaderTicker?: string; description?: string };
+  marketMood?: string;
+  fearGreed?: DailyIndicators['fearGreed'];
+  spyTrend?: DailyIndicators['spyTrend'];
+  sectorRotation?: DailyIndicators['sectorRotation'];
+  optionsPulse?: DailyIndicators['optionsPulse'];
 }
 
 export interface DailyBriefBullet {
@@ -375,17 +398,35 @@ export interface LiveHeadline {
 }
 
 export interface AccuracyBreakdown {
-  fearGreed: number;       // 0-100
-  spyTrend: number;        // 0-100
-  sectorRotation: number;  // 0-100
-  optionsPulse: number;    // 0-100
+  // New model fields
+  spy?: number;       // 0-100
+  vix?: number;       // 0-100
+  topMover?: number;  // 0-100
+  // Previous model (kept for old DB rows)
+  spyDirection?: number;
+  sectorCategory?: number;
+  vixDirection?: number;
+  // Legacy 4-indicator model (kept for old DB rows)
+  fearGreed?: number;
+  spyTrend?: number;
+  sectorRotation?: number;
+  optionsPulse?: number;
 }
 
 export interface RollingAccuracy {
-  fearGreed: number | null;
-  spyTrend: number | null;
-  sectorRotation: number | null;
-  optionsPulse: number | null;
+  // New model fields
+  spy?: number | null;
+  vix?: number | null;
+  topMover?: number | null;
+  // Previous model (kept for old DB rows)
+  spyDirection?: number | null;
+  sectorCategory?: number | null;
+  vixDirection?: number | null;
+  // Legacy fields
+  fearGreed?: number | null;
+  spyTrend?: number | null;
+  sectorRotation?: number | null;
+  optionsPulse?: number | null;
   daysScored: number;
 }
 
@@ -407,6 +448,7 @@ export interface DailyMarketRecord {
   accuracyScore: number | null; // 0-100
   accuracyBreakdown: AccuracyBreakdown | null;
   accuracyCalculatedAt: string | null;
+  accuracyBrief: string | null; // AI recap: what happened, why right/wrong
   // Daily Edge Board & Positioning
   edgeBoard: DailyEdgeBoard | null;
   positioning: TodayPositioning | null;

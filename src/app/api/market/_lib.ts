@@ -27,6 +27,7 @@ export const CACHE_TTL: Record<string, number> = {
   portfolioAdvice: 0,
   fearAndGreed:   10 * 60 * 1000,
   spyData:         5 * 60 * 1000,
+  vixData:         5 * 60 * 1000,
   sectorData:     10 * 60 * 1000,
   marketMovers:   10 * 60 * 1000,
   putCallRatio:    5 * 60 * 1000,
@@ -268,6 +269,34 @@ export async function fetchFearAndGreed(): Promise<FearGreedData | null> {
   });
 }
 
+export interface VIXData {
+  level: number | null;
+  direction: 'Up' | 'Down' | null;
+  previousClose: number | null;
+  changePercent: number | null;
+}
+export async function fetchVIXData(): Promise<VIXData> {
+  return getCachedL1L2<VIXData>('vixData', CACHE_TTL.spyData, async () => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const quote = await (yahooFinance as any).quote('^VIX');
+      const level: number | null = quote?.regularMarketPrice ?? null;
+      const prevClose: number | null = quote?.regularMarketPreviousClose ?? null;
+      const direction: 'Up' | 'Down' | null =
+        level != null && prevClose != null
+          ? level > prevClose ? 'Up' : 'Down'
+          : null;
+      const changePercent: number | null =
+        level != null && prevClose != null && prevClose !== 0
+          ? Math.round(((level - prevClose) / prevClose) * 10000) / 100
+          : null;
+      return { level, direction, previousClose: prevClose, changePercent };
+    } catch {
+      return { level: null, direction: null, previousClose: null, changePercent: null };
+    }
+  });
+}
+
 export interface MoverQuote { ticker: string; name: string; changePercent: number; change: string }
 
 const SECTOR_ETFS = ['XLK','XLF','XLE','XLV','XLI','XLY','XLP','XLU','XLB','XLRE','XLC'];
@@ -401,16 +430,36 @@ export async function saveSignalWeights(sql: ReturnType<typeof db>, weights: Sig
 
 // ─── Shared rolling accuracy calculator (deduplicates tripleCard + refreshLive) ──
 export function computeRollingAccuracy(rows: Array<{ accuracy_breakdown: unknown; user_accuracy_correct: unknown }>) {
-  const rolling: Record<string, number[]> = { fearGreed: [], spyTrend: [], sectorRotation: [], optionsPulse: [] };
+  // Track new (spy/vix/topMover), previous (spyDirection/sectorCategory/vixDirection), and legacy (fearGreed/spyTrend/etc) fields
+  const rolling: Record<string, number[]> = {
+    spy: [], vix: [], topMover: [],
+    spyDirection: [], sectorCategory: [], vixDirection: [],
+    fearGreed: [], spyTrend: [], sectorRotation: [], optionsPulse: [],
+  };
   let modelStreak = 0, userStreak = 0, modelBroken = false, userBroken = false;
   for (const r of rows) {
     const ab = r.accuracy_breakdown as Record<string, number> | null;
     if (ab) {
+      // Only accumulate new model rows (has spy/vix/topMover) OR legacy rows — skip transitional rows to keep averages clean
+      const isNewModel = ab.spy != null || ab.vix != null || ab.topMover != null;
+      const isLegacy = ab.fearGreed != null || ab.spyTrend != null;
+      const isPrevious = !isNewModel && (ab.spyDirection != null || ab.sectorCategory != null || ab.vixDirection != null);
       for (const key of Object.keys(rolling)) {
-        if (ab[key] != null) rolling[key].push(Number(ab[key]));
+        if (ab[key] != null) {
+          // For new model fields, only accumulate from new model rows
+          if ((key === 'spy' || key === 'vix' || key === 'topMover') && isNewModel) {
+            rolling[key].push(Number(ab[key]));
+          } else if ((key === 'spyDirection' || key === 'sectorCategory' || key === 'vixDirection') && isPrevious) {
+            rolling[key].push(Number(ab[key]));
+          } else if (isLegacy && !isNewModel && !isPrevious) {
+            rolling[key].push(Number(ab[key]));
+          }
+        }
       }
       if (!modelBroken) {
-        if (ab.spyTrend != null && ab.spyTrend >= 60) modelStreak++;
+        // Use spy for new rows, spyDirection for previous, spyTrend for legacy
+        const spyScore = ab.spy ?? ab.spyDirection ?? ab.spyTrend;
+        if (spyScore != null && spyScore >= 60) modelStreak++;
         else modelBroken = true;
       }
     } else if (!modelBroken) {
@@ -424,6 +473,12 @@ export function computeRollingAccuracy(rows: Array<{ accuracy_breakdown: unknown
   const avg = (arr: number[]) => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : null;
   return {
     rollingAccuracy: {
+      spy:            avg(rolling.spy),
+      vix:            avg(rolling.vix),
+      topMover:       avg(rolling.topMover),
+      spyDirection:   avg(rolling.spyDirection),
+      sectorCategory: avg(rolling.sectorCategory),
+      vixDirection:   avg(rolling.vixDirection),
       fearGreed:      avg(rolling.fearGreed),
       spyTrend:       avg(rolling.spyTrend),
       sectorRotation: avg(rolling.sectorRotation),

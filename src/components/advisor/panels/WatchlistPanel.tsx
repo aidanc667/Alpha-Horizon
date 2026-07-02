@@ -105,8 +105,8 @@ export function WatchlistPanel({
           <button
             onClick={addTicker}
             disabled={adding || !input.trim() || tickers.length >= 20}
-            className="disabled:bg-zinc-200 text-white disabled:text-zinc-400 text-xs font-bold px-4 py-2.5 rounded-xl transition-colors flex items-center gap-2 whitespace-nowrap"
-            style={{ background: '#C9A84C' }}
+            className="disabled:bg-zinc-200 disabled:text-zinc-400 text-xs font-bold px-4 py-2.5 rounded-xl transition-colors flex items-center gap-2 whitespace-nowrap"
+            style={{ background: '#C9A84C', color: '#1a1008' }}
           >
             {adding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
             Add

@@ -9,202 +9,141 @@ import {
 // ─── scoreAccuracy ────────────────────────────────────────────────────────────
 
 describe('scoreAccuracy', () => {
-  // ── Fear & Greed component ──────────────────────────────────────────────────
+  // ── SPY component ──────────────────────────────────────────────────────────
 
-  it('gives 100 on F&G when prediction exactly matches actual', () => {
+  it('gives 100 on spy when direction matches and magnitude within 0.3%', () => {
     const { breakdown } = scoreAccuracy(
-      { fearGreed: { score: 62 } },
-      { fearGreed: { score: 62 } },
+      { spyDirection: 'Up', spyChangePercent: 0.5 },
+      { spyDirection: 'Up', spyChangePercent: 0.7 },
     );
-    expect(breakdown.fearGreed).toBe(100);
+    expect(breakdown.spy).toBe(100); // magDiff = 0.2 <= 0.3 → 60+40
   });
 
-  it('gives 80 on F&G when prediction is off by 10 (tiered scoring)', () => {
+  it('gives 85 on spy when direction matches and magnitude within 0.7%', () => {
     const { breakdown } = scoreAccuracy(
-      { fearGreed: { score: 50 } },
-      { fearGreed: { score: 60 } },
+      { spyDirection: 'Up', spyChangePercent: 0.5 },
+      { spyDirection: 'Up', spyChangePercent: 1.0 },
     );
-    expect(breakdown.fearGreed).toBe(80); // diff=10, within ≤10 band → 80
+    expect(breakdown.spy).toBe(85); // magDiff = 0.5 → 60+25
   });
 
-  it('clamps F&G score to 0 when difference exceeds 100', () => {
+  it('gives 70 on spy when direction matches and magnitude within 1.5%', () => {
     const { breakdown } = scoreAccuracy(
-      { fearGreed: { score: 0 } },
-      { fearGreed: { score: 100 } },
+      { spyDirection: 'Up', spyChangePercent: 0.5 },
+      { spyDirection: 'Up', spyChangePercent: 1.8 },
     );
-    expect(breakdown.fearGreed).toBe(0);
+    expect(breakdown.spy).toBe(70); // magDiff = 1.3 → 60+10
   });
 
-  it('uses 50 as default F&G score when fields are missing', () => {
+  it('gives 60 on spy when direction matches but magnitude far off', () => {
+    const { breakdown } = scoreAccuracy(
+      { spyDirection: 'Up', spyChangePercent: 0.5 },
+      { spyDirection: 'Up', spyChangePercent: 3.0 },
+    );
+    expect(breakdown.spy).toBe(60); // magDiff = 2.5 > 1.5 → 60+0
+  });
+
+  it('gives 0 on spy when direction does not match', () => {
+    const { breakdown } = scoreAccuracy(
+      { spyDirection: 'Up', spyChangePercent: 0.5 },
+      { spyDirection: 'Down', spyChangePercent: -0.5 },
+    );
+    expect(breakdown.spy).toBe(0);
+  });
+
+  // ── VIX component ──────────────────────────────────────────────────────────
+
+  it('gives 100 on vix when direction matches and magnitude within 5%', () => {
+    const { breakdown } = scoreAccuracy(
+      { vixDirection: 'Down', vixChangePercent: -8 },
+      { vixDirection: 'Down', vixChangePercent: -10 },
+    );
+    expect(breakdown.vix).toBe(100); // magDiff = 2 <= 5 → 60+40
+  });
+
+  it('gives 85 on vix when direction matches and magnitude within 15%', () => {
+    const { breakdown } = scoreAccuracy(
+      { vixDirection: 'Up', vixChangePercent: 5 },
+      { vixDirection: 'Up', vixChangePercent: 15 },
+    );
+    expect(breakdown.vix).toBe(85); // magDiff = 10 → 60+25
+  });
+
+  it('gives 0 on vix when direction does not match', () => {
+    const { breakdown } = scoreAccuracy(
+      { vixDirection: 'Up', vixChangePercent: 5 },
+      { vixDirection: 'Down', vixChangePercent: -5 },
+    );
+    expect(breakdown.vix).toBe(0);
+  });
+
+  it('gives 0 on vix when missing from both pred and actual', () => {
     const { breakdown } = scoreAccuracy({}, {});
-    expect(breakdown.fearGreed).toBe(100); // both default to 50, diff = 0
+    expect(breakdown.vix).toBe(0);
   });
 
-  // ── SPY Trend component ─────────────────────────────────────────────────────
+  // ── Top Mover component ────────────────────────────────────────────────────
 
-  it('gives 100 on SPY when direction matches and magnitude is within 0.5%', () => {
+  it('gives 100 on topMover when direction matches and ticker moved ≥5% and was top3', () => {
     const { breakdown } = scoreAccuracy(
-      { spyTrend: { direction: 'Up', changePercent: 0.8 } },
-      { spyTrend: { direction: 'Up', changePercent: 1.0 } },
+      { topMover: { ticker: 'NVDA', direction: 'Up', changePercent: 4.5 } },
+      { topMover: { predictedTickerChange: 6.2, predictedTickerWasTop3: true } },
     );
-    expect(breakdown.spyTrend).toBe(100); // 60 direction + 40 magnitude (diff 0.2 ≤ 0.5)
+    expect(breakdown.topMover).toBe(100); // 50+40+10 = 100
   });
 
-  it('gives 80 on SPY when direction matches but magnitude diff is 0.6–1.0%', () => {
+  it('gives 90 on topMover when direction matches and ticker moved ≥5% but not top3', () => {
     const { breakdown } = scoreAccuracy(
-      { spyTrend: { direction: 'Up', changePercent: 0.5 } },
-      { spyTrend: { direction: 'Up', changePercent: 1.3 } },
+      { topMover: { ticker: 'NVDA', direction: 'Up', changePercent: 4.5 } },
+      { topMover: { predictedTickerChange: 5.5, predictedTickerWasTop3: false } },
     );
-    expect(breakdown.spyTrend).toBe(80); // 60 + 20 (diff 0.8, in 0.5–1.0 band)
+    expect(breakdown.topMover).toBe(90); // 50+40+0 = 90
   });
 
-  it('gives 60 on SPY when direction matches but magnitude diff exceeds 1.0%', () => {
+  it('gives 80 on topMover when direction matches and ticker moved ≥3%', () => {
     const { breakdown } = scoreAccuracy(
-      { spyTrend: { direction: 'Up', changePercent: 0.1 } },
-      { spyTrend: { direction: 'Up', changePercent: 1.5 } },
+      { topMover: { ticker: 'NVDA', direction: 'Up', changePercent: 3.5 } },
+      { topMover: { predictedTickerChange: 3.8, predictedTickerWasTop3: false } },
     );
-    expect(breakdown.spyTrend).toBe(60); // 60 + 0 (diff 1.4 > 1.0)
+    expect(breakdown.topMover).toBe(80); // 50+30+0 = 80
   });
 
-  it('gives 0 on SPY when direction is wrong and magnitude diff exceeds 1.0%', () => {
-    // direction mismatch (0 pts) + magDiff = |0.5 - (-1.2)| = 1.7 > 1.0 (0 pts)
+  it('gives 0 on topMover when direction is wrong', () => {
     const { breakdown } = scoreAccuracy(
-      { spyTrend: { direction: 'Up', changePercent: 0.5 } },
-      { spyTrend: { direction: 'Down', changePercent: -1.2 } },
+      { topMover: { ticker: 'NVDA', direction: 'Up', changePercent: 4.5 } },
+      { topMover: { predictedTickerChange: -3.0, predictedTickerWasTop3: false } },
     );
-    expect(breakdown.spyTrend).toBe(0);
+    expect(breakdown.topMover).toBe(0);
   });
 
-  it('awards magnitude points even when direction is wrong if percent diff is small', () => {
-    // Direction mismatch: 0 for direction. Magnitude diff = 0.2, so +40 still applies.
-    // This is intentional — near-zero moves are noise not signal.
+  it('gives 0 on topMover when actual ticker change is null (no data)', () => {
     const { breakdown } = scoreAccuracy(
-      { spyTrend: { direction: 'Up', changePercent: 0.1 } },
-      { spyTrend: { direction: 'Down', changePercent: -0.1 } },
+      { topMover: { ticker: 'NVDA', direction: 'Up', changePercent: 4.5 } },
+      { topMover: { predictedTickerChange: null } },
     );
-    expect(breakdown.spyTrend).toBe(40); // 0 direction + 40 magnitude (diff 0.2 ≤ 0.5)
-  });
-
-  // ── Sector Rotation component ───────────────────────────────────────────────
-
-  it('gives 100 on sector when predicted ticker exactly matches actual', () => {
-    const { breakdown } = scoreAccuracy(
-      { sectorRotation: { leader: { ticker: 'XLK' } } },
-      { sectorRotation: { leader: { ticker: 'XLK' } } },
-    );
-    expect(breakdown.sectorRotation).toBe(100);
-  });
-
-  it('gives 50 on sector when tickers differ but are in the same category', () => {
-    // XLK and XLC are both 'growth'
-    const { breakdown } = scoreAccuracy(
-      { sectorRotation: { leader: { ticker: 'XLK' } } },
-      { sectorRotation: { leader: { ticker: 'XLC' } } },
-    );
-    expect(breakdown.sectorRotation).toBe(50);
-  });
-
-  it('gives 50 on sector for any two value-category tickers', () => {
-    // XLF and XLE are both 'value'
-    const { breakdown } = scoreAccuracy(
-      { sectorRotation: { leader: { ticker: 'XLF' } } },
-      { sectorRotation: { leader: { ticker: 'XLE' } } },
-    );
-    expect(breakdown.sectorRotation).toBe(50);
-  });
-
-  it('gives 0 on sector when tickers are in different categories', () => {
-    // XLK (growth) vs XLV (defensive)
-    const { breakdown } = scoreAccuracy(
-      { sectorRotation: { leader: { ticker: 'XLK' } } },
-      { sectorRotation: { leader: { ticker: 'XLV' } } },
-    );
-    expect(breakdown.sectorRotation).toBe(0);
-  });
-
-  it('gives 0 on sector for an unknown predicted ticker', () => {
-    const { breakdown } = scoreAccuracy(
-      { sectorRotation: { leader: { ticker: 'UNKNOWN' } } },
-      { sectorRotation: { leader: { ticker: 'XLK' } } },
-    );
-    expect(breakdown.sectorRotation).toBe(0);
-  });
-
-  // ── Options Pulse component ─────────────────────────────────────────────────
-
-  it('gives 100 on options when lean exactly matches', () => {
-    const { breakdown } = scoreAccuracy(
-      { optionsPulse: { lean: 'Bullish' } },
-      { optionsPulse: { lean: 'Bullish' } },
-    );
-    expect(breakdown.optionsPulse).toBe(100);
-  });
-
-  it('gives 50 on options for adjacent leans (Bullish vs Neutral)', () => {
-    const { breakdown } = scoreAccuracy(
-      { optionsPulse: { lean: 'Bullish' } },
-      { optionsPulse: { lean: 'Neutral' } },
-    );
-    expect(breakdown.optionsPulse).toBe(50);
-  });
-
-  it('gives 50 on options for adjacent leans (Neutral vs Bearish)', () => {
-    const { breakdown } = scoreAccuracy(
-      { optionsPulse: { lean: 'Neutral' } },
-      { optionsPulse: { lean: 'Bearish' } },
-    );
-    expect(breakdown.optionsPulse).toBe(50);
-  });
-
-  it('gives 0 on options for opposite leans (Bullish vs Bearish)', () => {
-    const { breakdown } = scoreAccuracy(
-      { optionsPulse: { lean: 'Bullish' } },
-      { optionsPulse: { lean: 'Bearish' } },
-    );
-    expect(breakdown.optionsPulse).toBe(0);
+    expect(breakdown.topMover).toBe(0);
   });
 
   // ── Overall score ───────────────────────────────────────────────────────────
 
-  it('computes overall score as the rounded average of all 4 components', () => {
-    // F&G: 100, SPY: 60 (direction only, wrong magnitude), Sector: 50 (same category), Options: 0 (opposite)
+  it('computes overall score as the rounded average of spy, vix, topMover', () => {
+    // spy: dir match + magDiff 0.2 → 100; vix: dir mismatch → 0; topMover: no data → 0
     const { score, breakdown } = scoreAccuracy(
-      {
-        fearGreed: { score: 50 },
-        spyTrend: { direction: 'Up', changePercent: 0.5 },
-        sectorRotation: { leader: { ticker: 'XLK' } },
-        optionsPulse: { lean: 'Bullish' },
-      },
-      {
-        fearGreed: { score: 50 },
-        spyTrend: { direction: 'Up', changePercent: 1.8 },
-        sectorRotation: { leader: { ticker: 'XLC' } },
-        optionsPulse: { lean: 'Bearish' },
-      },
+      { spyDirection: 'Up', spyChangePercent: 0.5, vixDirection: 'Up', topMover: { direction: 'Up' } },
+      { spyDirection: 'Up', spyChangePercent: 0.7, vixDirection: 'Down', topMover: { predictedTickerChange: null } },
     );
-    expect(breakdown.fearGreed).toBe(100);
-    expect(breakdown.spyTrend).toBe(60);
-    expect(breakdown.sectorRotation).toBe(50);
-    expect(breakdown.optionsPulse).toBe(0);
-    expect(score).toBe(Math.round((100 + 60 + 50 + 0) / 4)); // 53
+    expect(breakdown.spy).toBe(100);
+    expect(breakdown.vix).toBe(0);
+    expect(breakdown.topMover).toBe(0);
+    expect(score).toBe(Math.round((100 + 0 + 0) / 3)); // 33
   });
 
-  it('returns a perfect 100 when all four components are exact matches', () => {
+  it('returns 0 when all three components score 0', () => {
     const { score } = scoreAccuracy(
-      {
-        fearGreed: { score: 72 },
-        spyTrend: { direction: 'Up', changePercent: 0.9 },
-        sectorRotation: { leader: { ticker: 'XLK' } },
-        optionsPulse: { lean: 'Neutral' },
-      },
-      {
-        fearGreed: { score: 72 },
-        spyTrend: { direction: 'Up', changePercent: 0.9 },
-        sectorRotation: { leader: { ticker: 'XLK' } },
-        optionsPulse: { lean: 'Neutral' },
-      },
+      { spyDirection: 'Up', vixDirection: 'Up', topMover: { direction: 'Up' } },
+      { spyDirection: 'Down', vixDirection: 'Down', topMover: { predictedTickerChange: -2.0 } },
     );
-    expect(score).toBe(100);
+    expect(score).toBe(0);
   });
 });
 

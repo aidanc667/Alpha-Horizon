@@ -17,14 +17,19 @@ export const DEFAULT_SIGNAL_WEIGHTS: SignalWeights = {
 };
 
 export function computeWeightAdjustment(rolling: {
-  fearGreed: number | null;
-  spyTrend: number | null;
-  optionsPulse: number | null;
+  // New model fields
+  spy?: number | null;
+  vix?: number | null;
+  topMover?: number | null;
+  // Legacy fields (still accepted for backward compat)
+  fearGreed?: number | null;
+  spyTrend?: number | null;
+  optionsPulse?: number | null;
   daysScored: number;
 }): SignalWeights {
   if (rolling.daysScored < 5) return DEFAULT_SIGNAL_WEIGHTS;
 
-  const adjust = (acc: number | null): number => {
+  const adjust = (acc: number | null | undefined): number => {
     if (acc == null) return 1.0;
     if (acc < 35) return 0.4;
     if (acc < 45) return 0.6;
@@ -35,17 +40,11 @@ export function computeWeightAdjustment(rolling: {
   };
 
   return {
-    fearGreed:   adjust(rolling.fearGreed),
-    spyTrend:    adjust(rolling.spyTrend),
-    optionsPulse: adjust(rolling.optionsPulse),
+    fearGreed:    adjust(rolling.fearGreed ?? null),
+    spyTrend:     adjust(rolling.spy ?? rolling.spyTrend ?? null),
+    optionsPulse: adjust(rolling.optionsPulse ?? null),
   };
 }
-
-export const SECTOR_CATS: Record<string, string> = {
-  XLK: 'growth', XLC: 'growth', XLY: 'growth',
-  XLF: 'value',  XLI: 'value',  XLB: 'value',  XLE: 'value',
-  XLV: 'defensive', XLP: 'defensive', XLU: 'defensive', XLRE: 'defensive',
-};
 
 export interface SectorQuote {
   ticker: string;
@@ -56,44 +55,46 @@ export interface SectorQuote {
 // ─── scoreAccuracy ────────────────────────────────────────────────────────────
 // All inputs are typed loosely (any) to match what comes out of the DB.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function scoreAccuracy(pred: any, actual: any, predictionConfidence?: 'High' | 'Moderate' | 'Low'): {
+export function scoreAccuracy(
+  pred: any,
+  actual: any,
+): {
   score: number;
-  breakdown: { fearGreed: number; spyTrend: number; sectorRotation: number; optionsPulse: number };
-  isMisfire: boolean;
+  breakdown: { spy: number; vix: number; topMover: number };
 } {
-  // Fear & Greed: tiered proximity scoring (tighter bands — a neutral guess of 50
-  // no longer scores 88–95% just for being close to a mildly-neutral reading)
-  const fgDiff = Math.abs((pred.fearGreed?.score ?? 50) - (actual.fearGreed?.score ?? 50));
-  const fearGreed = fgDiff <= 5 ? 100 : fgDiff <= 10 ? 80 : fgDiff <= 20 ? 55 : fgDiff <= 30 ? 30 : 0;
-
-  // SPY Trend: direction 60pts + magnitude proximity 40pts
-  const dirMatch = pred.spyTrend?.direction === actual.spyTrend?.direction;
-  const magDiff = Math.abs((pred.spyTrend?.changePercent ?? 0) - (actual.spyTrend?.changePercent ?? 0));
-  const spyTrend = (dirMatch ? 60 : 0) + (magDiff <= 0.5 ? 40 : magDiff <= 1.0 ? 20 : 0);
-
-  // Sector Rotation leader: exact ticker = 100, same category = 50, miss = 0
-  const predLeader = pred.sectorRotation?.leader?.ticker ?? '';
-  const actLeader = actual.sectorRotation?.leader?.ticker ?? '';
-  const sectorRotation = predLeader === actLeader ? 100 :
-    (SECTOR_CATS[predLeader] === SECTOR_CATS[actLeader] && SECTOR_CATS[predLeader] ? 50 : 0);
-
-  // Options Pulse lean: exact = 100, adjacent = 50, opposite = 0
-  const LEANS = ['Bullish', 'Neutral', 'Bearish'];
-  const predLean = pred.optionsPulse?.lean ?? 'Neutral';
-  const actLean = actual.optionsPulse?.lean ?? 'Neutral';
-  const leanDiff = Math.abs(LEANS.indexOf(predLean) - LEANS.indexOf(actLean));
-  const optionsPulse = leanDiff === 0 ? 100 : leanDiff === 1 ? 50 : 0;
-
-  let score = Math.round((fearGreed + spyTrend + sectorRotation + optionsPulse) / 4);
-
-  // Confidence-adjusted scoring: High Conviction wrong = misfire penalty; right = small bonus
-  const isMisfire = predictionConfidence === 'High' && !dirMatch;
-  if (predictionConfidence === 'High') {
-    if (!dirMatch) score = Math.max(0, score - 12);
-    else if (score >= 65) score = Math.min(100, score + 5);
+  // ── SPY (0–100) ───────────────────────────────────────────────────────────
+  const spyDirMatch = pred.spyDirection === actual.spyDirection;
+  let spy = 0;
+  if (spyDirMatch) {
+    const magDiff = Math.abs((pred.spyChangePercent ?? 0) - (actual.spyChangePercent ?? 0));
+    spy = 60 + (magDiff <= 0.3 ? 40 : magDiff <= 0.7 ? 25 : magDiff <= 1.5 ? 10 : 0);
   }
 
-  return { score, breakdown: { fearGreed, spyTrend, sectorRotation, optionsPulse }, isMisfire };
+  // ── VIX (0–100) ──────────────────────────────────────────────────────────
+  const vixDirMatch = pred.vixDirection === actual.vixDirection;
+  let vix = 0;
+  if (vixDirMatch) {
+    const magDiff = Math.abs((pred.vixChangePercent ?? 0) - (actual.vixChangePercent ?? 0));
+    vix = 60 + (magDiff <= 5 ? 40 : magDiff <= 15 ? 25 : magDiff <= 30 ? 10 : 0);
+  }
+
+  // ── Top Mover (0–100) ────────────────────────────────────────────────────
+  // actual.topMover contains: { actualTopTicker, actualChangePercent, predictedTickerChange, predictedTickerWasTop3 }
+  let topMover = 0;
+  const predDir = pred.topMover?.direction;
+  const actualChange = actual.topMover?.predictedTickerChange ?? null;
+  if (predDir && actualChange != null) {
+    const actualDir = actualChange >= 0 ? 'Up' : 'Down';
+    if (predDir === actualDir) {
+      const magnitude = Math.abs(actualChange);
+      const magScore = magnitude >= 5 ? 40 : magnitude >= 3 ? 30 : magnitude >= 1.5 ? 15 : 5;
+      const bonusTop3 = actual.topMover?.predictedTickerWasTop3 ? 10 : 0;
+      topMover = Math.min(100, 50 + magScore + bonusTop3);
+    }
+  }
+
+  const score = Math.round((spy + vix + topMover) / 3);
+  return { score, breakdown: { spy, vix, topMover } };
 }
 
 // ─── buildWeather ─────────────────────────────────────────────────────────────
@@ -255,6 +256,7 @@ export function rowToRecord(row: any) {
     accuracyScore: row.accuracy_score != null ? Number(row.accuracy_score) : null,
     accuracyBreakdown: row.accuracy_breakdown ?? null,
     accuracyCalculatedAt: row.accuracy_calculated_at ? String(row.accuracy_calculated_at) : null,
+    accuracyBrief: row.accuracy_brief ?? null,
     edgeBoard: row.edge_board ?? null,
     positioning: row.positioning ?? null,
     userSpyPrediction: row.user_spy_prediction ?? null,

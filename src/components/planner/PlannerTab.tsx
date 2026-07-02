@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Sparkles, RotateCcw, ShieldCheck, UserCircle, Search, PieChart, Shield, Calculator, Star, Brain } from 'lucide-react';
+import { Sparkles, RotateCcw, ShieldCheck, UserCircle, TrendingUp, PieChart, Shield, Calculator, CheckCircle, Brain, FileText, ArrowRight } from 'lucide-react';
 import OnboardingFlow from './OnboardingFlow';
 import AgentStreamPanel from './AgentStreamPanel';
 import PlanResults from './PlanResults';
@@ -208,8 +208,8 @@ export default function PlannerTab() {
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
             </div>
             <div>
-              <p className="text-sm font-bold text-gray-900">AI Financial Planner</p>
-              <p className="text-xs text-gray-600">6-Agent Institutional Portfolio Analysis</p>
+              <p className="text-sm font-bold text-gray-900">Portfolio Planner</p>
+              <p className="text-xs text-gray-600">7-Agent Institutional Portfolio Construction</p>
             </div>
           </div>
           {(view === 'active' || view === 'onboarding') && (
@@ -243,126 +243,142 @@ export default function PlannerTab() {
         {view === 'welcome' && (
           <div
             className="flex flex-col animate-fade-in -mx-6 -mt-6 min-h-full"
-            style={{ background: 'linear-gradient(135deg, #0a0d12 0%, #0f1419 40%, #141d27 100%)' }}
+            style={{ background: '#faf8f3' }}
           >
-            {/* Depth orbs */}
-            <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ background: 'radial-gradient(ellipse 60% 40% at 15% 20%, rgba(6,182,212,0.05) 0%, transparent 70%)' }} />
-            <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ background: 'radial-gradient(ellipse 50% 40% at 85% 80%, rgba(52,211,153,0.04) 0%, transparent 70%)' }} />
-
             {/* Hero */}
-            <div className="relative px-8 pt-12 pb-10 text-center">
-              <div className="relative z-10 max-w-2xl mx-auto space-y-4">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border mb-2"
-                  style={{ background: 'rgba(6,182,212,0.1)', borderColor: 'rgba(6,182,212,0.25)' }}>
-                  <Sparkles className="w-3 h-3" style={{ color: '#06b6d4' }} />
-                  <span className="font-mono text-[10px] uppercase tracking-[0.18em]" style={{ color: '#06b6d4' }}>6 AI Agents · Tax-Optimized · Institutional Grade</span>
+            <div className="px-10 pt-10 pb-8" style={{ borderBottom: '1px solid #ebe4d8' }}>
+              <p className="font-sans uppercase mb-3" style={{ fontSize: 9.5, letterSpacing: '0.16em', fontWeight: 600, color: '#16a34a' }}>
+                ● Portfolio Planner
+              </p>
+              <div className="flex items-end justify-between gap-8">
+                <div>
+                  <h1 className="font-display font-bold leading-none" style={{ fontSize: '2.6rem', color: '#1a1008' }}>
+                    Build your portfolio.<br />
+                    <span style={{ color: '#16a34a' }}>In minutes.</span>
+                  </h1>
+                  <p className="font-sans mt-3 max-w-md" style={{ fontSize: 13.5, lineHeight: 1.7, color: '#6b5840' }}>
+                    Answer 16 questions across 7 topics. Seven specialized agents run in sequence to construct, stress-test, and tax-optimize an institutional-grade portfolio around your goals.
+                  </p>
                 </div>
-                <p className="font-sans uppercase mb-2" style={{ fontSize: 9.5, letterSpacing: '0.16em', fontWeight: 600, color: '#16a34a' }}>
-                  ● Portfolio Planner
-                </p>
-                <h1 className="font-brand font-extrabold text-white tracking-[-0.02em] leading-none" style={{
-                  fontSize: '3.25rem',
-                  background: 'linear-gradient(135deg, #ffffff 30%, #67e8f9 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                }}>
-                  AI FINANCIAL PLANNER
-                </h1>
-                <p className="text-[14px] leading-[1.65] max-w-lg mx-auto" style={{ color: 'rgba(241,244,248,0.5)' }}>
-                  Six specialized agents. One institutional-grade portfolio — built, stress-tested, and refined around your goals.
-                </p>
-                <div className="flex items-center justify-center gap-8 pt-2">
-                  {[
-                    { value: '12', label: 'Questions' },
-                    { value: '6', label: 'AI Agents' },
-                    { value: 'IPS', label: 'Document' },
-                    { value: 'CMA', label: '2026 Data' },
-                  ].map((s) => (
-                    <div key={s.label} className="text-center">
-                      <p className="text-xl font-black font-mono" style={{ color: '#06b6d4' }}>{s.value}</p>
-                      <p className="font-mono text-[9px] uppercase tracking-[0.14em]" style={{ color: 'rgba(241,244,248,0.35)' }}>{s.label}</p>
-                    </div>
-                  ))}
-                </div>
+                <button
+                  onClick={() => setView('onboarding')}
+                  className="flex-shrink-0 flex items-center gap-2 font-sans font-semibold rounded-xl transition-all hover:opacity-90 active:scale-95"
+                  style={{ background: '#16a34a', color: '#fff', padding: '11px 24px', fontSize: 13 }}
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Build My Portfolio
+                  <ArrowRight className="w-4 h-4" />
+                </button>
               </div>
             </div>
 
-            {/* Divider */}
-            <div className="mx-8 h-px" style={{ background: 'rgba(255,255,255,0.05)' }} />
+            {/* Stats strip */}
+            <div className="grid grid-cols-4" style={{ borderBottom: '1px solid #ebe4d8' }}>
+              {[
+                { value: '16', label: 'Intake questions', sub: 'across 7 topics' },
+                { value: '7', label: 'AI agents', sub: 'run in sequence' },
+                { value: '<5ms', label: 'Projection engine', sub: 'closed-form lognormal' },
+                { value: '80+', label: 'Quality threshold', sub: 'critic re-runs if below' },
+              ].map((s, i) => (
+                <div
+                  key={s.label}
+                  className="py-5 px-6 flex flex-col gap-0.5"
+                  style={{ borderRight: i < 3 ? '1px solid #ebe4d8' : 'none' }}
+                >
+                  <p className="font-mono font-bold" style={{ fontSize: 22, color: '#16a34a', lineHeight: 1 }}>{s.value}</p>
+                  <p className="font-sans font-medium" style={{ fontSize: 11, color: '#1a1008', marginTop: 4 }}>{s.label}</p>
+                  <p className="font-sans" style={{ fontSize: 10, color: '#b09060' }}>{s.sub}</p>
+                </div>
+              ))}
+            </div>
 
-            {/* Agent cards */}
-            <div className="px-8 py-8 flex flex-col items-center gap-6">
-              <div className="grid grid-cols-3 gap-4 w-full max-w-2xl">
+            {/* Agent pipeline */}
+            <div className="px-10 py-8 max-w-4xl">
+              <p className="font-sans uppercase mb-5" style={{ fontSize: 9.5, letterSpacing: '0.14em', fontWeight: 600, color: '#b09060' }}>
+                The 7-agent pipeline
+              </p>
+              <div className="grid grid-cols-2 gap-3">
                 {([
                   {
-                    Icon: UserCircle, number: '01', title: 'Client Profile Agent',
-                    description: 'Scores your risk tolerance, time horizon, and tax bracket instantly.',
-                    color: '#06b6d4', bg: 'rgba(6,182,212,0.07)', border: 'rgba(6,182,212,0.18)',
+                    Icon: UserCircle, number: '01', title: 'Client Profile',
+                    description: 'Derives risk score, effective tax rate, and goal classification from your 16 answers.',
                   },
                   {
-                    Icon: Search, number: '02', title: 'Capital Markets Agent',
-                    description: 'Pulls live macro data to classify the current investment regime.',
-                    color: '#818cf8', bg: 'rgba(129,140,248,0.07)', border: 'rgba(129,140,248,0.18)',
+                    Icon: TrendingUp, number: '02', title: 'Capital Markets',
+                    description: 'Fetches live CAPE ratio, 10Y yield, and macro regime via FRED — or falls back to JPM/Vanguard/BlackRock 2026 CMAs.',
                   },
                   {
-                    Icon: PieChart, number: '03', title: 'Portfolio Construction Agent',
-                    description: 'Sharpe-optimizes across 28 institutional ETFs and 3 buckets.',
-                    color: '#34d399', bg: 'rgba(52,211,153,0.07)', border: 'rgba(52,211,153,0.18)',
+                    Icon: PieChart, number: '03', title: 'Portfolio Construction',
+                    description: 'Gradient-ascent Sharpe optimizer selects from 22 institutional ETFs across 3 account buckets.',
                   },
                   {
-                    Icon: Shield, number: '04', title: 'Risk Analysis Agent',
-                    description: 'Stress-tests for drawdown, sequence risk, and inflation sensitivity.',
-                    color: '#f59e0b', bg: 'rgba(245,158,11,0.07)', border: 'rgba(245,158,11,0.18)',
+                    Icon: Shield, number: '04', title: 'Risk Analysis',
+                    description: 'Runs parallel stress tests: max drawdown, sequence-of-returns risk, and inflation sensitivity.',
                   },
                   {
-                    Icon: Calculator, number: '05', title: 'Tax & Implementation Agent',
-                    description: 'Maximizes after-tax returns across Taxable, Roth, and Traditional.',
-                    color: '#fb7185', bg: 'rgba(251,113,133,0.07)', border: 'rgba(251,113,133,0.18)',
+                    Icon: Calculator, number: '05', title: 'Tax & Placement',
+                    description: 'Assigns holdings across Taxable, Traditional, and Roth accounts to maximize after-tax returns.',
                   },
                   {
-                    Icon: Star, number: '06', title: 'Critic & Evaluator Agent',
-                    description: 'Reruns the pipeline until your plan scores above 85/100.',
-                    color: '#a78bfa', bg: 'rgba(167,139,250,0.07)', border: 'rgba(167,139,250,0.18)',
+                    Icon: CheckCircle, number: '06', title: 'Critic & Evaluator',
+                    description: 'Scores 5 dimensions — alignment, diversification, risk, tax efficiency, feasibility. Re-runs if overall score is below 85.',
                   },
-                ] as const).map((agent) => (
+                  {
+                    Icon: Brain, number: '07', title: 'Narrative Synthesis',
+                    description: 'Gemini LLM writes a plain-English investment rationale summarizing the full plan and key trade-offs.',
+                  },
+                ] as const).map((agent, idx) => (
                   <div
                     key={agent.number}
-                    className="rounded-2xl p-5 flex flex-col gap-3 border"
-                    style={{ background: agent.bg, borderColor: agent.border }}
+                    className="flex items-start gap-3 rounded-xl p-4 border"
+                    style={{ background: '#ffffff', borderColor: '#ebe4d8', gridColumn: idx === 6 ? 'span 2' : undefined }}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center border"
-                        style={{ background: agent.bg, borderColor: agent.border }}>
-                        <agent.Icon style={{ width: 18, height: 18, color: agent.color }} />
-                      </div>
-                      <span className="text-xs font-mono font-bold" style={{ color: agent.color, opacity: 0.6 }}>{agent.number}</span>
+                    <div
+                      className="flex-shrink-0 flex items-center justify-center rounded-lg"
+                      style={{ width: 34, height: 34, background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.15)' }}
+                    >
+                      <agent.Icon style={{ width: 15, height: 15, color: '#16a34a' }} />
                     </div>
-                    <div>
-                      <h3 className="text-white font-semibold text-sm mb-1.5">{agent.title}</h3>
-                      <p className="text-slate-400 text-xs leading-relaxed">{agent.description}</p>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-mono text-[10px] font-bold" style={{ color: '#16a34a', opacity: 0.6 }}>{agent.number}</span>
+                        <h3 className="font-sans font-semibold" style={{ fontSize: 12, color: '#1a1008' }}>{agent.title}</h3>
+                      </div>
+                      <p className="font-sans" style={{ fontSize: 11, lineHeight: 1.55, color: '#6b5840' }}>{agent.description}</p>
                     </div>
                   </div>
                 ))}
               </div>
+            </div>
 
-              {/* CTA */}
-              <button
-                onClick={() => setView('onboarding')}
-                className="group flex items-center gap-2 px-10 py-3.5 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-2xl hover:opacity-90 hover:scale-[1.02]"
-                style={{ background: '#16a34a', color: '#fff' }}
-              >
-                <Sparkles className="w-4 h-4" />
-                Start Planning →
-              </button>
-
-              {/* Disclaimer */}
-              <div className="rounded-2xl border p-4 text-center w-full max-w-2xl" style={{ borderColor: 'rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.02)' }}>
-                <p style={{ color: '#475569', fontSize: '0.72rem', lineHeight: 1.7 }}>
-                  © 2026 Alpha Horizon. For informational and educational purposes only. Not financial, investment, or tax advice.
-                  Past performance does not predict future results. Consult a licensed financial advisor (RIA/CFP) before making any investment decisions.
-                </p>
+            {/* Output strip */}
+            <div className="mx-10 mb-8 rounded-xl border overflow-hidden" style={{ borderColor: '#ebe4d8' }}>
+              <div className="px-5 py-3" style={{ background: '#f0ece4', borderBottom: '1px solid #ebe4d8' }}>
+                <p className="font-sans uppercase" style={{ fontSize: 9.5, letterSpacing: '0.14em', fontWeight: 600, color: '#b09060' }}>What you receive</p>
               </div>
+              <div className="grid grid-cols-4" style={{ background: '#ffffff' }}>
+                {[
+                  { Icon: PieChart, label: 'ETF Allocation', desc: 'Weighted portfolio across 28 tickers' },
+                  { Icon: FileText, label: 'IPS Document', desc: 'Investment policy statement' },
+                  { Icon: Shield, label: 'Stress Test Report', desc: 'Drawdown & sequence risk analysis' },
+                  { Icon: Calculator, label: 'Tax Placement Map', desc: 'Account-by-account holding plan' },
+                ].map(({ Icon, label, desc }, i) => (
+                  <div key={label} className="px-5 py-4 flex items-start gap-3" style={{ borderRight: i < 3 ? '1px solid #ebe4d8' : 'none' }}>
+                    <Icon className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: '#16a34a' }} />
+                    <div>
+                      <p className="font-sans font-semibold" style={{ fontSize: 11, color: '#1a1008' }}>{label}</p>
+                      <p className="font-sans" style={{ fontSize: 10, color: '#b09060', marginTop: 2 }}>{desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Disclaimer */}
+            <div className="px-10 pb-8">
+              <p style={{ color: '#b09060', fontSize: '0.68rem', lineHeight: 1.8 }}>
+                For informational and educational purposes only. Not financial, investment, or tax advice. Past performance does not predict future results. Consult a licensed financial advisor (RIA/CFP) before making any investment decisions. © 2026 Alpha Horizon.
+              </p>
             </div>
           </div>
         )}

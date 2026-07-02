@@ -216,15 +216,15 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
   }, [personaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return (
-    <div className="flex items-center justify-center h-full">
-      <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
+    <div className="flex items-center justify-center h-full" style={{ background: '#faf8f3' }}>
+      <Loader2 className="w-8 h-8 text-red-600 animate-spin" />
     </div>
   );
 
   if (error || !persona) return (
-    <div className="flex items-center justify-center h-full flex-col gap-3">
-      <p className="text-red-400">{error || 'Persona not found'}</p>
-      <button onClick={onBack} className="text-amber-400 text-sm hover:underline">← Back to roster</button>
+    <div className="flex items-center justify-center h-full flex-col gap-3" style={{ background: '#faf8f3' }}>
+      <p className="text-red-500">{error || 'Persona not found'}</p>
+      <button onClick={onBack} className="text-sm hover:underline" style={{ color: '#b91c1c' }}>← Back to roster</button>
     </div>
   );
 
@@ -391,37 +391,37 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
 
   return (
     <>
-    <div className="h-full overflow-y-auto" style={{ background: 'linear-gradient(135deg, #0a0f1e 0%, #0f172a 50%, #111827 100%)' }}>
+    <div className="h-full overflow-y-auto" style={{ background: '#faf8f3' }}>
       <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
 
         {/* Back + Header */}
         <div className="flex items-center justify-between">
-          <button onClick={onBack} className="flex items-center gap-2 text-slate-400 hover:text-amber-400 transition-colors text-sm">
+          <button onClick={onBack} className="flex items-center gap-2 transition-colors text-sm hover:text-red-700" style={{ color: '#6b5840' }}>
             <ArrowLeft className="w-4 h-4" />Back to Arena
           </button>
           <div className="flex items-center gap-3">
             <button
               onClick={handleAnalyzeInSilas}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500/15 hover:bg-orange-500/25 border border-orange-500/30 rounded-lg text-orange-400 text-xs font-semibold transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 border border-orange-200 rounded-lg text-orange-700 text-xs font-semibold transition-all"
               title="Import this persona into Silas for AI analysis"
             >
               <MessageSquare className="w-3.5 h-3.5" />Analyze with Silas
             </button>
             <button
               onClick={() => { setShowAddPosition(true); setAddError(''); }}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 rounded-lg text-emerald-400 text-xs font-semibold transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-emerald-700 text-xs font-semibold transition-all"
             >
               <Plus className="w-3.5 h-3.5" />Add Position
             </button>
             <button
               onClick={openRebalance}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/30 rounded-lg text-blue-400 text-xs font-semibold transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg text-blue-700 text-xs font-semibold transition-all"
             >
               <Scale className="w-3.5 h-3.5" />Rebalance
             </button>
             <button
               onClick={handleDelete}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg text-red-400 text-xs font-semibold transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg text-red-700 text-xs font-semibold transition-all"
               title="Delete this persona"
             >
               <Trash2 className="w-3.5 h-3.5" />Delete
@@ -429,7 +429,8 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
             <button
               onClick={handleRefresh}
               disabled={refreshing}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-500/15 hover:bg-violet-500/25 border border-violet-500/30 rounded-lg text-violet-400 text-xs font-semibold transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-zinc-50 border border-zinc-200 rounded-lg text-xs font-semibold transition-all"
+              style={{ color: '#6b5840' }}
             >
               <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
               {refreshing ? 'Refreshing...' : 'Refresh Prices'}
@@ -438,194 +439,177 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
         </div>
 
         {/* Hero Stats */}
-        <div className="bg-slate-900 border border-white/8 rounded-2xl p-6" style={{ background: 'linear-gradient(135deg, rgba(245,158,11,0.06) 0%, rgba(15,23,42,0.98) 100%)' }}>
+        <div className="bg-white border border-zinc-200 rounded-2xl p-6" style={{ background: 'linear-gradient(135deg, rgba(185,28,28,0.04) 0%, #ffffff 100%)' }}>
           <div className="flex items-start justify-between mb-4">
             <div>
-              <h1 className="text-2xl font-bold text-white">{persona.name}</h1>
-              <p className="text-slate-400 text-sm mt-0.5">
+              <h1 className="text-2xl font-bold" style={{ color: '#1a1008' }}>{persona.name}</h1>
+              <p className="text-sm mt-0.5" style={{ color: '#6b5840' }}>
                 Risk {persona.risk_score}/10 · vs {persona.benchmark_ticker} · {daysRunning} days running
               </p>
             </div>
             <div className="text-right">
-              <p className="text-3xl font-bold text-white font-mono">
+              <p className="text-3xl font-bold font-mono" style={{ color: '#1a1008' }}>
                 ${currentValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
-              <p className="text-slate-400 text-xs mt-0.5">
+              <p className="text-xs mt-0.5" style={{ color: '#b09060' }}>
                 Started: ${startingBalance.toLocaleString()}
               </p>
             </div>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-white/4 border border-white/6 rounded-xl p-3">
-              <p className="text-slate-400 text-xs uppercase tracking-wide mb-1">Today</p>
+            <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-3">
+              <p className="text-xs uppercase tracking-wide mb-1" style={{ color: '#6b5840' }}>Today</p>
               <div className="flex items-center gap-1">
-                {todayReturn >= 0 ? <TrendingUp className="w-4 h-4 text-emerald-400" /> : <TrendingDown className="w-4 h-4 text-red-400" />}
-                <p className={`text-lg font-bold font-mono ${todayReturn >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {todayReturn >= 0 ? <TrendingUp className="w-4 h-4 text-emerald-600" /> : <TrendingDown className="w-4 h-4 text-red-500" />}
+                <p className={`text-lg font-bold font-mono ${todayReturn >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                   {todayReturn >= 0 ? '+' : ''}{todayReturn.toFixed(2)}%
                 </p>
               </div>
-              <p className={`text-xs mt-0.5 ${todayDollar >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+              <p className={`text-xs mt-0.5 ${todayDollar >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                 {todayDollar >= 0 ? '+' : ''}${todayDollar.toFixed(2)}
               </p>
             </div>
 
-            <div className="bg-white/4 border border-white/6 rounded-xl p-3">
-              <p className="text-slate-400 text-xs uppercase tracking-wide mb-1">Since Inception</p>
+            <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-3">
+              <p className="text-xs uppercase tracking-wide mb-1" style={{ color: '#6b5840' }}>Since Inception</p>
               <div className="flex items-center gap-1">
-                {totalReturn >= 0 ? <TrendingUp className="w-4 h-4 text-emerald-400" /> : <TrendingDown className="w-4 h-4 text-red-400" />}
-                <p className={`text-lg font-bold font-mono ${totalReturn >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {totalReturn >= 0 ? <TrendingUp className="w-4 h-4 text-emerald-600" /> : <TrendingDown className="w-4 h-4 text-red-500" />}
+                <p className={`text-lg font-bold font-mono ${totalReturn >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                   {totalReturn >= 0 ? '+' : ''}{totalReturn.toFixed(2)}%
                 </p>
               </div>
-              <p className={`text-xs mt-0.5 ${totalReturnDollar >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+              <p className={`text-xs mt-0.5 ${totalReturnDollar >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                 {totalReturnDollar >= 0 ? '+' : ''}${totalReturnDollar.toFixed(2)}
               </p>
             </div>
 
-            <div className="bg-white/4 border border-white/6 rounded-xl p-3">
-              <p className="text-slate-400 text-xs uppercase tracking-wide mb-1">{persona.benchmark_ticker} Return</p>
-              <p className={`text-lg font-bold font-mono ${benchReturn >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
+            <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-3">
+              <p className="text-xs uppercase tracking-wide mb-1" style={{ color: '#6b5840' }}>{persona.benchmark_ticker} Return</p>
+              <p className={`text-lg font-bold font-mono ${benchReturn >= 0 ? 'text-blue-600' : 'text-red-500'}`}>
                 {benchReturn >= 0 ? '+' : ''}{benchReturn.toFixed(2)}%
               </p>
-              <p className="text-xs text-slate-500 mt-0.5">Benchmark</p>
+              <p className="text-xs mt-0.5" style={{ color: '#b09060' }}>Benchmark</p>
             </div>
 
-            <div className="bg-white/4 border border-white/6 rounded-xl p-3">
-              <p className="text-slate-400 text-xs uppercase tracking-wide mb-1">Alpha</p>
+            <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-3">
+              <p className="text-xs uppercase tracking-wide mb-1" style={{ color: '#6b5840' }}>Alpha</p>
               <div className="flex items-center gap-1">
-                <Target className={`w-4 h-4 ${alpha >= 0 ? 'text-amber-400' : 'text-red-400'}`} />
-                <p className={`text-lg font-bold font-mono ${alpha >= 0 ? 'text-amber-400' : 'text-red-400'}`}>
+                <Target className={`w-4 h-4 ${alpha >= 0 ? 'text-red-700' : 'text-red-500'}`} />
+                <p className={`text-lg font-bold font-mono ${alpha >= 0 ? 'text-red-700' : 'text-red-500'}`}>
                   {alpha >= 0 ? '+' : ''}{alpha.toFixed(2)}%
                 </p>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">vs {persona.benchmark_ticker}</p>
+              <p className="text-xs mt-0.5" style={{ color: '#b09060' }}>vs {persona.benchmark_ticker}</p>
             </div>
           </div>
         </div>
 
         {/* Portfolio Intelligence Metrics */}
-        <div className="bg-slate-900 border border-white/8 rounded-2xl p-5">
+        <div className="bg-white border border-zinc-200 rounded-2xl p-5">
           <div className="flex items-center gap-2 mb-4">
-            <Activity className="w-4 h-4 text-blue-400" />
-            <h3 className="text-white font-semibold text-sm">Portfolio Intelligence</h3>
+            <Activity className="w-4 h-4 text-blue-600" />
+            <h3 className="font-semibold text-sm" style={{ color: '#1a1008' }}>Portfolio Intelligence</h3>
           </div>
           {metrics ? (
             <>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {/* Volatility */}
-                <div className="bg-white/4 border border-white/6 rounded-xl p-3">
-                  <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-1">Volatility</p>
+                <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-3">
+                  <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: '#b09060' }}>Volatility</p>
                   <p className={`text-xl font-bold font-mono ${
-                    metrics.annualizedVol < 15 ? 'text-slate-300' :
-                    metrics.annualizedVol < 25 ? 'text-amber-400' : 'text-red-400'
+                    metrics.annualizedVol < 15 ? 'text-zinc-700' :
+                    metrics.annualizedVol < 25 ? 'text-amber-600' : 'text-red-500'
                   }`}>{metrics.annualizedVol.toFixed(1)}%</p>
-                  <p className="text-slate-500 text-[10px] mt-0.5">annualized std dev</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: '#b09060' }}>annualized std dev</p>
                 </div>
                 {/* Sharpe */}
-                <div className="bg-white/4 border border-white/6 rounded-xl p-3">
-                  <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-1">Sharpe Ratio</p>
+                <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-3">
+                  <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: '#b09060' }}>Sharpe Ratio</p>
                   {metrics.sharpe !== null ? (
                     <p className={`text-xl font-bold font-mono ${
-                      metrics.sharpe < 0 ? 'text-red-400' :
-                      metrics.sharpe < 1 ? 'text-amber-400' :
-                      metrics.sharpe < 2 ? 'text-emerald-400' : 'text-emerald-300'
+                      metrics.sharpe < 0 ? 'text-red-500' :
+                      metrics.sharpe < 1 ? 'text-amber-600' :
+                      metrics.sharpe < 2 ? 'text-emerald-600' : 'text-emerald-700'
                     }`}>{metrics.sharpe.toFixed(2)}</p>
                   ) : (
-                    <p className="text-xl font-bold font-mono text-slate-600">—</p>
+                    <p className="text-xl font-bold font-mono text-zinc-300">—</p>
                   )}
-                  <p className="text-slate-500 text-[10px] mt-0.5">{metrics.sharpe !== null ? 'risk-adj return (4.5% rf)' : 'need 5+ snapshots'}</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: '#b09060' }}>{metrics.sharpe !== null ? 'risk-adj return (4.5% rf)' : 'need 5+ snapshots'}</p>
                 </div>
                 {/* Sortino */}
-                <div className="bg-white/4 border border-white/6 rounded-xl p-3">
-                  <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-1">Sortino Ratio</p>
+                <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-3">
+                  <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: '#b09060' }}>Sortino Ratio</p>
                   {metrics.sortino !== null ? (
                     <p className={`text-xl font-bold font-mono ${
-                      metrics.sortino < 0 ? 'text-red-400' :
-                      metrics.sortino < 1 ? 'text-amber-400' :
-                      metrics.sortino < 2 ? 'text-emerald-400' : 'text-emerald-300'
+                      metrics.sortino < 0 ? 'text-red-500' :
+                      metrics.sortino < 1 ? 'text-amber-600' :
+                      metrics.sortino < 2 ? 'text-emerald-600' : 'text-emerald-700'
                     }`}>{metrics.sortino.toFixed(2)}</p>
                   ) : (
-                    <p className="text-xl font-bold font-mono text-slate-600">—</p>
+                    <p className="text-xl font-bold font-mono text-zinc-300">—</p>
                   )}
-                  <p className="text-slate-500 text-[10px] mt-0.5">{metrics.sortino !== null ? 'downside risk only' : 'need 5+ snapshots'}</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: '#b09060' }}>{metrics.sortino !== null ? 'downside risk only' : 'need 5+ snapshots'}</p>
                 </div>
                 {/* Max Drawdown */}
-                <div className="bg-white/4 border border-white/6 rounded-xl p-3">
-                  <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-1">Max Drawdown</p>
+                <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-3">
+                  <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: '#b09060' }}>Max Drawdown</p>
                   <p className={`text-xl font-bold font-mono ${
-                    metrics.maxDD < 5 ? 'text-emerald-400' :
-                    metrics.maxDD < 15 ? 'text-amber-400' : 'text-red-400'
+                    metrics.maxDD < 5 ? 'text-emerald-600' :
+                    metrics.maxDD < 15 ? 'text-amber-600' : 'text-red-500'
                   }`}>-{metrics.maxDD.toFixed(1)}%</p>
-                  <p className="text-slate-500 text-[10px] mt-0.5">peak-to-trough</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: '#b09060' }}>peak-to-trough</p>
                 </div>
                 {/* Beta */}
-                <div className="bg-white/4 border border-white/6 rounded-xl p-3">
-                  <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-1">Beta</p>
+                <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-3">
+                  <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: '#b09060' }}>Beta</p>
                   {metrics.beta !== null ? (
                     <p className={`text-xl font-bold font-mono ${
-                      metrics.beta < 0.8 ? 'text-blue-400' :
-                      metrics.beta < 1.2 ? 'text-slate-300' :
-                      metrics.beta < 1.6 ? 'text-amber-400' : 'text-red-400'
+                      metrics.beta < 0.8 ? 'text-blue-600' :
+                      metrics.beta < 1.2 ? 'text-zinc-700' :
+                      metrics.beta < 1.6 ? 'text-amber-600' : 'text-red-500'
                     }`}>{metrics.beta.toFixed(2)}</p>
                   ) : (
-                    <p className="text-xl font-bold font-mono text-slate-600">—</p>
+                    <p className="text-xl font-bold font-mono text-zinc-300">—</p>
                   )}
-                  <p className="text-slate-500 text-[10px] mt-0.5">{metrics.beta !== null ? 'vs benchmark sensitivity' : 'need 5+ snapshots'}</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: '#b09060' }}>{metrics.beta !== null ? 'vs benchmark sensitivity' : 'need 5+ snapshots'}</p>
                 </div>
                 {/* Win Rate */}
-                <div className="bg-white/4 border border-white/6 rounded-xl p-3">
-                  <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-1">Win Rate</p>
+                <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-3">
+                  <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: '#b09060' }}>Win Rate</p>
                   <p className={`text-xl font-bold font-mono ${
-                    metrics.winRate < 40 ? 'text-red-400' :
-                    metrics.winRate < 55 ? 'text-amber-400' : 'text-emerald-400'
+                    metrics.winRate < 40 ? 'text-red-500' :
+                    metrics.winRate < 55 ? 'text-amber-600' : 'text-emerald-600'
                   }`}>{metrics.winRate.toFixed(0)}%</p>
-                  <p className="text-slate-500 text-[10px] mt-0.5">{metrics.n} trading days</p>
+                  <p className="text-[10px] mt-0.5" style={{ color: '#b09060' }}>{metrics.n} trading days</p>
                 </div>
               </div>
-              <p className="text-slate-600 text-xs mt-3">
+              <p className="text-xs mt-3" style={{ color: '#b09060' }}>
                 Based on {metrics.n} daily snapshots{metrics.n < 20 ? ' — stabilizes at 20+' : ''}
               </p>
             </>
           ) : (
             <div className="text-center py-6">
-              <Activity className="w-8 h-8 text-blue-500/30 mx-auto mb-2" />
-              <p className="text-slate-500 text-sm">Metrics available after 2+ daily snapshots</p>
-              <p className="text-slate-600 text-xs mt-1">Refresh prices daily to build your history</p>
+              <Activity className="w-8 h-8 mx-auto mb-2" style={{ color: '#ebe4d8' }} />
+              <p className="text-sm" style={{ color: '#b09060' }}>Metrics available after 2+ daily snapshots</p>
+              <p className="text-xs mt-1" style={{ color: '#b09060' }}>Refresh prices daily to build your history</p>
             </div>
           )}
         </div>
 
-        {/* Investment Thesis (collapsible) */}
-        {persona.thesis && (
-          <div className="bg-slate-900 border border-white/8 rounded-2xl overflow-hidden">
-            <button
-              onClick={() => setShowThesis(!showThesis)}
-              className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-white/4 transition-colors"
-            >
-              <span className="text-sm font-semibold text-slate-300">Investment Thesis</span>
-              {showThesis ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-            </button>
-            {showThesis && (
-              <div className="px-5 pb-4 border-t border-white/6">
-                <p className="text-slate-300 text-sm leading-relaxed mt-3 italic">&quot;{persona.thesis}&quot;</p>
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Chart */}
-        <div className="bg-slate-900 border border-white/8 rounded-2xl p-5">
+        <div className="bg-white border border-zinc-200 rounded-2xl p-5">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-white font-semibold text-sm">Benchmark Race</h3>
+            <h3 className="font-semibold text-sm" style={{ color: '#1a1008' }}>Benchmark Race</h3>
             <div className="flex gap-1">
               {PERIODS.map(p => (
                 <button
                   key={p}
                   onClick={() => setPeriod(p)}
                   className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
-                    period === p ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'text-slate-500 hover:text-slate-300'
+                    period === p ? 'bg-red-50 text-red-700 border border-red-200' : 'hover:text-zinc-700'
                   }`}
+                  style={period !== p ? { color: '#b09060' } : {}}
                 >
                   {p === '1w' ? '1W' : p === '1m' ? '1M' : p === '6m' ? '6M' : 'All'}
                 </button>
@@ -635,21 +619,21 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
           {filteredChart.length > 1 ? (
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={filteredChart} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={v => `$${(v/1000).toFixed(0)}k`} tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#ebe4d8" />
+                <XAxis dataKey="date" tick={{ fill: '#b09060', fontSize: 10 }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={v => `$${(v/1000).toFixed(0)}k`} tick={{ fill: '#b09060', fontSize: 10 }} axisLine={false} tickLine={false} />
                 <Tooltip
-                  contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontSize: 12 }}
+                  contentStyle={{ background: '#ffffff', border: '1px solid #ebe4d8', borderRadius: 8, fontSize: 12, color: '#1a1008' }}
                   formatter={(val, name) => [`$${Number(val).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, name === 'portfolio' ? persona.name : persona.benchmark_ticker]}
                 />
-                <Legend formatter={(val) => val === 'portfolio' ? persona.name : persona.benchmark_ticker} wrapperStyle={{ fontSize: 11, color: '#94a3b8' }} />
-                <Line type="monotone" dataKey="portfolio" stroke="#f59e0b" strokeWidth={2} dot={false} />
+                <Legend formatter={(val) => val === 'portfolio' ? persona.name : persona.benchmark_ticker} wrapperStyle={{ fontSize: 11, color: '#6b5840' }} />
+                <Line type="monotone" dataKey="portfolio" stroke="#b91c1c" strokeWidth={2} dot={false} />
                 <Line type="monotone" dataKey="benchmark" stroke="#60a5fa" strokeWidth={2} dot={false} strokeDasharray="4 2" />
               </LineChart>
             </ResponsiveContainer>
           ) : (
             <div className="h-[220px] flex items-center justify-center">
-              <p className="text-slate-500 text-sm">Chart will populate as daily snapshots accumulate</p>
+              <p className="text-sm" style={{ color: '#b09060' }}>Chart will populate as daily snapshots accumulate</p>
             </div>
           )}
         </div>
@@ -667,46 +651,47 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
 
         {/* Holdings Table */}
         {latestSnapshot && latestSnapshot.holdings_detail_json.length > 0 && (
-          <div className="bg-slate-900 border border-white/8 rounded-2xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-white/6">
-              <h3 className="text-white font-semibold text-sm">Holdings</h3>
+          <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-zinc-200">
+              <h3 className="font-semibold text-sm" style={{ color: '#1a1008' }}>Holdings</h3>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-white/6">
+                  <tr className="border-b border-zinc-200">
                     {['Ticker', 'Inception Price', 'Current Price', 'Today', 'Started With', 'Current Value', 'Total Return', '% of Portfolio', 'Action'].map(h => (
-                      <th key={h} className="px-4 py-2.5 text-left text-[10px] font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
+                      <th key={h} className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#b09060' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {latestSnapshot.holdings_detail_json.map((h, i) => (
-                    <tr key={i} className="border-b border-white/4 hover:bg-white/2 transition-colors">
-                      <td className="px-4 py-3 font-mono font-bold text-white text-sm">{h.ticker}</td>
-                      <td className="px-4 py-3 text-slate-400 text-sm font-mono">${h.inceptionPrice.toFixed(2)}</td>
-                      <td className="px-4 py-3 text-white text-sm font-mono font-semibold">${h.currentPrice.toFixed(2)}</td>
-                      <td className={`px-4 py-3 text-sm font-bold font-mono ${h.todayChangePct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    <tr key={i} className="border-b border-zinc-100 hover:bg-zinc-50 transition-colors">
+                      <td className="px-4 py-3 font-mono font-bold text-sm" style={{ color: '#1a1008' }}>{h.ticker}</td>
+                      <td className="px-4 py-3 text-sm font-mono" style={{ color: '#6b5840' }}>${h.inceptionPrice.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-sm font-mono font-semibold" style={{ color: '#1a1008' }}>${h.currentPrice.toFixed(2)}</td>
+                      <td className={`px-4 py-3 text-sm font-bold font-mono ${h.todayChangePct >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                         {h.todayChangePct >= 0 ? '+' : ''}{(h.todayChangePct * 100).toFixed(2)}%
                       </td>
-                      <td className="px-4 py-3 text-slate-300 text-sm font-mono">${(h.shares * h.inceptionPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td className="px-4 py-3 text-white text-sm font-mono">${h.currentValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td className={`px-4 py-3 text-sm font-bold font-mono ${h.gainLossPct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      <td className="px-4 py-3 text-sm font-mono" style={{ color: '#6b5840' }}>${(h.shares * h.inceptionPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="px-4 py-3 text-sm font-mono" style={{ color: '#1a1008' }}>${h.currentValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className={`px-4 py-3 text-sm font-bold font-mono ${h.gainLossPct >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                         {h.gainLossPct >= 0 ? '+' : ''}{(h.gainLossPct * 100).toFixed(2)}%
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <div className="w-16 h-1.5 rounded-full bg-white/8">
-                            <div className="h-full rounded-full bg-amber-500/70" style={{ width: `${(h.weightCurrent * 100).toFixed(1)}%` }} />
+                          <div className="w-16 h-1.5 rounded-full bg-zinc-200">
+                            <div className="h-full rounded-full bg-red-600/70" style={{ width: `${(h.weightCurrent * 100).toFixed(1)}%` }} />
                           </div>
-                          <span className="text-slate-300 text-xs">{(h.weightCurrent * 100).toFixed(1)}%</span>
+                          <span className="text-xs" style={{ color: '#6b5840' }}>{(h.weightCurrent * 100).toFixed(1)}%</span>
                         </div>
                       </td>
                       <td className="px-4 py-3">
                         {h.ticker !== 'CASH' && (
                           <button
                             onClick={() => { setShowSell(h.ticker); setSellAmount(''); setSellError(''); }}
-                            className="px-2.5 py-1 text-xs font-semibold text-slate-400 hover:text-red-400 border border-white/8 hover:border-red-500/30 hover:bg-red-500/10 rounded-lg transition-all"
+                            className="px-2.5 py-1 text-xs font-semibold border border-zinc-200 hover:border-red-200 hover:bg-red-50 hover:text-red-700 rounded-lg transition-all"
+                            style={{ color: '#6b5840' }}
                           >
                             Sell
                           </button>
@@ -722,9 +707,9 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
 
         {/* Performance Attribution */}
         {attribution.length > 0 && (
-          <div className="bg-slate-900 border border-white/8 rounded-2xl p-5">
-            <h3 className="text-white font-semibold text-sm mb-3">Performance Attribution</h3>
-            <p className="text-slate-400 text-xs mb-3">
+          <div className="bg-white border border-zinc-200 rounded-2xl p-5">
+            <h3 className="font-semibold text-sm mb-3" style={{ color: '#1a1008' }}>Performance Attribution</h3>
+            <p className="text-xs mb-3" style={{ color: '#6b5840' }}>
               Of {persona.name}&apos;s {totalReturn >= 0 ? '+' : ''}{totalReturn.toFixed(2)}% total return:
             </p>
             <div className="space-y-2">
@@ -732,16 +717,16 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
                 const maxContribution = Math.max(...attribution.map(x => Math.abs(x.contribution)));
                 return (
                   <div key={i} className="flex items-center justify-between">
-                    <span className="text-slate-300 font-mono text-sm w-16">{a.ticker}</span>
+                    <span className="font-mono text-sm w-16" style={{ color: '#1a1008' }}>{a.ticker}</span>
                     <div className="flex-1 mx-3">
-                      <div className="h-1.5 rounded-full bg-white/8 relative">
+                      <div className="h-1.5 rounded-full bg-zinc-200 relative">
                         <div
                           className={`h-full rounded-full ${a.contribution >= 0 ? 'bg-emerald-500' : 'bg-red-500'}`}
                           style={{ width: `${Math.min(100, maxContribution > 0 ? Math.abs(a.contribution) / maxContribution * 100 : 0)}%` }}
                         />
                       </div>
                     </div>
-                    <span className={`text-xs font-bold font-mono w-16 text-right ${a.contribution >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    <span className={`text-xs font-bold font-mono w-16 text-right ${a.contribution >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                       {a.contribution >= 0 ? '+' : ''}{a.contribution.toFixed(2)}%
                     </span>
                   </div>
@@ -751,19 +736,37 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
           </div>
         )}
 
+        {/* Investment Thesis (collapsible) */}
+        {persona.thesis && (
+          <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
+            <button
+              onClick={() => setShowThesis(!showThesis)}
+              className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-zinc-50 transition-colors"
+            >
+              <span className="text-sm font-semibold" style={{ color: '#1a1008' }}>Investment Thesis</span>
+              {showThesis ? <ChevronUp className="w-4 h-4" style={{ color: '#6b5840' }} /> : <ChevronDown className="w-4 h-4" style={{ color: '#6b5840' }} />}
+            </button>
+            {showThesis && (
+              <div className="px-5 pb-4 border-t border-zinc-200">
+                <p className="text-sm leading-relaxed mt-3 italic" style={{ color: '#6b5840' }}>&quot;{persona.thesis}&quot;</p>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* AI Daily Briefing */}
-        <div className="bg-slate-900 border border-white/8 rounded-2xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-white/6 flex items-center justify-between">
+        <div className="bg-white border border-zinc-200 rounded-2xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-zinc-200 flex items-center justify-between">
             <div>
-              <h3 className="text-white font-semibold text-sm">AI Daily Briefing</h3>
+              <h3 className="font-semibold text-sm" style={{ color: '#1a1008' }}>AI Daily Briefing</h3>
               {briefingTime && (
-                <p className="text-slate-500 text-xs mt-0.5">Last analyzed: today at {formatTime(briefingTime)}</p>
+                <p className="text-xs mt-0.5" style={{ color: '#b09060' }}>Last analyzed: today at {formatTime(briefingTime)}</p>
               )}
             </div>
             <button
               onClick={handleGetBriefing}
               disabled={briefingLoading}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 rounded-lg text-amber-400 text-xs font-semibold transition-all disabled:opacity-50"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg text-red-700 text-xs font-semibold transition-all disabled:opacity-50"
             >
               {briefingLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
               {briefingLoading ? 'Analyzing...' : briefing ? 'Refresh Analysis' : 'Get AI Analysis'}
@@ -779,29 +782,29 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
                   health?: string;
                 };
                 const SIGNAL_STYLES: Record<string, string> = {
-                  TRIM: 'bg-red-500/15 border-red-500/30 text-red-300',
-                  SELL: 'bg-red-500/15 border-red-500/30 text-red-300',
-                  ADD: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300',
-                  BUY: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300',
-                  HOLD: 'bg-slate-500/15 border-slate-500/30 text-slate-300',
-                  WATCH: 'bg-amber-500/15 border-amber-500/30 text-amber-300',
-                  REBALANCE: 'bg-blue-500/15 border-blue-500/30 text-blue-300',
+                  TRIM: 'bg-red-50 border-red-200 text-red-700',
+                  SELL: 'bg-red-50 border-red-200 text-red-700',
+                  ADD: 'bg-emerald-50 border-emerald-200 text-emerald-700',
+                  BUY: 'bg-emerald-50 border-emerald-200 text-emerald-700',
+                  HOLD: 'bg-zinc-100 border-zinc-200 text-zinc-600',
+                  WATCH: 'bg-amber-50 border-amber-200 text-amber-700',
+                  REBALANCE: 'bg-blue-50 border-blue-200 text-blue-700',
                 };
                 const HEALTH_STYLES: Record<string, { bg: string; label: string }> = {
-                  OVERWEIGHT_RISK: { bg: 'bg-red-500/15 border-red-500/30 text-red-300', label: 'Overweight Risk' },
-                  BALANCED: { bg: 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300', label: 'Balanced' },
-                  UNDERWEIGHT_RISK: { bg: 'bg-blue-500/15 border-blue-500/30 text-blue-300', label: 'Underweight Risk' },
-                  CASH_DRAG: { bg: 'bg-amber-500/15 border-amber-500/30 text-amber-300', label: 'Cash Drag' },
+                  OVERWEIGHT_RISK: { bg: 'bg-red-50 border-red-200 text-red-700', label: 'Overweight Risk' },
+                  BALANCED: { bg: 'bg-emerald-50 border-emerald-200 text-emerald-700', label: 'Balanced' },
+                  UNDERWEIGHT_RISK: { bg: 'bg-blue-50 border-blue-200 text-blue-700', label: 'Underweight Risk' },
+                  CASH_DRAG: { bg: 'bg-amber-50 border-amber-200 text-amber-700', label: 'Cash Drag' },
                 };
                 const healthStyle = HEALTH_STYLES[b.health ?? ''] || HEALTH_STYLES.BALANCED;
                 return (
                   <div className="space-y-4">
-                    {b.summary && <p className="text-slate-200 text-sm leading-relaxed">{b.summary}</p>}
+                    {b.summary && <p className="text-sm leading-relaxed" style={{ color: '#1a1008' }}>{b.summary}</p>}
                     {b.signals && b.signals.length > 0 && (
                       <div className="space-y-2">
-                        <p className="text-slate-500 text-xs font-semibold uppercase tracking-wide">Signals</p>
+                        <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#b09060' }}>Signals</p>
                         {b.signals.map((sig: { type: string; ticker: string; action: string; reason: string }, i: number) => (
-                          <div key={i} className={`flex items-start gap-3 p-3 rounded-xl border ${SIGNAL_STYLES[sig.type] || 'bg-white/4 border-white/8 text-slate-300'}`}>
+                          <div key={i} className={`flex items-start gap-3 p-3 rounded-xl border ${SIGNAL_STYLES[sig.type] || 'bg-zinc-50 border-zinc-200 text-zinc-700'}`}>
                             <span className="text-[10px] font-bold uppercase tracking-wide mt-0.5 flex-shrink-0 w-16">{sig.type}</span>
                             <div className="flex-1 min-w-0">
                               <span className="font-mono font-bold text-xs">{sig.ticker}</span>
@@ -813,27 +816,27 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
                       </div>
                     )}
                     {b.macro && (
-                      <div className="p-3 bg-white/4 border border-white/6 rounded-xl">
-                        <p className="text-slate-500 text-[10px] uppercase tracking-wide mb-1">Macro Context</p>
-                        <p className="text-slate-300 text-xs">{b.macro}</p>
+                      <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-xl">
+                        <p className="text-[10px] uppercase tracking-wide mb-1" style={{ color: '#b09060' }}>Macro Context</p>
+                        <p className="text-xs" style={{ color: '#1a1008' }}>{b.macro}</p>
                       </div>
                     )}
                     {b.health && (
                       <div className="flex items-center gap-2">
-                        <span className="text-slate-500 text-xs">Portfolio Health:</span>
+                        <span className="text-xs" style={{ color: '#b09060' }}>Portfolio Health:</span>
                         <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wide border ${healthStyle.bg}`}>{healthStyle.label}</span>
                       </div>
                     )}
                   </div>
                 );
               } catch {
-                return <p className="text-slate-300 text-sm leading-relaxed whitespace-pre-line">{String(briefing)}</p>;
+                return <p className="text-sm leading-relaxed whitespace-pre-line" style={{ color: '#1a1008' }}>{String(briefing)}</p>;
               }
             })() : (
               <div className="text-center py-6">
-                <Sparkles className="w-8 h-8 text-amber-500/40 mx-auto mb-2" />
-                <p className="text-slate-500 text-sm">Click &quot;Get AI Analysis&quot; to generate today&apos;s briefing</p>
-                <p className="text-slate-600 text-xs mt-1">Generated once per day · Cached for 24h</p>
+                <Sparkles className="w-8 h-8 mx-auto mb-2" style={{ color: '#ebe4d8' }} />
+                <p className="text-sm" style={{ color: '#b09060' }}>Click &quot;Get AI Analysis&quot; to generate today&apos;s briefing</p>
+                <p className="text-xs mt-1" style={{ color: '#b09060' }}>Generated once per day · Cached for 24h</p>
               </div>
             )}
           </div>
@@ -844,61 +847,63 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
 
     {/* Add Position Modal */}
     {showAddPosition && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-        <div className="w-full max-w-sm bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-white/8"
-            style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.08) 0%, transparent 100%)' }}>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+        <div className="w-full max-w-sm bg-white border border-zinc-200 rounded-2xl shadow-2xl overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200"
+            style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.05) 0%, #ffffff 100%)' }}>
             <div>
-              <h3 className="text-white font-bold text-sm">Add Position</h3>
-              <p className="text-slate-400 text-xs mt-0.5">Price locked at time of submission</p>
+              <h3 className="font-bold text-sm" style={{ color: '#1a1008' }}>Add Position</h3>
+              <p className="text-xs mt-0.5" style={{ color: '#6b5840' }}>Price locked at time of submission</p>
             </div>
             <button onClick={() => setShowAddPosition(false)}
-              className="w-7 h-7 rounded-lg bg-white/8 flex items-center justify-center hover:bg-white/15 transition-colors">
-              <X className="w-4 h-4 text-slate-400" />
+              className="w-7 h-7 rounded-lg bg-zinc-100 flex items-center justify-center hover:bg-zinc-200 transition-colors">
+              <X className="w-4 h-4" style={{ color: '#6b5840' }} />
             </button>
           </div>
 
           <div className="p-5 space-y-4">
             <div>
-              <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5 block">Ticker Symbol</label>
+              <label className="text-xs font-semibold uppercase tracking-wide mb-1.5 block" style={{ color: '#6b5840' }}>Ticker Symbol</label>
               <input
                 value={addTicker}
                 onChange={e => setAddTicker(e.target.value.toUpperCase())}
                 placeholder="e.g. AAPL"
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 font-mono uppercase"
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2.5 text-sm placeholder-zinc-400 focus:outline-none focus:border-emerald-400 font-mono uppercase"
+                style={{ color: '#1a1008' }}
               />
             </div>
 
             <div>
-              <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5 block">Dollar Amount ($)</label>
+              <label className="text-xs font-semibold uppercase tracking-wide mb-1.5 block" style={{ color: '#6b5840' }}>Dollar Amount ($)</label>
               <input
                 type="number"
                 value={addAmount}
                 onChange={e => setAddAmount(e.target.value)}
                 placeholder="e.g. 5000"
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-emerald-500/50"
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2.5 text-sm placeholder-zinc-400 focus:outline-none focus:border-emerald-400"
+                style={{ color: '#1a1008' }}
               />
             </div>
 
-            <div className="p-3 bg-white/4 border border-white/8 rounded-xl">
-              <p className="text-slate-400 text-xs">The same dollar amount will also be added to the {persona?.benchmark_ticker} benchmark for a fair comparison.</p>
+            <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-xl">
+              <p className="text-xs" style={{ color: '#6b5840' }}>The same dollar amount will also be added to the {persona?.benchmark_ticker} benchmark for a fair comparison.</p>
             </div>
 
             {addError && (
-              <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                <p className="text-red-300 text-xs">{addError}</p>
+              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                <p className="text-red-700 text-xs">{addError}</p>
               </div>
             )}
           </div>
 
-          <div className="flex items-center justify-between px-5 py-4 border-t border-white/8 bg-white/2">
+          <div className="flex items-center justify-between px-5 py-4 border-t border-zinc-200 bg-zinc-50">
             <button onClick={() => setShowAddPosition(false)}
-              className="text-sm text-slate-400 hover:text-white transition-colors">Cancel</button>
+              className="text-sm transition-colors hover:text-zinc-900" style={{ color: '#6b5840' }}>Cancel</button>
             <button
               onClick={handleAddPosition}
               disabled={addLoading || !addTicker.trim() || !addAmount}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-sm rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {addLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
               {addLoading ? 'Adding...' : 'Add Position'}
@@ -910,16 +915,16 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
 
     {/* Sell Modal */}
     {showSell && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-        <div className="w-full max-w-sm bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-white/8"
-            style={{ background: 'linear-gradient(135deg, rgba(239,68,68,0.08) 0%, transparent 100%)' }}>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+        <div className="w-full max-w-sm bg-white border border-zinc-200 rounded-2xl shadow-2xl overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200"
+            style={{ background: 'linear-gradient(135deg, rgba(185,28,28,0.05) 0%, #ffffff 100%)' }}>
             <div>
-              <h3 className="text-white font-bold text-sm">Sell Position — {showSell}</h3>
-              <p className="text-slate-400 text-xs mt-0.5">Proceeds convert to CASH (tracked at $1/share)</p>
+              <h3 className="font-bold text-sm" style={{ color: '#1a1008' }}>Sell Position — {showSell}</h3>
+              <p className="text-xs mt-0.5" style={{ color: '#6b5840' }}>Proceeds convert to CASH (tracked at $1/share)</p>
             </div>
-            <button onClick={() => setShowSell(null)} className="w-7 h-7 rounded-lg bg-white/8 flex items-center justify-center hover:bg-white/15 transition-colors">
-              <X className="w-4 h-4 text-slate-400" />
+            <button onClick={() => setShowSell(null)} className="w-7 h-7 rounded-lg bg-zinc-100 flex items-center justify-center hover:bg-zinc-200 transition-colors">
+              <X className="w-4 h-4" style={{ color: '#6b5840' }} />
             </button>
           </div>
           <div className="p-5 space-y-4">
@@ -927,43 +932,44 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
               const h = latestSnapshot?.holdings_detail_json?.find(x => x.ticker === showSell);
               if (!h) return null;
               return (
-                <div className="p-3 bg-white/4 border border-white/6 rounded-xl">
-                  <p className="text-slate-400 text-xs mb-1">Current Position</p>
-                  <p className="text-white font-mono text-sm font-bold">{h.shares.toFixed(4)} shares @ ${h.currentPrice.toFixed(2)}</p>
-                  <p className="text-slate-400 text-xs">= ${h.currentValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-xl">
+                  <p className="text-xs mb-1" style={{ color: '#6b5840' }}>Current Position</p>
+                  <p className="font-mono text-sm font-bold" style={{ color: '#1a1008' }}>{h.shares.toFixed(4)} shares @ ${h.currentPrice.toFixed(2)}</p>
+                  <p className="text-xs" style={{ color: '#6b5840' }}>= ${h.currentValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                   <button
                     onClick={() => setSellAmount(h.currentValue.toFixed(2))}
-                    className="mt-2 text-xs text-amber-400 hover:text-amber-300 transition-colors"
+                    className="mt-2 text-xs text-red-700 hover:text-red-800 transition-colors"
                   >Sell all →</button>
                 </div>
               );
             })()}
             <div>
-              <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5 block">Dollar Amount to Sell ($)</label>
+              <label className="text-xs font-semibold uppercase tracking-wide mb-1.5 block" style={{ color: '#6b5840' }}>Dollar Amount to Sell ($)</label>
               <input
                 type="number"
                 value={sellAmount}
                 onChange={e => setSellAmount(e.target.value)}
                 placeholder="e.g. 2500"
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-red-500/50"
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2.5 text-sm placeholder-zinc-400 focus:outline-none focus:border-red-400"
+                style={{ color: '#1a1008' }}
               />
             </div>
-            <div className="p-3 bg-amber-500/6 border border-amber-500/15 rounded-xl">
-              <p className="text-amber-300/80 text-xs">Benchmark is NOT reduced when you sell — this lets you see the opportunity cost of holding cash.</p>
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+              <p className="text-amber-700 text-xs">Benchmark is NOT reduced when you sell — this lets you see the opportunity cost of holding cash.</p>
             </div>
             {sellError && (
-              <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                <p className="text-red-300 text-xs">{sellError}</p>
+              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                <p className="text-red-700 text-xs">{sellError}</p>
               </div>
             )}
           </div>
-          <div className="flex items-center justify-between px-5 py-4 border-t border-white/8 bg-white/2">
-            <button onClick={() => setShowSell(null)} className="text-sm text-slate-400 hover:text-white transition-colors">Cancel</button>
+          <div className="flex items-center justify-between px-5 py-4 border-t border-zinc-200 bg-zinc-50">
+            <button onClick={() => setShowSell(null)} className="text-sm transition-colors hover:text-zinc-900" style={{ color: '#6b5840' }}>Cancel</button>
             <button
               onClick={handleSell}
               disabled={sellLoading || !sellAmount || Number(sellAmount) <= 0}
-              className="flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-400 text-white font-bold text-sm rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-sm rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {sellLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
               {sellLoading ? 'Selling...' : 'Confirm Sell'}
@@ -975,18 +981,18 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
 
     {/* Rebalance Modal */}
     {showRebalance && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-        <div className="w-full max-w-md bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-white/8 flex-shrink-0"
-            style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.08) 0%, transparent 100%)' }}>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+        <div className="w-full max-w-md bg-white border border-zinc-200 rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200 flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.05) 0%, #ffffff 100%)' }}>
             <div>
-              <h3 className="text-white font-bold text-sm">Rebalance Portfolio</h3>
-              <p className="text-slate-400 text-xs mt-0.5">
+              <h3 className="font-bold text-sm" style={{ color: '#1a1008' }}>Rebalance Portfolio</h3>
+              <p className="text-xs mt-0.5" style={{ color: '#6b5840' }}>
                 Portfolio value: ${currentValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
-            <button onClick={() => setShowRebalance(false)} className="w-7 h-7 rounded-lg bg-white/8 flex items-center justify-center hover:bg-white/15 transition-colors">
-              <X className="w-4 h-4 text-slate-400" />
+            <button onClick={() => setShowRebalance(false)} className="w-7 h-7 rounded-lg bg-zinc-100 flex items-center justify-center hover:bg-zinc-200 transition-colors">
+              <X className="w-4 h-4" style={{ color: '#6b5840' }} />
             </button>
           </div>
           <div className="p-5 space-y-3 overflow-y-auto flex-1">
@@ -995,9 +1001,9 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
               const totalW = rebalanceWeights.reduce((s, w) => s + w.weight, 0);
               const isValid = Math.abs(totalW - 1) <= 0.011;
               return (
-                <div className={`flex items-center justify-between p-3 rounded-xl border ${isValid ? 'bg-emerald-500/8 border-emerald-500/20' : 'bg-red-500/8 border-red-500/20'}`}>
-                  <span className="text-xs text-slate-400">Total Weight</span>
-                  <span className={`font-mono font-bold text-sm ${isValid ? 'text-emerald-400' : 'text-red-400'}`}>
+                <div className={`flex items-center justify-between p-3 rounded-xl border ${isValid ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
+                  <span className="text-xs" style={{ color: '#6b5840' }}>Total Weight</span>
+                  <span className={`font-mono font-bold text-sm ${isValid ? 'text-emerald-700' : 'text-red-700'}`}>
                     {(totalW * 100).toFixed(1)}% {isValid ? '✓' : `(need 100%)`}
                   </span>
                 </div>
@@ -1011,8 +1017,8 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
               const targetValue = currentValue * rw.weight;
               const diff = targetValue - currentHoldingValue;
               return (
-                <div key={rw.ticker} className="flex items-center gap-3 p-3 bg-white/4 border border-white/6 rounded-xl">
-                  <span className="font-mono font-bold text-white text-sm w-16 flex-shrink-0">{rw.ticker}</span>
+                <div key={rw.ticker} className="flex items-center gap-3 p-3 bg-zinc-50 border border-zinc-200 rounded-xl">
+                  <span className="font-mono font-bold text-sm w-16 flex-shrink-0" style={{ color: '#1a1008' }}>{rw.ticker}</span>
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <input
@@ -1025,14 +1031,15 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
                           const newW = Number(e.target.value) / 100;
                           setRebalanceWeights(prev => prev.map((w, j) => j === i ? { ...w, weight: newW } : w));
                         }}
-                        className="w-20 bg-slate-800 border border-white/10 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-blue-500/50 font-mono"
+                        className="w-20 bg-white border border-zinc-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:border-blue-400 font-mono"
+                        style={{ color: '#1a1008' }}
                       />
-                      <span className="text-slate-400 text-xs">%</span>
+                      <span className="text-xs" style={{ color: '#6b5840' }}>%</span>
                     </div>
-                    <p className="text-slate-500 text-[10px] mt-1">
+                    <p className="text-[10px] mt-1" style={{ color: '#b09060' }}>
                       Target: ${targetValue.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                       {currentHoldingValue > 0 && (
-                        <span className={diff >= 0 ? 'text-emerald-500 ml-1' : 'text-red-500 ml-1'}>
+                        <span className={diff >= 0 ? 'text-emerald-600 ml-1' : 'text-red-500 ml-1'}>
                           ({diff >= 0 ? 'Buy' : 'Sell'} ${Math.abs(diff).toLocaleString('en-US', { maximumFractionDigits: 0 })})
                         </span>
                       )}
@@ -1042,23 +1049,23 @@ export default function PersonaDetail({ personaId, onBack, onDelete }: PersonaDe
               );
             })}
 
-            <div className="p-3 bg-white/4 border border-white/6 rounded-xl">
-              <p className="text-slate-400 text-xs">Inception prices reset to today&apos;s prices. Overall portfolio return history is preserved.</p>
+            <div className="p-3 bg-zinc-50 border border-zinc-200 rounded-xl">
+              <p className="text-xs" style={{ color: '#6b5840' }}>Inception prices reset to today&apos;s prices. Overall portfolio return history is preserved.</p>
             </div>
 
             {rebalanceError && (
-              <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                <p className="text-red-300 text-xs">{rebalanceError}</p>
+              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                <p className="text-red-700 text-xs">{rebalanceError}</p>
               </div>
             )}
           </div>
-          <div className="flex items-center justify-between px-5 py-4 border-t border-white/8 bg-white/2 flex-shrink-0">
-            <button onClick={() => setShowRebalance(false)} className="text-sm text-slate-400 hover:text-white transition-colors">Cancel</button>
+          <div className="flex items-center justify-between px-5 py-4 border-t border-zinc-200 bg-zinc-50 flex-shrink-0">
+            <button onClick={() => setShowRebalance(false)} className="text-sm transition-colors hover:text-zinc-900" style={{ color: '#6b5840' }}>Cancel</button>
             <button
               onClick={handleRebalance}
               disabled={rebalanceLoading}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-400 text-white font-bold text-sm rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {rebalanceLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scale className="w-4 h-4" />}
               {rebalanceLoading ? 'Rebalancing...' : 'Confirm Rebalance'}
