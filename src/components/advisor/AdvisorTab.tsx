@@ -268,16 +268,19 @@ export default function AdvisorTab() {
   void buildAdvisorContext;
 
   return (
-    <div className="flex flex-col h-screen bg-white">
+    <div className="flex flex-col h-screen" style={{ background: '#faf8f3' }}>
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header className="flex-shrink-0 border-b border-zinc-200 px-6 pt-5 pb-0 bg-white">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-orange-500 flex items-center justify-center shadow-sm">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center shadow-sm" style={{ background: '#C9A84C' }}>
               <Brain className="w-5 h-5 text-white" />
             </div>
             <div>
+              <p className="font-sans uppercase mb-1" style={{ fontSize: 9.5, letterSpacing: '0.16em', fontWeight: 600, color: '#C9A84C' }}>
+                ● Silas Advisor
+              </p>
               <h1 className="text-lg font-bold text-zinc-900 leading-tight">Silas</h1>
               <p className="text-xs text-zinc-500">Expert Wealth Advisor</p>
             </div>
@@ -309,7 +312,7 @@ export default function AdvisorTab() {
               className={clsx(
                 'flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold whitespace-nowrap transition-all border-b-2 -mb-px',
                 mode === id
-                  ? 'border-orange-500 text-orange-600'
+                  ? 'border-[#C9A84C] text-[#C9A84C]'
                   : 'border-transparent text-zinc-500 hover:text-zinc-800'
               )}
             >
@@ -370,11 +373,11 @@ export default function AdvisorTab() {
                     /* ── Arena persona imported — show persona-specific greeting ── */
                     <div className="max-w-2xl mx-auto space-y-4">
                       <div className="flex items-start gap-3">
-                        <div className="w-7 h-7 rounded-full bg-orange-500 flex items-center justify-center shrink-0 mt-0.5">
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: '#C9A84C' }}>
                           <Brain className="w-4 h-4 text-white" />
                         </div>
-                        <div className="bg-zinc-50 border border-zinc-200 rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-zinc-800 leading-relaxed">
-                          <p className="font-semibold text-zinc-900 mb-2">I&apos;ve loaded your <span className="text-orange-600">{arenaSnapshot.personaName}</span> persona from Strategy Arena.</p>
+                        <div className="rounded-2xl rounded-tl-sm px-4 py-3 text-sm text-zinc-800 leading-relaxed" style={{ background: '#fefce8', border: '1px solid #fde68a' }}>
+                          <p className="font-semibold text-zinc-900 mb-2">I&apos;ve loaded your <span style={{ color: '#C9A84C' }}>{arenaSnapshot.personaName}</span> persona from Strategy Arena.</p>
                           <p className="text-zinc-600 mb-3">Here&apos;s what I&apos;m working with:</p>
                           <div className="bg-white border border-zinc-100 rounded-xl px-3 py-2.5 mb-3 space-y-1">
                             {arenaSnapshot.allocations.split(', ').map((holding) => {
@@ -403,7 +406,7 @@ export default function AdvisorTab() {
                           `Which holding is the weakest link in today's macro environment?`,
                         ].map(p => (
                           <button key={p} onClick={() => sendChat(p)}
-                            className="text-left text-xs text-zinc-600 bg-zinc-50 hover:bg-orange-50 hover:text-orange-700 hover:border-orange-200 border border-zinc-200 rounded-xl px-4 py-3 transition-all leading-relaxed"
+                            className="text-left text-xs text-zinc-600 bg-zinc-50 hover:bg-[#fefce8] hover:border-[#fde68a] border border-zinc-200 rounded-xl px-4 py-3 transition-all leading-relaxed" style={{ color: undefined }}
                           >
                             {p}
                           </button>
@@ -423,7 +426,7 @@ export default function AdvisorTab() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-2xl mx-auto">
                         {SUGGESTED_PROMPTS.map(p => (
                           <button key={p} onClick={() => sendChat(p)}
-                            className="text-left text-xs text-zinc-600 bg-zinc-50 hover:bg-orange-50 hover:text-orange-700 hover:border-orange-200 border border-zinc-200 rounded-xl px-4 py-3 transition-all leading-relaxed"
+                            className="text-left text-xs text-zinc-600 bg-zinc-50 hover:bg-[#fefce8] hover:border-[#fde68a] border border-zinc-200 rounded-xl px-4 py-3 transition-all leading-relaxed" style={{ color: undefined }}
                           >
                             {p}
                           </button>
@@ -437,16 +440,19 @@ export default function AdvisorTab() {
               {messages.filter(msg => msg.text).map((msg, i) => (
                 <div key={i} className={clsx('flex items-start gap-3', msg.role === 'user' ? 'justify-end' : 'justify-start')}>
                   {msg.role === 'assistant' && (
-                    <div className="w-7 h-7 rounded-full bg-orange-500 flex items-center justify-center shrink-0 mt-0.5">
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5" style={{ background: '#C9A84C' }}>
                       <Brain className="w-4 h-4 text-white" />
                     </div>
                   )}
-                  <div className={clsx(
-                    'rounded-2xl px-4 py-3 text-sm leading-relaxed max-w-[85%]',
-                    msg.role === 'user'
-                      ? 'bg-zinc-900 text-white rounded-tr-sm'
-                      : 'bg-zinc-50 text-zinc-800 border border-zinc-200 rounded-tl-sm'
-                  )}>
+                  <div
+                    className={clsx(
+                      'rounded-2xl px-4 py-3 text-sm leading-relaxed max-w-[85%]',
+                      msg.role === 'user'
+                        ? 'bg-zinc-900 text-white rounded-tr-sm'
+                        : 'text-zinc-800'
+                    )}
+                    style={msg.role === 'assistant' ? { background: '#fefce8', border: '1px solid #fde68a', borderRadius: '4px 12px 12px 12px' } : undefined}
+                  >
                     {msg.role === 'assistant' ? (
                       <ReactMarkdown
                         components={{
@@ -469,14 +475,14 @@ export default function AdvisorTab() {
 
               {chatLoading && !messages[messages.length - 1]?.text && (
                 <div className="flex items-start gap-3 justify-start">
-                  <div className="w-7 h-7 rounded-full bg-orange-500 flex items-center justify-center shrink-0">
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ background: '#C9A84C' }}>
                     <Brain className="w-4 h-4 text-white" />
                   </div>
-                  <div className="bg-zinc-50 border border-zinc-200 rounded-2xl rounded-tl-sm px-4 py-3.5">
+                  <div className="rounded-2xl rounded-tl-sm px-4 py-3.5" style={{ background: '#fefce8', border: '1px solid #fde68a' }}>
                     <div className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 rounded-full bg-orange-400 animate-bounce [animation-delay:0ms]" />
-                      <div className="w-2 h-2 rounded-full bg-orange-400 animate-bounce [animation-delay:150ms]" />
-                      <div className="w-2 h-2 rounded-full bg-orange-400 animate-bounce [animation-delay:300ms]" />
+                      <div className="w-2 h-2 rounded-full animate-bounce [animation-delay:0ms]" style={{ background: '#C9A84C' }} />
+                      <div className="w-2 h-2 rounded-full animate-bounce [animation-delay:150ms]" style={{ background: '#C9A84C' }} />
+                      <div className="w-2 h-2 rounded-full animate-bounce [animation-delay:300ms]" style={{ background: '#C9A84C' }} />
                     </div>
                   </div>
                 </div>
@@ -486,7 +492,7 @@ export default function AdvisorTab() {
 
             {/* Chat input */}
             <div className="flex-shrink-0 border-t border-zinc-200 px-6 py-4 bg-white">
-              <div className="flex items-center gap-3 bg-zinc-50 border border-zinc-200 rounded-2xl px-4 py-3 focus-within:border-orange-400 focus-within:ring-2 focus-within:ring-orange-100 transition-all">
+              <div className="flex items-center gap-3 bg-zinc-50 border border-zinc-200 rounded-2xl px-4 py-3 focus-within:border-[#C9A84C] focus-within:ring-2 focus-within:ring-yellow-100 transition-all">
                 <input
                   type="text"
                   value={chatInput}
@@ -499,7 +505,8 @@ export default function AdvisorTab() {
                 <button
                   onClick={() => sendChat(chatInput)}
                   disabled={chatLoading || !chatInput.trim()}
-                  className="w-8 h-8 rounded-xl bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-200 flex items-center justify-center transition-colors"
+                  className="w-8 h-8 rounded-xl disabled:bg-zinc-200 flex items-center justify-center transition-colors"
+                  style={{ background: '#C9A84C', color: '#fff' }}
                 >
                   <Send className="w-3.5 h-3.5 text-white" />
                 </button>
@@ -621,13 +628,13 @@ function PortfolioBuilderPanel({
       <div className="mb-3">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2">
-            <PieChart className="w-4 h-4 text-orange-500" />
+            <PieChart className="w-4 h-4" style={{ color: '#C9A84C' }} />
             <span className="text-sm font-bold text-zinc-900">Portfolio Analysis</span>
             {totalValue > 0 && (
               <span className="text-xs text-zinc-500 font-medium">Total: ${totalValue.toLocaleString()}</span>
             )}
           </div>
-          <button onClick={addRow} className="flex items-center gap-1 text-xs font-semibold text-orange-600 hover:text-orange-700 transition-colors">
+          <button onClick={addRow} className="flex items-center gap-1 text-xs font-semibold transition-colors" style={{ color: '#C9A84C' }}>
             <Plus className="w-3.5 h-3.5" /> Add Asset
           </button>
         </div>
@@ -645,7 +652,7 @@ function PortfolioBuilderPanel({
                   onChange={e => updateRow(row.id, 'asset', e.target.value.toUpperCase())}
                   onBlur={e => { if (e.target.value.trim()) lookupTicker(e.target.value.trim()); }}
                   placeholder="TICKER"
-                  className="bg-white border border-zinc-200 rounded-lg px-3 py-1.5 text-xs text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-orange-400 uppercase font-mono w-full"
+                  className="bg-white border border-zinc-200 rounded-lg px-3 py-1.5 text-xs text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-[#C9A84C] uppercase font-mono w-full"
                 />
                 {row.asset.trim() && p && !p.loading && p.price !== null && (
                   <span className={clsx('text-[10px] font-mono px-1', p.changePct != null && p.changePct >= 0 ? 'text-emerald-600' : 'text-red-500')}>
@@ -662,13 +669,13 @@ function PortfolioBuilderPanel({
                   value={row.amount}
                   onChange={e => updateRow(row.id, 'amount', e.target.value)}
                   placeholder="Amount"
-                  className="w-28 bg-white border border-zinc-200 rounded-lg pl-6 pr-3 py-1.5 text-xs text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-orange-400"
+                  className="w-28 bg-white border border-zinc-200 rounded-lg pl-6 pr-3 py-1.5 text-xs text-zinc-900 placeholder-zinc-400 focus:outline-none focus:border-[#C9A84C]"
                 />
               </div>
               <select
                 value={row.accountType}
                 onChange={e => updateRow(row.id, 'accountType', e.target.value)}
-                className="flex-1 bg-white border border-zinc-200 rounded-lg px-2 py-1.5 text-xs text-zinc-900 focus:outline-none focus:border-orange-400"
+                className="flex-1 bg-white border border-zinc-200 rounded-lg px-2 py-1.5 text-xs text-zinc-900 focus:outline-none focus:border-[#C9A84C]"
               >
                 {ACCOUNT_TYPES.map(t => <option key={t}>{t}</option>)}
               </select>
@@ -685,7 +692,7 @@ function PortfolioBuilderPanel({
       <button
         onClick={onAnalyze}
         disabled={loading || rows.every(r => !r.asset.trim())}
-        className="mt-3 w-full bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-200 text-white disabled:text-zinc-400 text-xs font-bold py-2 rounded-xl transition-colors flex items-center justify-center gap-2"
+        className="mt-3 w-full disabled:bg-zinc-200 text-white disabled:text-zinc-400 text-xs font-bold py-2 rounded-xl transition-colors flex items-center justify-center gap-2" style={{ background: '#C9A84C' }}
       >
         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
         {loading ? 'Analyzing...' : 'Analyze in Chat'}
@@ -703,7 +710,7 @@ function ThesisPanel({ thesis, setThesis, onStressTest, loading }: {
     <div className="flex-shrink-0 border-b border-zinc-200 px-6 py-4 bg-zinc-50">
       <div className="mb-2">
         <div className="flex items-center gap-2 mb-1">
-          <Zap className="w-4 h-4 text-orange-500" />
+          <Zap className="w-4 h-4" style={{ color: '#C9A84C' }} />
           <span className="text-sm font-bold text-zinc-900">Stress Test</span>
         </div>
         <p className="text-xs text-zinc-500 leading-relaxed">Describe an investment thesis and Silas will stress-test it against current macro conditions — what kills it, what confirms it, and a probability-weighted verdict.</p>
@@ -712,12 +719,12 @@ function ThesisPanel({ thesis, setThesis, onStressTest, loading }: {
         value={thesis}
         onChange={e => setThesis(e.target.value)}
         placeholder='e.g. "I think tech will outperform over the next 6 months because AI capex is still accelerating and the Fed is done hiking"'
-        className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-xs text-zinc-900 placeholder-zinc-400 resize-none h-20 focus:outline-none focus:border-orange-400 leading-relaxed"
+        className="w-full bg-white border border-zinc-200 rounded-xl px-4 py-3 text-xs text-zinc-900 placeholder-zinc-400 resize-none h-20 focus:outline-none focus:border-[#C9A84C] leading-relaxed"
       />
       <button
         onClick={onStressTest}
         disabled={loading || !thesis.trim()}
-        className="mt-2 w-full bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-200 text-white disabled:text-zinc-400 text-xs font-bold py-2 rounded-xl transition-colors flex items-center justify-center gap-2"
+        className="mt-2 w-full disabled:bg-zinc-200 text-white disabled:text-zinc-400 text-xs font-bold py-2 rounded-xl transition-colors flex items-center justify-center gap-2" style={{ background: '#C9A84C' }}
       >
         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
         {loading ? 'Testing...' : 'Stress Test in Chat'}
@@ -745,11 +752,11 @@ function ComparePanel({ items, setItems, onCompare, loading }: {
       <div className="mb-3">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2">
-            <GitCompare className="w-4 h-4 text-orange-500" />
+            <GitCompare className="w-4 h-4" style={{ color: '#C9A84C' }} />
             <span className="text-sm font-bold text-zinc-900">Compare Assets</span>
           </div>
           {items.length < 5 && (
-            <button onClick={addItem} className="flex items-center gap-1 text-xs font-semibold text-orange-600 hover:text-orange-700 transition-colors">
+            <button onClick={addItem} className="flex items-center gap-1 text-xs font-semibold transition-colors" style={{ color: '#C9A84C' }}>
               <Plus className="w-3.5 h-3.5" /> Add Asset
             </button>
           )}
@@ -765,7 +772,7 @@ function ComparePanel({ items, setItems, onCompare, loading }: {
                 value={val}
                 onChange={e => updateItem(i, e.target.value)}
                 placeholder={`Asset ${String.fromCharCode(65 + i)}`}
-                className="w-28 bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 placeholder-zinc-400 uppercase font-mono focus:outline-none focus:border-orange-400"
+                className="w-28 bg-white border border-zinc-200 rounded-xl px-3 py-2 text-xs text-zinc-900 placeholder-zinc-400 uppercase font-mono focus:outline-none focus:border-[#C9A84C]"
               />
               {items.length > 2 && (
                 <button onClick={() => removeItem(i)} className="p-1 text-zinc-300 hover:text-red-500 transition-colors">
@@ -779,7 +786,7 @@ function ComparePanel({ items, setItems, onCompare, loading }: {
       <button
         onClick={onCompare}
         disabled={loading || validCount < 2}
-        className="w-full bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-200 text-white disabled:text-zinc-400 text-xs font-bold py-2 rounded-xl transition-colors flex items-center justify-center gap-2"
+        className="w-full disabled:bg-zinc-200 text-white disabled:text-zinc-400 text-xs font-bold py-2 rounded-xl transition-colors flex items-center justify-center gap-2" style={{ background: '#C9A84C' }}
       >
         {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageSquare className="w-3.5 h-3.5" />}
         {loading ? 'Comparing...' : 'Compare in Chat'}
@@ -932,7 +939,8 @@ function MacroCalendarPanel({ onAskSilas }: { onAskSilas: (prompt: string) => vo
                 </span>
                 <button
                   onClick={() => onAskSilas(buildPrompt(event))}
-                  className="text-[11px] font-semibold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 px-3 py-1.5 rounded-lg transition-all whitespace-nowrap"
+                  className="text-[11px] font-semibold bg-[#fefce8] hover:bg-yellow-100 border border-[#fde68a] px-3 py-1.5 rounded-lg transition-all whitespace-nowrap"
+                  style={{ color: '#C9A84C' }}
                 >
                   Ask Silas
                 </button>

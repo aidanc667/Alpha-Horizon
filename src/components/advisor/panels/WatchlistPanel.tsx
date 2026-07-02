@@ -83,14 +83,14 @@ export function WatchlistPanel({
     <div className="flex flex-col flex-1 min-h-0">
       <div className="flex-shrink-0 border-b border-zinc-200 px-6 py-4 bg-zinc-50">
         <div className="flex items-center gap-2 mb-1">
-          <Eye className="w-4 h-4 text-orange-500" />
+          <Eye className="w-4 h-4" style={{ color: '#C9A84C' }} />
           <span className="text-sm font-bold text-zinc-900">Watchlist</span>
           <span className="text-[10px] text-zinc-400 font-medium ml-1">Auto-refreshes every 60s</span>
         </div>
         <p className="text-xs text-zinc-500 leading-relaxed mb-3">Track your favorite tickers with live prices and daily change. Hit &quot;Ask Silas&quot; on any position to get a real-time read.</p>
         <div className="flex items-center gap-3">
           <div className={clsx('flex items-center gap-2 flex-1 bg-white border rounded-xl px-4 py-2.5 focus-within:ring-2 focus-within:ring-orange-100 transition-all',
-            addError ? 'border-red-300 focus-within:border-red-400' : 'border-zinc-200 focus-within:border-orange-400'
+            addError ? 'border-red-300 focus-within:border-red-400' : 'border-zinc-200 focus-within:border-[#C9A84C]'
           )}>
             <Eye className="w-4 h-4 text-zinc-400 flex-shrink-0" />
             <input
@@ -105,7 +105,8 @@ export function WatchlistPanel({
           <button
             onClick={addTicker}
             disabled={adding || !input.trim() || tickers.length >= 20}
-            className="bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-200 text-white disabled:text-zinc-400 text-xs font-bold px-4 py-2.5 rounded-xl transition-colors flex items-center gap-2 whitespace-nowrap"
+            className="disabled:bg-zinc-200 text-white disabled:text-zinc-400 text-xs font-bold px-4 py-2.5 rounded-xl transition-colors flex items-center gap-2 whitespace-nowrap"
+            style={{ background: '#C9A84C' }}
           >
             {adding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
             Add
@@ -162,7 +163,8 @@ export function WatchlistPanel({
                     </button>
                     <button
                       onClick={() => onAskSilas(`Give me your read on ${ticker} right now — current price action, what I should know, and whether you'd be adding, holding, or trimming at these levels.`)}
-                      className="text-[11px] font-semibold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 px-3 py-1.5 rounded-lg transition-all whitespace-nowrap"
+                      className="text-[11px] font-semibold bg-[#fefce8] hover:bg-yellow-100 border border-[#fde68a] px-3 py-1.5 rounded-lg transition-all whitespace-nowrap"
+                      style={{ color: '#C9A84C' }}
                     >
                       Ask Silas
                     </button>

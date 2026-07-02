@@ -78,14 +78,15 @@ export function BestAssetsPanel({
           <button
             onClick={generate}
             disabled={loading}
-            className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-200 text-white disabled:text-zinc-400 px-6 py-2.5 rounded-xl text-sm font-bold transition-colors"
+            className="flex items-center gap-2 disabled:bg-zinc-200 text-white disabled:text-zinc-400 px-6 py-2.5 rounded-xl text-sm font-bold transition-colors"
+            style={{ background: '#C9A84C' }}
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Star className="w-4 h-4" />}
             {loading ? 'Generating...' : 'Generate Best Stocks'}
           </button>
         </div>
         {contextStatus === 'loading' && (
-          <p className="text-xs text-amber-600 mt-3 flex items-center gap-1.5">
+          <p className="text-xs mt-3 flex items-center gap-1.5" style={{ color: '#C9A84C' }}>
             <AlertTriangle className="w-3 h-3" />
             Market context still loading — results will improve once ready.
           </p>
@@ -100,13 +101,13 @@ export function BestAssetsPanel({
             <h2 className="text-xl font-bold text-zinc-900">Top Stocks Right Now</h2>
             <p className="text-sm text-zinc-500 mt-0.5">{result.generatedAt} · Regime: <span className="font-medium text-zinc-700">{result.regime}</span></p>
           </div>
-          <div className="bg-orange-50 border border-orange-200 rounded-xl px-5 py-4 text-sm text-orange-900 leading-relaxed">
+          <div className="rounded-xl px-5 py-4 text-sm leading-relaxed" style={{ background: '#fefce8', border: '1px solid #fde68a', color: '#78590a' }}>
             <span className="font-bold">Macro Alignment: </span>{result.macroAlignment}
           </div>
           <div className="space-y-3">
             {(result.assets || []).map((asset, i) => (
-              <div key={i} className="bg-white border border-zinc-200 rounded-xl p-5 flex items-start gap-4 hover:border-orange-200 transition-colors">
-                <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 font-bold text-sm flex items-center justify-center shrink-0">{asset.rank}</div>
+              <div key={i} className="bg-white border border-zinc-200 rounded-xl p-5 flex items-start gap-4 transition-colors" style={{ ['--tw-border-opacity' as string]: '1' }} onMouseEnter={e => (e.currentTarget.style.borderColor = '#fde68a')} onMouseLeave={e => (e.currentTarget.style.borderColor = '')}>
+                <div className="w-8 h-8 rounded-full font-bold text-sm flex items-center justify-center shrink-0" style={{ background: '#fefce8', color: '#C9A84C', fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{asset.rank}</div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
                     <span className="text-base font-bold text-zinc-900 font-mono">{asset.ticker}</span>
@@ -114,7 +115,7 @@ export function BestAssetsPanel({
                     <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600">{asset.category}</span>
                     <span className={clsx('text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full',
                       asset.risk === 'Low' ? 'bg-emerald-100 text-emerald-700' :
-                      asset.risk === 'Medium' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+                      asset.risk === 'Medium' ? 'bg-[#fefce8] text-[#C9A84C]' : 'bg-red-100 text-red-700'
                     )}>{asset.risk} Risk</span>
                   </div>
                   <p className="text-sm text-zinc-600 leading-relaxed mb-3">{asset.rationale}</p>
@@ -131,8 +132,8 @@ export function BestAssetsPanel({
         </div>
       ) : !loading && !error && (
         <div className="text-center py-16 text-zinc-400">
-          <div className="w-16 h-16 rounded-2xl bg-orange-50 flex items-center justify-center mx-auto mb-4">
-            <Star className="w-8 h-8 text-orange-300" />
+          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: '#fefce8' }}>
+            <Star className="w-8 h-8" style={{ color: '#C9A84C', opacity: 0.6 }} />
           </div>
           <p className="font-semibold text-zinc-500 mb-2 text-base">Best Stocks</p>
           <p className="text-sm max-w-sm mx-auto leading-relaxed">
