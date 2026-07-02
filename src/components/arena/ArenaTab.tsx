@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Plus, Swords, TrendingUp, Trophy, Loader2, AlertCircle } from 'lucide-react';
+import { Plus, TrendingUp, Trophy, Swords, Loader2, AlertCircle } from 'lucide-react';
 import PersonaCard from './PersonaCard';
 import PersonaDetail from './PersonaDetail';
 import CreatePersonaFlow from './CreatePersonaFlow';
@@ -126,23 +126,24 @@ export default function ArenaTab() {
   ];
 
   return (
-    <div className="min-h-full" style={{ background: 'linear-gradient(135deg, #0a0d12 0%, #0f1419 40%, #141d27 100%)' }}>
+    <div className="min-h-full" style={{ background: '#faf8f3' }}>
       <div className="max-w-7xl mx-auto px-6 py-6">
 
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/20 flex items-center justify-center">
-              <Swords className="w-6 h-6 text-amber-400" />
-            </div>
-            <div>
-              <h1 className="font-brand font-extrabold text-white tracking-[-0.02em] leading-none" style={{ fontSize: '1.75rem' }}>STRATEGY ARENA</h1>
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] mt-1" style={{ color: 'rgba(241,244,248,0.4)' }}>Paper trade · Real prices · Benchmark comparison</p>
-            </div>
+          <div>
+            <p className="font-sans uppercase mb-1" style={{ fontSize: 9.5, letterSpacing: '0.16em', fontWeight: 600, color: '#b91c1c' }}>
+              ● Strategy Arena
+            </p>
+            <h1 className="font-display font-semibold" style={{ fontSize: 24, color: '#1a1008', lineHeight: 1.2 }}>
+              Investor Personas
+            </h1>
+            <p className="font-sans mt-1" style={{ fontSize: 12, color: '#6b5840' }}>Paper trade · Real prices · Benchmark comparison</p>
           </div>
           <button
             onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-bold text-sm rounded-xl transition-all shadow-lg shadow-amber-500/20"
+            className="flex items-center gap-2 font-sans font-semibold rounded-[7px] transition-all"
+            style={{ padding: '8px 18px', background: '#b91c1c', color: '#fff', fontSize: 13 }}
           >
             <Plus className="w-4 h-4" />New Persona
           </button>
@@ -152,15 +153,15 @@ export default function ArenaTab() {
         {error && (
           <div className="flex items-center gap-2 p-4 bg-red-500/10 border border-red-500/20 rounded-xl mb-4">
             <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-            <p className="text-red-300 text-sm">{error}</p>
+            <p className="text-sm" style={{ color: '#b91c1c' }}>{error}</p>
           </div>
         )}
 
         {/* Price fetch warning */}
         {priceWarning && (
           <div className="flex items-center justify-between gap-3 p-3 bg-amber-500/10 border border-amber-500/25 rounded-xl mb-4">
-            <p className="text-amber-300 text-xs">{priceWarning}</p>
-            <button onClick={() => setPriceWarning(null)} className="text-amber-500 hover:text-amber-300 text-xs flex-shrink-0">Dismiss</button>
+            <p className="text-xs" style={{ color: '#92400e' }}>{priceWarning}</p>
+            <button onClick={() => setPriceWarning(null)} className="text-xs flex-shrink-0" style={{ color: '#92400e' }}>Dismiss</button>
           </div>
         )}
 
@@ -168,7 +169,7 @@ export default function ArenaTab() {
         {personas.length > 0 && (
           <div className="grid grid-cols-3 gap-4 mb-6">
             {[
-              { label: 'Total Personas', value: personas.length.toString(), icon: Swords, color: 'text-amber-400' },
+              { label: 'Total Personas', value: personas.length.toString(), icon: Swords, iconColor: '#b91c1c', iconBg: 'rgba(185,28,28,0.08)' },
               {
                 label: 'Best Performer',
                 value: (() => {
@@ -182,7 +183,8 @@ export default function ArenaTab() {
                   return `${best.name.split(' ')[0]} (+${ret.toFixed(1)}%)`;
                 })(),
                 icon: Trophy,
-                color: 'text-emerald-400',
+                iconColor: '#16a34a',
+                iconBg: 'rgba(22,163,74,0.08)',
               },
               {
                 label: 'Beating Benchmark',
@@ -196,16 +198,18 @@ export default function ArenaTab() {
                   return `${beating} / ${personas.length}`;
                 })(),
                 icon: TrendingUp,
-                color: 'text-blue-400',
+                iconColor: '#6366f1',
+                iconBg: 'rgba(99,102,241,0.08)',
               },
             ].map(stat => (
-              <div key={stat.label} className="bg-slate-900 border border-white/8 rounded-xl p-4 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white/6 flex items-center justify-center flex-shrink-0">
-                  <stat.icon className={`w-5 h-5 ${stat.color}`} />
+              <div key={stat.label} style={{ background: '#ffffff', border: '1px solid #ebe4d8', borderRadius: 10, padding: '14px 16px', position: 'relative', overflow: 'hidden' }} className="flex items-center gap-3">
+                <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: '#b91c1c' }} />
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: stat.iconBg }}>
+                  <stat.icon className="w-5 h-5" style={{ color: stat.iconColor }} />
                 </div>
                 <div>
-                  <p className="text-slate-400 text-xs">{stat.label}</p>
-                  <p className="text-white font-bold text-sm">{stat.value}</p>
+                  <p style={{ color: '#6b5840', fontSize: 10 }}>{stat.label}</p>
+                  <p style={{ color: '#1a1008', fontWeight: 700, fontSize: 14 }}>{stat.value}</p>
                 </div>
               </div>
             ))}
@@ -215,14 +219,16 @@ export default function ArenaTab() {
         {/* Sort controls */}
         {personas.length > 0 && (
           <div className="flex items-center gap-2 mb-4">
-            <span className="text-slate-500 text-xs">Sort:</span>
+            <span className="text-xs" style={{ color: '#6b5840' }}>Sort:</span>
             {SORT_OPTIONS.map(s => (
               <button
                 key={s.id}
                 onClick={() => setSortBy(s.id)}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                  sortBy === s.id ? 'bg-amber-500/20 border border-amber-500/30 text-amber-300' : 'text-slate-500 hover:text-slate-300 border border-transparent'
-                }`}
+                className="transition-all"
+                style={sortBy === s.id
+                  ? { background: '#fff1f2', border: '1px solid #fecdd3', color: '#b91c1c', borderRadius: 8, padding: '3px 10px', fontSize: 12, fontWeight: 600 }
+                  : { color: '#6b5840', fontSize: 12, padding: '3px 10px', border: '1px solid transparent', borderRadius: 8 }
+                }
               >{s.label}</button>
             ))}
           </div>
@@ -231,23 +237,24 @@ export default function ArenaTab() {
         {/* Loading */}
         {loading && (
           <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
+            <Loader2 className="w-8 h-8 animate-spin" style={{ color: '#b91c1c' }} />
           </div>
         )}
 
         {/* Empty State */}
         {!loading && personas.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mb-4">
-              <Swords className="w-8 h-8 text-amber-500/60" />
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: '#fff1f2', border: '1px solid #fecdd3' }}>
+              <Swords className="w-8 h-8" style={{ color: 'rgba(185,28,28,0.5)' }} />
             </div>
-            <h3 className="text-white font-bold text-lg mb-2">No Personas Yet</h3>
-            <p className="text-slate-400 text-sm max-w-sm mb-6">
+            <h3 className="font-bold text-lg mb-2" style={{ color: '#1a1008' }}>No Personas Yet</h3>
+            <p className="text-sm max-w-sm mb-6" style={{ color: '#6b5840' }}>
               Create your first hypothetical investor persona and watch their portfolio compete against a benchmark in real-time.
             </p>
             <button
               onClick={() => setShowCreate(true)}
-              className="flex items-center gap-2 px-5 py-3 bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-xl transition-all"
+              className="flex items-center gap-2 px-5 py-3 font-bold rounded-xl transition-all"
+              style={{ background: '#b91c1c', color: '#fff' }}
             >
               <Plus className="w-4 h-4" />Create First Persona
             </button>
