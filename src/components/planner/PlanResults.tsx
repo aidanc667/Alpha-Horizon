@@ -925,7 +925,7 @@ function AnalysisTab({
   const intlTickers  = new Set(['VEA', 'VWO', 'VXUS', 'VT', 'AVDV', 'BNDX']);
 
   const factorWeight = alloc.filter(s => valueTickers.has(s.ticker)).reduce((a, s) => a + s.weight, 0);
-  const factorBps    = Math.round(factorWeight * 150 * 100); // 150bps annualised SCV premium
+  const factorBps    = Math.round(factorWeight * 75 * 100); // 75bps annualised SCV premium (conservative estimate)
 
   const taxBps = Math.round(taxOpt.estimatedAnnualSavings);
 
@@ -938,7 +938,7 @@ function AnalysisTab({
   const costBps   = Math.round((0.0030 - stats.weightedExpenseRatio) * 10_000); // vs 30bps typical active
 
   const alphaRows = [
-    { source: 'Factor Premium (est.)', bps: factorBps, desc: 'Historical Fama-French SCV premium — long-run estimate, not forward-looking' },
+    { source: 'Factor Premium (est.)', bps: factorBps, desc: 'Conservative estimate of Fama-French SCV premium — academic range is 50–150bps, not guaranteed' },
     { source: 'Tax Alpha', bps: taxBps, desc: 'Optimal asset location & muni bond selection' },
     { source: 'Intl. Diversification (est.)', bps: intlBps, desc: 'Historical diversification premium — compresses in high-valuation environments' },
     { source: 'Bond Efficiency', bps: bondBps, desc: 'Muni bond yield advantage for your bracket' },
@@ -1785,8 +1785,61 @@ export default function PlanResults({ plan, backtest, answers, ips }: Props) {
   const [activeTab, setActiveTab] = useState<TabId>('portfolio');
   const belowThreshold = plan.criticScore.scores.overall < 80;
 
+  // Readiness warnings
+  const noEmergencyFund = answers.financialSnapshot?.hasEmergencyFund === false;
+  const hasHighDebt = answers.financialSnapshot?.hasHighInterestDebt === true;
+
+  // Savings rate
+  const annualSavings = (answers.monthlyContribution ?? 0) * 12;
+  const annualIncome = answers.annualIncome ?? 0;
+  const savingsRatePct = annualIncome > 0 ? Math.round((annualSavings / annualIncome) * 100) : null;
+  const savingsRateLow = savingsRatePct != null && savingsRatePct < 15;
+
   return (
     <div className="space-y-4">
+      {/* Readiness warnings */}
+      {(noEmergencyFund || hasHighDebt) && (
+        <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 flex items-start gap-3">
+          <span className="text-orange-500 text-base leading-none mt-0.5">⚠</span>
+          <div className="space-y-1">
+            <p className="text-xs font-bold text-orange-800">Before investing — a few things to address first</p>
+            {noEmergencyFund && (
+              <p className="text-[11px] text-orange-700">
+                <span className="font-semibold">No emergency fund:</span> Most financial planners recommend 3–6 months of expenses in cash before investing, so you can avoid selling investments during an emergency.
+              </p>
+            )}
+            {hasHighDebt && (
+              <p className="text-[11px] text-orange-700">
+                <span className="font-semibold">High-interest debt:</span> Paying off credit cards or high-interest loans first is a guaranteed return that typically beats market returns. Consider clearing this before investing beyond any employer match.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Savings rate feedback */}
+      {savingsRatePct != null && (
+        <div className={`rounded-lg border px-4 py-3 flex items-start gap-3 ${
+          savingsRateLow
+            ? 'border-blue-200 bg-blue-50'
+            : 'border-emerald-200 bg-emerald-50'
+        }`}>
+          <span className={`text-base leading-none mt-0.5 ${savingsRateLow ? 'text-blue-500' : 'text-emerald-500'}`}>
+            {savingsRateLow ? 'ⓘ' : '✓'}
+          </span>
+          <div>
+            <p className={`text-xs font-bold ${savingsRateLow ? 'text-blue-800' : 'text-emerald-800'}`}>
+              Savings rate: {savingsRatePct}% of income
+            </p>
+            <p className={`text-[11px] mt-0.5 ${savingsRateLow ? 'text-blue-700' : 'text-emerald-700'}`}>
+              {savingsRateLow
+                ? `Most financial planners recommend saving at least 15% of income for retirement. Increasing your monthly contribution from ${fmt$(answers.monthlyContribution)}/mo would significantly improve your long-term outcome — see the Monte Carlo tab.`
+                : 'You\'re saving at a healthy rate. Your savings rate is the most important factor in long-term wealth building.'}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Quality warning banner */}
       {belowThreshold && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 flex items-start gap-3">
