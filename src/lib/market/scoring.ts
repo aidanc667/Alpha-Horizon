@@ -71,7 +71,7 @@ export function scoreAccuracy(
   }
 
   // ── VIX (0–100) ──────────────────────────────────────────────────────────
-  const vixDirMatch = pred.vixDirection === actual.vixDirection;
+  const vixDirMatch = !!pred.vixDirection && pred.vixDirection === actual.vixDirection;
   let vix = 0;
   if (vixDirMatch) {
     const magDiff = Math.abs((pred.vixChangePercent ?? 0) - (actual.vixChangePercent ?? 0));
