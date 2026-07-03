@@ -1833,7 +1833,7 @@ export default function PlanResults({ plan, backtest, answers, ips }: Props) {
             </p>
             <p className={`text-[11px] mt-0.5 ${savingsRateLow ? 'text-blue-700' : 'text-emerald-700'}`}>
               {savingsRateLow
-                ? `Most financial planners recommend saving at least 15% of income for retirement. Increasing your monthly contribution from ${fmt$(answers.monthlyContribution)}/mo would significantly improve your long-term outcome — see the Monte Carlo tab.`
+                ? `Most financial planners recommend saving at least 15% of income for retirement. Increasing your monthly contribution above ${fmt$(answers.monthlyContribution)}/mo would significantly improve your long-term outcome — see the Monte Carlo tab.`
                 : 'You\'re saving at a healthy rate. Your savings rate is the most important factor in long-term wealth building.'}
             </p>
           </div>
