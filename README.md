@@ -1,5 +1,7 @@
 # Alpha Horizon
 
+![Alpha Horizon logo](logo.jpg)
+
 An institutional-grade AI investment terminal — five integrated apps powered by a 7-agent pipeline, a Sharpe optimizer, a closed-form Monte Carlo engine, and a self-correcting critic system.
 
 [![Tests](https://github.com/aidanc667/Alpha-Horizon/actions/workflows/test.yml/badge.svg)](https://github.com/aidanc667/Alpha-Horizon/actions/workflows/test.yml)
