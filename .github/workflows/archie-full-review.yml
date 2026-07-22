@@ -1,0 +1,24 @@
+name: Archie Full Review
+
+on:
+  workflow_dispatch:
+    inputs:
+      top-n:
+        description: "Number of top-risk files to review in detail"
+        required: false
+        default: '10'
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  full-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aidanc667/archie/full-review-action@main
+        with:
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          top-n: ${{ inputs.top-n }}
